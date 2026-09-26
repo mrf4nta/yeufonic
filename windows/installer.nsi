@@ -261,13 +261,13 @@ Function .onInit
     ${EndIf}
   ${EndIf}
 
-  ${If} $Legacy == 1
-    StrCpy $WelcomeTitle "${LEGACY_APPNAME} is now ${APPNAME}"
-    StrCpy $WelcomeText "${LEGACY_APPNAME} $OldVersion is installed on this PC. It has been renamed ${APPNAME}, and this updates it to ${APPNAME} ${VERSION} where it is, in $INSTDIR.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and only what has changed is downloaded. The ${LEGACY_APPNAME} shortcuts and Apps list entry are replaced by ${APPNAME} ones.$\r$\n$\r$\nIf ${LEGACY_APPNAME} is running, it is closed first."
-    StrCpy $InstHeader "Updating ${LEGACY_APPNAME} to ${APPNAME}"
-    StrCpy $FinishText "${LEGACY_APPNAME} $OldVersion is now ${APPNAME} ${VERSION}.$\r$\n$\r$\nYour library and settings are as you left them. Start it from the ${APPNAME} shortcut on the desktop or in the Start menu."
-  ${ElseIf} $Updating == 1
-    ${If} $OldVersion == "${VERSION}"
+  ${If} $Updating == 1
+    ${If} $Legacy == 1
+      StrCpy $WelcomeTitle "${LEGACY_APPNAME} is now ${APPNAME}"
+      StrCpy $WelcomeText "${LEGACY_APPNAME} $OldVersion is installed on this PC. It has been renamed ${APPNAME}, and this updates it to ${APPNAME} ${VERSION} where it is, in $INSTDIR.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and only what has changed is downloaded. The ${LEGACY_APPNAME} shortcuts and Apps list entry are replaced by ${APPNAME} ones.$\r$\n$\r$\nIf ${LEGACY_APPNAME} is running, it is closed first."
+      StrCpy $InstHeader "Updating ${LEGACY_APPNAME} to ${APPNAME}"
+      StrCpy $FinishText "${LEGACY_APPNAME} $OldVersion is now ${APPNAME} ${VERSION}.$\r$\n$\r$\nYour library and settings are as you left them. Start it from the ${APPNAME} shortcut on the desktop or in the Start menu."
+    ${ElseIf} $OldVersion == "${VERSION}"
       StrCpy $WelcomeTitle "Reinstall ${APPNAME} ${VERSION}"
       StrCpy $WelcomeText "${APPNAME} ${VERSION} is already installed on this PC. This installs it again over itself, which can repair a copy that has stopped working.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and anything already in place is not downloaded again.$\r$\n$\r$\nIf ${APPNAME} is running, it is closed first."
       StrCpy $InstHeader "Reinstalling ${APPNAME}"

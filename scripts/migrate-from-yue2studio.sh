@@ -31,7 +31,8 @@ NEW=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
     || { echo "$OLD does not look like YuE2 Studio: its compose.yml does not name yue2studio." >&2; exit 1; }
 
 # A library in use must not be moved: SQLite may be halfway through a write.
-if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx 'yue2studio-app\|yue2studio-engine'; then
+if command -v docker >/dev/null 2>&1 \
+    && [ -n "$(docker ps -q --filter "label=com.docker.compose.project.working_dir=$OLD")" ]; then
     echo "YuE2 Studio is running. Stop it first:  (cd $OLD && docker compose down)" >&2
     exit 1
 fi
