@@ -3526,7 +3526,11 @@ var openPersonas = openIdentities;
 
 function closeIdentities() {
   var modal = getIdentityModal();
-  if (modal) { modal.classList.add('hidden'); }
+  if (modal) {
+    modal.classList.add('hidden');
+    // Hidden, a song under review would play on with no way to stop it.
+    Array.prototype.forEach.call(modal.querySelectorAll('audio'), function (audio) { audio.pause(); });
+  }
   document.body.style.overflow = '';
   clearTimeout(IDENTITY.timer);
   IDENTITY.timer = null;
