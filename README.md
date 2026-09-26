@@ -1,5 +1,11 @@
 # <img src="app/static/icon.svg" alt="" width="40" align="top"> Yeufonic
 
+> **YuE2 Studio is now Yeufonic.** It's the same app under a new name, with the version numbers
+> starting again at 0.0.1. The old repository,
+> [dynamohum/YuE2gen-studio](https://github.com/dynamohum/YuE2gen-studio), is archived and gets
+> no more updates. If you use YuE2 Studio, your library, settings, LoRAs and models all come
+> across: see [Moving from YuE2 Studio](#moving-from-yue2-studio).
+
 A web interface for [YuE2](https://github.com/multimodal-art-projection/YuE), the open music
 model. Write a song from a prompt, or cover your own recording. Edit the score either way,
 then pull the stems out of the result.
@@ -31,8 +37,9 @@ Covering a recording, with the score editor open:
 
 [![Cover a recording](docs/screenshots/cover-a-recording.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/cover-a-recording.png)
 
-The same library with **Wide** and **Comfy** on: the page fills the window, and each card shows
-the whole prompt and every setting the take was made with. Compact cards are what you start with:
+The same library with **Wide** and **Comfy** on: the page fills the window, and the cards are
+wider, with room for the full title. Hover over a card's settings or prompt to read all of it.
+Compact cards are what you start with:
 
 [![Comfy layout](docs/screenshots/comfy-layout.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/comfy-layout.png)
 
