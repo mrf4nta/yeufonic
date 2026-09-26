@@ -32,8 +32,9 @@ on Windows: no Docker, no WSL and no administrator prompt. **First pass: being t
 (`yeufonic-exe.nsi`, built by `build.sh`) that runs `launcher.py` with `pythonw` and waits.
 Task Manager therefore lists *Yeufonic*, with the engine and the app beneath it.
 - **Start:** the engine and the app start together. The page opens as soon as the app answers,
-  in a window of its own: Edge's app mode, with a profile in `browser\` (no sign-in, sync or
-  extensions). The engine takes longer; the page says it is starting, and a job asked for
+  in a window of its own: the app mode of the default browser when it has one (Chrome, Edge,
+  Brave, Vivaldi), and otherwise Edge's, which comes with Windows (Firefox has none). Each
+  browser gets a profile of its own in `browsers\`, with no sign-in, sync or extensions. The engine takes longer; the page says it is starting, and a job asked for
   meanwhile waits for it.
 - **The icon by the clock:** drawn with the Windows API through `ctypes`, so there is nothing
   to install. Click it to open the window; right-click for *Open*, *Open the logs folder* and
@@ -57,7 +58,7 @@ Ports, the library folder and the window can be changed in `settings.ini`:
 app_port = 8090
 engine_port = 8188
 data_dir = D:\YuE2 library
-; app: a window of its own (the default); browser: the default browser
+; app: a window of its own (the default); browser: a tab in the default browser
 window = app
 ```
 

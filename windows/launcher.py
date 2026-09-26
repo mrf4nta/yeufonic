@@ -34,9 +34,11 @@ COMFY = ENGINE / "ComfyUI"
 LOGS = HERE / "logs"
 STATE = HERE / "state"
 ICON = HERE / "yeufonic.ico"
-# The window's own browser profile, apart from the user's: it keeps the window's size
-# and place, and nothing of theirs.
-BROWSER_PROFILE = HERE / "browser"
+# The window's own browser profiles, one per browser, apart from the user's: they keep
+# the window's size and place, and nothing of theirs.
+PROFILES = HERE / "browsers"
+# Browsers built on Chromium, which can open a page as an app window of its own.
+APP_BROWSERS = ("chrome.exe", "msedge.exe", "brave.exe", "vivaldi.exe", "chromium.exe")
 APP = "Yeufonic"
 CONSOLE = "--console" in sys.argv[1:]
 
@@ -246,8 +248,36 @@ def fail(text: str, log: Path | None = None) -> None:
     sys.exit(1)
 
 
+def default_browser() -> str | None:
+    """The program Windows opens web links with, from the user's choice for https and
+    that choice's open command."""
+    try:
+        import shlex
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\Shell\Associations"
+                            r"\UrlAssociations\https\UserChoice") as key:
+            prog_id = winreg.QueryValueEx(key, "ProgId")[0]
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"{prog_id}\shell\open\command") as key:
+            command = winreg.QueryValue(key, None)
+        return shlex.split(command, posix=False)[0].strip('"')
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def app_browser() -> str | None:
+    """The browser for the page's window: the default one when it can open an app
+    window (Chrome, Edge, Brave, Vivaldi), else Edge, which comes with Windows 10 and
+    11.  Firefox cannot, so its users get Edge's window, which is only its engine: none
+    of their browsing comes into it.  None means a tab in the default browser."""
+    chosen = default_browser()
+    if chosen and Path(chosen).name.lower() in APP_BROWSERS and Path(chosen).exists():
+        return chosen
+    return find_edge()
+
+
 def find_edge() -> str | None:
-    """Edge comes with Windows 10 and 11, whatever browser is the default."""
+    """Edge comes with Windows 10 and 11, whatever browser is the default, though in
+    some countries it can be removed."""
     for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")):
         if base:
             path = Path(base) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
@@ -320,14 +350,14 @@ def claim_window(hwnd: int) -> bool:
     return ok
 
 
-def seed_browser_profile() -> None:
-    """Preferences for the window's new profile, read by Edge on its first start: no
-    signing in, so nothing of the user's account comes into it."""
+def seed_browser_profile(profile: Path) -> None:
+    """Preferences for the window's new profile, read by the browser on its first start:
+    no signing in, so nothing of the user's account comes into it."""
     prefs = {"signin": {"allowed": False, "allowed_on_next_startup": False},
              "sync": {"requested": False}, "browser": {"has_seen_welcome_page": True}}
     try:
-        (BROWSER_PROFILE / "Default").mkdir(parents=True, exist_ok=True)
-        (BROWSER_PROFILE / "Default" / "Preferences").write_text(json.dumps(prefs), encoding="utf-8")
+        (profile / "Default").mkdir(parents=True, exist_ok=True)
+        (profile / "Default" / "Preferences").write_text(json.dumps(prefs), encoding="utf-8")
     except OSError:
         pass
 
@@ -424,17 +454,19 @@ class Launcher:
                 user32.ShowWindow(hwnd, 9)   # SW_RESTORE
             user32.SetForegroundWindow(hwnd)
             return
-        edge = find_edge() if self.cfg["window"].lower() != "browser" else None
-        if not edge:
+        browser = app_browser() if self.cfg["window"].lower() != "browser" else None
+        if not browser:
             webbrowser.open(self.url)
             return
-        # A profile of its own, which Edge would otherwise sign in to the user's Microsoft
-        # account, syncing their extensions and opening an Extensions tab beside the window.
-        args = [edge, f"--app={self.url}", f"--user-data-dir={BROWSER_PROFILE}", "--no-first-run",
+        # A profile of its own, which the browser would otherwise sign in to the user's
+        # account: Edge synced their extensions and opened an Extensions tab beside it.
+        profile = PROFILES / Path(browser).stem.lower()
+        args = [browser, f"--app={self.url}", f"--user-data-dir={profile}", "--no-first-run",
                 "--no-default-browser-check", "--disable-sync", "--disable-extensions"]
-        if not BROWSER_PROFILE.exists():
-            seed_browser_profile()
+        if not profile.exists():
+            seed_browser_profile(profile)
             args.append("--window-size=1500,950")   # the first time; after that, where it was left
+        record(f"Opening the window in {Path(browser).stem}.")
         subprocess.Popen(args)   # in our job, so it goes when Yeufonic does
 
     # ---------- quitting
@@ -633,6 +665,10 @@ def main() -> int:
         fail("The engine is not installed. Run the installer again.")
 
     LOGS.mkdir(exist_ok=True)
+    # The first version kept a single Edge profile here; each browser has its own now.
+    if (HERE / "browser").is_dir():
+        import shutil
+        shutil.rmtree(HERE / "browser", ignore_errors=True)
     data = Path(cfg["data_dir"])
     data.mkdir(parents=True, exist_ok=True)
     return Launcher(cfg).run(data)

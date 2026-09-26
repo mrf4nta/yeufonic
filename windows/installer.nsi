@@ -366,7 +366,8 @@ Section "Uninstall"
     Delete "$INSTDIR\setup.ps1"
     Delete "$INSTDIR\launcher.py"
     Delete "$INSTDIR\Yeufonic.exe"
-    ; The page's window's browser profile: sizes and places, nothing of the user's.
+    ; The page's window's browser profiles: sizes and places, nothing of the user's.
+    RMDir /r "$INSTDIR\browsers"
     RMDir /r "$INSTDIR\browser"
     Delete "$INSTDIR\terms.txt"
     Delete "$INSTDIR\LICENSE"

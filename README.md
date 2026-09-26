@@ -205,8 +205,10 @@ window = app
 
 `data_dir` is where the library lives (by default, `data` in the install folder). `import_roots`
 is the folders a corpus may be built from, separated by commas (by default, your user folder).
-`window = browser` opens Yeufonic in your default browser instead of a window of its own, which
-is Microsoft Edge's app mode with its own profile, apart from yours.
+The window is your default browser's app mode when it has one (Chrome, Edge, Brave or Vivaldi),
+and otherwise Microsoft Edge's, which comes with Windows. Either way it uses a profile of its own,
+so none of your browsing comes into it. `window = browser` opens Yeufonic as an ordinary tab in
+your default browser instead.
 Other settings are environment variables: see [Environment variables](#environment-variables).
 
 **Updating:** run a newer installer over the top. It says it is an update, keeps the models and

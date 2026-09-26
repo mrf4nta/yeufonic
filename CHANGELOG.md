@@ -37,7 +37,8 @@ Everything YuE2 Studio did, Yeufonic does. The version numbers start again.
   starts alongside it, the header says *Engine starting…*, and anything asked for meanwhile waits.
   How long each took to start is kept in `logs\launcher.log`.
 - **On Windows, Yeufonic runs like an app,** with no console window. It opens in a window of its
-  own, has an icon by the clock to reopen it or quit, and shows as *Yeufonic* in Task Manager.
+  own, in your default browser when that is Chrome, Edge, Brave or Vivaldi and otherwise in Edge,
+  has an icon by the clock to reopen it or quit, and shows as *Yeufonic* in Task Manager.
   Closing the window leaves it running, and Quit asks first. *Yeufonic (with console)* in the
   Start menu keeps the old console for diagnosing.
 
