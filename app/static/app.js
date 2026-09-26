@@ -4751,7 +4751,7 @@ function paintTakes() {
             icon('move') + '</button>' +
         '</div>' +
       '</div>' +
-      '<div class="take-style">' + esc(take.style) + '</div>' +
+      '<div class="take-style" title="' + esc(take.style) + '">' + esc(take.style) + '</div>' +
       live +
       '<div class="take-actions">' + actions + '</div>' +
       stemsBlock(take) +

@@ -462,7 +462,7 @@ its strengths, the seed and its age — so a card reads as the recipe that made 
 audio format set in Settings.
 
 **Starred** shows only starred takes. **Compact** switches between three narrow cards across and
-wider ones with the full title and style.
+wider ones with the full title. Hover over a card's settings or style to read all of it.
 
 ### The player
 
