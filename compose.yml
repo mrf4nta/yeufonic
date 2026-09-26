@@ -1,0 +1,112 @@
+# Yeufonic, single machine, GPU aware.
+#
+#   engine  - ComfyUI with the YuE2 nodes.  Owns the GPU.  Port 8188 stays inside.
+#   app     - the web UI, the library, and stems.  Published on localhost:8090.
+#
+# Only localhost is published.  Reaching it from other devices is a README topic.
+# A fixed project name, so containers and the network are named the same wherever
+# the repository is cloned.
+name: yeufonic
+
+services:
+  engine:
+    build:
+      context: ./engine
+      # The node pack that trains a LoRA from a corpus. "0" leaves it out of the image
+      # and the app then hides Corpora and training.
+      args:
+        WITH_TRAINER: "1"
+    image: yeufonic-engine:latest
+    container_name: yeufonic-engine
+    restart: unless-stopped
+    # ComfyUI refuses any request body over its own limit, which defaults to 100 MB.
+    # A long lossless recording is bigger than that — 138 MB for a six minute
+    # 24/96 FLAC — so the app's upload of it was refused with "413 Request Entity Too
+    # Large" before anything read it.  Two gigabytes covers any source a person would
+    # hand the app, and MAX_UPLOAD_MB on the app side is set to match.
+    command: python main.py --listen 0.0.0.0 --port 8188 --max-upload-size=${ENGINE_MAX_UPLOAD_MB:-2048}
+    # Localhost only, for debugging and for the optional ComfyUI UI.  The app
+    # reaches the engine by service name over the compose network.
+    ports:
+      - "127.0.0.1:8189:8188"
+    volumes:
+      - ./models:/app/models
+      - ./engine-state/input:/app/input
+      - ./engine-state/output:/app/output
+      - ./engine-state/user:/app/user
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: yeufonic-app:latest
+    container_name: yeufonic-app
+    restart: unless-stopped
+    # Run as the host user so the audio, stems and database stay owned by you, and
+    # a backup can read them without sudo.
+    user: "1000:1000"
+    depends_on:
+      - engine
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      ENGINE_URL: http://engine:8188
+      DATA_DIR: /data
+      # STEMS_JOBS left unset on purpose: the code picks a quarter of the CPUs, up
+      # to four, which is the knee measured in app/stems.py. Set it to 1 on a small
+      # machine, or higher than four on a very large one.
+      PORT: "8090"
+      TZ: Europe/London
+      # The engine's output folder, so a render is removed from it once the app
+      # has its copy.  Leave both lines out and renders accumulate there instead.
+      ENGINE_OUTPUT_DIR: /engine-output
+      ENGINE_INPUT_DIR: /engine-input
+      # Where the transcriber Analyse uses keeps its weights.  Without this they are
+      # downloaded into the container, about 1.6 GB, and fetched again after every
+      # rebuild.
+      HF_HOME: /data/models/whisper
+      # Host names the page may be reached by.  Add a LAN name or address here if
+      # you publish the port beyond localhost.
+      ALLOWED_HOSTS: localhost,127.0.0.1,::1
+      # Optional: let the corpus picker browse your own music library alongside the
+      # built-in ./data/corpus/ folder. Comma-separated container paths; each needs a
+      # matching read-only volume mount. Set it in compose.override.yml rather than
+      # here, so an update does not overwrite it: compose.override.yml.example has it.
+      # IMPORT_ROOTS: /import
+      # Corpora and training a LoRA from one. "0" takes them out of the app. Training
+      # also needs the engine built with WITH_TRAINER=1, as it is above.
+      TRAINING_ENABLED: "1"
+    volumes:
+      - ./data:/data
+      - ./engine-state/output:/engine-output
+      - ./app:/app/app
+      # Read only, and only ever read: the app opens a LoRA's header to say
+      # whether it holds a planner half, a decoder half or both.
+      - ./models:/app/models:ro
+      # The one place the app writes a model file: installing a LoRA it was given.
+      # Listed after the read-only folder above, because the deeper path wins.
+      - ./models/loras:/app/models/loras
+      # The engine's input folder, so a training set can be put where the engine reads.
+      - ./engine-state/input:/engine-input
+      - ./data/models/whisper:/data/models/whisper
+      # Optional: mount a local music library or external drive for corpus building.
+      # The app only reads from it; nothing in it is changed. Best done in
+      # compose.override.yml too: see compose.override.yml.example.
+      # - /path/to/your/music:/import:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

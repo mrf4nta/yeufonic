@@ -1,0 +1,191 @@
+"""A quiet take can be brought up to the usual loudness when asked, and put back.
+Nothing is normalised without being asked."""
+import subprocess
+from pathlib import Path
+
+from app import config
+from app.db import execute, one
+from app.library import loudness, normalised_path, original_path
+
+from conftest import make_take
+
+
+def quiet_tone(path):
+    """A 44.1 kHz stereo tone far below the usual level, like a weak render."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["ffmpeg", "-v", "quiet", "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+                    "-af", "volume=0.15", "-ac", "2", "-ar", "44100", str(path)], check=True)
+    return path
+
+
+def rate_of(path):
+    return subprocess.run(["ffprobe", "-v", "quiet", "-show_entries", "stream=sample_rate", "-of", "csv=p=0", str(path)],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+def test_normalising_lifts_a_weak_take_and_keeps_the_rendered_file(client, tmp_path):
+    audio = quiet_tone(tmp_path / "takes" / "t1" / "song.flac")
+    before = loudness(audio)
+    take = make_take(audio_path=str(audio))
+    assert before < config.WEAK_RENDER_DB
+
+    execute("UPDATE takes SET loudness = ? WHERE id = ?", (before, take["id"]))
+
+    assert client.post(f"/api/takes/{take['id']}/normalise").json() == {"normalised": True}
+    louder_file = normalised_path(audio)
+    louder = loudness(louder_file)
+    assert louder > config.WEAK_RENDER_DB
+    assert loudness(audio) == before, "the file as rendered is never changed"
+    assert rate_of(louder_file) == "44100", "loudnorm works at 192 kHz; the take comes back at its own rate"
+    row = one("SELECT normalised, loudness, audio_path FROM takes WHERE id = ?", (take["id"],))
+    assert row["normalised"] == 1 and row["audio_path"] == str(louder_file)
+    assert row["loudness"] == before, "the level recorded is the one it was rendered at"
+
+    # Twice gives the same: it always starts from the file as rendered.
+    client.post(f"/api/takes/{take['id']}/normalise")
+    assert abs(loudness(louder_file) - louder) < 0.2
+
+
+def test_undo_puts_back_the_rendered_level(client, tmp_path):
+    audio = quiet_tone(tmp_path / "takes" / "t2" / "song.flac")
+    before = loudness(audio)
+    take = make_take(audio_path=str(audio))
+    client.post(f"/api/takes/{take['id']}/normalise")
+
+    answer = client.post(f"/api/takes/{take['id']}/normalise?undo=true").json()
+    assert answer == {"normalised": False} and loudness(audio) == before
+    assert not normalised_path(audio).exists()
+    row = one("SELECT normalised, audio_path FROM takes WHERE id = ?", (take["id"],))
+    assert row["normalised"] == 0 and row["audio_path"] == str(audio)
+    assert client.post(f"/api/takes/{take['id']}/normalise?undo=true").status_code == 409
+
+
+def test_a_take_is_left_as_rendered_unless_asked(client, tmp_path):
+    audio = quiet_tone(tmp_path / "takes" / "t3" / "song.flac")
+    make_take(audio_path=str(audio))
+    listed = client.get("/api/takes").json()[0]
+    assert listed["normalise"] == 0 and listed["normalised"] == 0 and not normalised_path(audio).exists()
+
+
+def test_a_take_without_audio_cannot_be_normalised(client):
+    take = make_take()
+    assert client.post(f"/api/takes/{take['id']}/normalise").status_code == 404
+
+
+def test_a_take_asked_to_be_normalised_is_when_its_render_finishes(monkeypatch, data_dir):
+    import asyncio
+
+    from app import jobs
+    from test_jobs import ABC, FakeEngine, render_history, use
+
+    rendered = quiet_tone(data_dir / "engine" / "take_00001_.flac")
+    monkeypatch.setattr(config, "ENGINE_OUTPUT_DIR", data_dir / "engine-output")
+    take = make_take(status="queued", abc=ABC, title="Quiet")
+    execute("UPDATE takes SET normalise = 1 WHERE id = ?", (take["id"],))
+    use(monkeypatch, FakeEngine([render_history()], audio=rendered))
+    asyncio.run(jobs.run_job("render", take["id"]))
+    row = one("SELECT * FROM takes WHERE id = ?", (take["id"],))
+    assert row["status"] == "done" and row["normalised"] == 1
+    assert loudness(Path(row["audio_path"])) > config.WEAK_RENDER_DB
+    assert row["loudness"] < config.WEAK_RENDER_DB, "still known as weak: the level is the one it was rendered at"
+    assert row["audio_path"].endswith("quiet.normalised.flac")
+    assert Path(row["audio_path"]).with_name("quiet.flac").exists()
+
+
+def test_the_form_choice_is_kept_on_the_take(client):
+    made = client.post("/api/songs", json={"lyrics": "[Verse]\nla la", "normalise": True}).json()
+    assert one("SELECT normalise FROM takes WHERE id = ?", (made["id"],))["normalise"] == 1
+    plain = client.post("/api/songs", json={"lyrics": "[Verse]\nla la"}).json()
+    assert one("SELECT normalise FROM takes WHERE id = ?", (plain["id"],))["normalise"] == 0
+
+
+def test_a_take_normalised_before_keeps_its_rendered_level_once_read_again(client, tmp_path):
+    from app.library import fill_loudness
+
+    audio = quiet_tone(tmp_path / "takes" / "t4" / "song.flac")
+    before = loudness(audio)
+    take = make_take(audio_path=str(audio))
+    client.post(f"/api/takes/{take['id']}/normalise")
+    execute("UPDATE takes SET loudness = NULL WHERE id = ?", (take["id"],))
+    assert fill_loudness() == 1
+    assert one("SELECT loudness FROM takes WHERE id = ?", (take["id"],))["loudness"] == before
+
+
+def test_the_weak_note_on_a_normalised_take_can_be_dismissed(client, tmp_path):
+    take = make_take(audio_path=str(quiet_tone(tmp_path / "takes" / "t5" / "song.flac")))
+    assert client.get("/api/takes").json()[0]["weak_dismissed"] == 0
+    assert client.post(f"/api/takes/{take['id']}/weak/dismiss").json() == {"dismissed": True}
+    assert one("SELECT weak_dismissed FROM takes WHERE id = ?", (take["id"],))["weak_dismissed"] == 1
+    assert client.post("/api/takes/nosuch/weak/dismiss").status_code == 404
+
+
+def test_a_file_open_elsewhere_is_waited_for_then_reported(monkeypatch, tmp_path):
+    """Windows will not replace a file another program has open.  A player lets go in
+    a moment, so it is tried again; one that does not is reported as open."""
+    import pytest
+
+    from app import library
+
+    src, dest = tmp_path / "new.flac", tmp_path / "old.flac"
+    src.write_bytes(b"new")
+    dest.write_bytes(b"old")
+    real, refusals = library.os.replace, []
+
+    def busy_twice(a, b):
+        if len(refusals) < 2:
+            refusals.append(1)
+            raise PermissionError("in use")
+        real(a, b)
+    monkeypatch.setattr(library.os, "replace", busy_twice)
+    monkeypatch.setattr(library.time, "sleep", lambda s: None)
+    library.replace_file(src, dest)
+    assert dest.read_bytes() == b"new" and len(refusals) == 2
+
+    monkeypatch.setattr(library.os, "replace", lambda a, b: (_ for _ in ()).throw(PermissionError("in use")))
+    with pytest.raises(PermissionError):
+        library.replace_file(dest, tmp_path / "x.flac", tries=3)
+
+
+def test_normalising_never_touches_the_file_being_played(client, tmp_path, monkeypatch):
+    """On Windows a file that is open cannot be replaced, and a player keeps the take
+    open while it streams.  The louder copy is a new file, so the one playing is left
+    alone however long it is held."""
+    from app import library
+
+    audio = quiet_tone(tmp_path / "takes" / "t6" / "song.flac")
+    take = make_take(audio_path=str(audio))
+    replaced = []
+    real = library.os.replace
+    monkeypatch.setattr(library.os, "replace", lambda a, b: (replaced.append(Path(b)), real(a, b)))
+    assert client.post(f"/api/takes/{take['id']}/normalise").status_code == 200
+    assert audio not in replaced
+
+
+def test_a_take_normalised_in_place_by_the_first_version_is_converted(client, tmp_path):
+    """song.flac louder and song.original.flac as rendered become song.flac as rendered
+    and song.normalised.flac louder."""
+    from app.library import convert_old_normalised
+
+    folder = tmp_path / "takes" / "t7"
+    rendered = quiet_tone(folder / "song.original.flac")
+    before = loudness(rendered)
+    louder = folder / "song.flac"
+    louder.write_bytes(b"louder")
+    take = make_take(audio_path=str(louder))
+    execute("UPDATE takes SET normalised = 1 WHERE id = ?", (take["id"],))
+    assert convert_old_normalised() == 1
+    assert loudness(folder / "song.flac") == before and (folder / "song.normalised.flac").read_bytes() == b"louder"
+    assert one("SELECT audio_path FROM takes WHERE id = ?", (take["id"],))["audio_path"] == str(folder / "song.normalised.flac")
+    assert convert_old_normalised() == 0
+
+
+def test_renaming_files_at_start_keeps_a_normalised_take_on_its_louder_copy(client):
+    from app.library import relayout, take_audio_path
+
+    take = make_take(title="Loud One")
+    rendered = quiet_tone(take_audio_path(take["id"], "Loud One"))
+    louder = normalised_path(rendered)
+    louder.write_bytes(rendered.read_bytes())
+    execute("UPDATE takes SET audio_path = ?, normalised = 1 WHERE id = ?", (str(louder), take["id"]))
+    relayout()
+    assert one("SELECT audio_path FROM takes WHERE id = ?", (take["id"],))["audio_path"] == str(louder)

@@ -1,0 +1,570 @@
+"""External LLM integration for Yeufonic.
+
+Provides an OpenAI-compatible client for delegating Gemma's text tasks
+(lyric drafting and song musical style analysis) to an external LLM
+provider (e.g. OpenAI, Anthropic, Gemini, Groq, OpenRouter, Ollama, LM Studio).
+
+When enabled in Settings, the external LLM takes over:
+1. Lyrics generation (brief, style, structure -> parsed lyrics)
+2. Musical style tag description for corpus songs (title, lyrics -> comma-separated tags)
+
+All significant actions (requests, completions, token usage, errors, test connections)
+are logged to the centralized logging system.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+import time
+from typing import Any
+import httpx
+
+from app import config
+from app.db import get_setting
+import app.lyrics as lyrics
+
+log = logging.getLogger("yue2.llm")
+
+DEFAULT_PROVIDER = "local"
+DEFAULT_API_URL = "https://api.openai.com/v1"
+DEFAULT_MODEL = "gpt-4o-mini"
+REQUEST_TIMEOUT = 60.0
+
+
+def get_config() -> dict[str, str]:
+    """Return the current LLM configuration from the settings store."""
+    provider = (get_setting("llm.provider", DEFAULT_PROVIDER) or DEFAULT_PROVIDER).strip().lower()
+    api_url = (get_setting("llm.api_url", DEFAULT_API_URL) or DEFAULT_API_URL).strip().rstrip("/")
+    api_key = (get_setting("llm.api_key", "") or "").strip()
+    raw_model = (get_setting("llm.model", "") or "").strip()
+    if not raw_model or (raw_model.lower().startswith("gpt-") and "generativelanguage.googleapis.com" in api_url):
+        if "generativelanguage.googleapis.com" in api_url:
+            model = "gemini-flash-latest"
+        else:
+            model = DEFAULT_MODEL
+    else:
+        model = raw_model
+    return {
+        "provider": provider,
+        "api_url": api_url,
+        "api_key": api_key,
+        "model": model,
+    }
+
+
+def is_external_enabled() -> bool:
+    """Return True if an external LLM provider is active."""
+    return get_config()["provider"] == "external"
+
+
+def _endpoint_url(base_url: str) -> str:
+    """Normalize the base URL to point to /chat/completions."""
+    cleaned = base_url.strip().rstrip("/")
+    if "generativelanguage.googleapis.com" in cleaned:
+        if not cleaned.endswith("/chat/completions"):
+            if cleaned.endswith("/v1beta/openai") or cleaned.endswith("/v1/openai"):
+                return f"{cleaned}/chat/completions"
+            return "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        return cleaned
+
+    if cleaned.endswith("/chat/completions"):
+        return cleaned
+    return f"{cleaned}/chat/completions"
+
+
+async def chat_complete(
+    messages: list[dict[str, Any]],
+    *,
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+    config_override: dict[str, str] | None = None,
+    timeout: float | None = None,
+) -> str:
+    """Call the OpenAI-compatible chat completions endpoint and return the text reply."""
+    cfg = get_config()
+    if config_override:
+        cfg.update(config_override)
+    endpoint = _endpoint_url(cfg["api_url"])
+    raw_model = cfg.get("model") or ""
+    if not raw_model or (raw_model.lower().startswith("gpt-") and "generativelanguage.googleapis.com" in endpoint):
+        model = "gemini-flash-latest" if "generativelanguage.googleapis.com" in endpoint else DEFAULT_MODEL
+    else:
+        model = raw_model
+    api_key = cfg["api_key"]
+
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": f"Yeufonic/{config.VERSION}",
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+
+    log.info("Sending chat completion to %s (model: %s, messages: %d)", endpoint, model, len(messages))
+    t0 = time.perf_counter()
+
+    async with httpx.AsyncClient(timeout=timeout or REQUEST_TIMEOUT) as client:
+        try:
+            resp = await client.post(endpoint, json=payload, headers=headers)
+        except httpx.TimeoutException as exc:
+            elapsed = time.perf_counter() - t0
+            log.error("External LLM request to %s timed out after %.2fs", endpoint, elapsed)
+            raise RuntimeError(f"External LLM request timed out after {elapsed:.1f}s") from exc
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            log.error("External LLM request to %s failed after %.2fs: %s", endpoint, elapsed, exc)
+            raise RuntimeError(f"External LLM connection failed: {exc}") from exc
+
+    elapsed = time.perf_counter() - t0
+    if resp.status_code != 200:
+        err_msg = resp.text[:400]
+        try:
+            err_json = resp.json()
+            if isinstance(err_json, list) and err_json and "error" in err_json[0]:
+                err_msg = err_json[0]["error"].get("message") or err_msg
+            elif isinstance(err_json, dict) and "error" in err_json:
+                err_msg = err_json["error"].get("message") or err_msg
+        except Exception:
+            pass
+        if "bidiGenerateContent" in err_msg or "-live" in model.lower():
+            flash_alt = model.replace("-live", "-flash")
+            err_msg = f"{err_msg} (Tip: '{model}' is a WebSocket streaming-only model. Use '{flash_alt}' for REST completions)."
+        log.warning("External LLM error from %s: HTTP %d - %s", endpoint, resp.status_code, err_msg)
+        raise RuntimeError(f"External LLM HTTP {resp.status_code}: {err_msg}")
+
+    try:
+        data = resp.json()
+        choice = data["choices"][0]
+        content = choice.get("message", {}).get("content") or ""
+    except Exception as exc:
+        log.error("Failed to parse JSON response from %s: %s (body: %s)", endpoint, exc, resp.text[:300])
+        raise RuntimeError(f"Invalid response from LLM provider: {exc}") from exc
+
+    # A model that thinks before it answers spends the same budget on the thinking, and
+    # a small budget left it one token for the answer: a corpus song's style came back
+    # as "." with 145 of 150 tokens gone on thought.  Say so when it happens.
+    if choice.get("finish_reason") == "length":
+        log.warning("External LLM reply from %s (%s) was cut off at max_tokens=%s; the answer may be incomplete",
+                    endpoint, model, max_tokens)
+
+    usage = data.get("usage") or {}
+    ptokens = usage.get("prompt_tokens", "?")
+    ctokens = usage.get("completion_tokens", "?")
+    log.info(
+        "External LLM reply from %s (%s) in %.2fs (prompt_tokens=%s, completion_tokens=%s, chars=%d)",
+        endpoint, model, elapsed, ptokens, ctokens, len(content),
+    )
+    return content
+
+
+async def test_connection(config_override: dict[str, str] | None = None) -> dict[str, Any]:
+    """Send a minimal test message to verify the external LLM configuration."""
+    cfg = get_config()
+    if config_override:
+        cfg.update(config_override)
+    raw_model = cfg.get("model") or ""
+    if not raw_model or (raw_model.lower().startswith("gpt-") and "generativelanguage.googleapis.com" in cfg.get("api_url", "")):
+        cfg["model"] = "gemini-flash-latest" if "generativelanguage.googleapis.com" in cfg.get("api_url", "") else DEFAULT_MODEL
+    endpoint = _endpoint_url(cfg["api_url"])
+    model = cfg["model"]
+    log.info("Testing external LLM connection to %s (model: %s)...", endpoint, model)
+    t0 = time.perf_counter()
+    reply = await chat_complete(
+        [
+            {"role": "user", "content": "Ping test. Reply with the single word 'OK'."},
+        ],
+        temperature=0.0,
+        max_tokens=1024,
+        config_override=cfg,
+    )
+    latency_ms = int((time.perf_counter() - t0) * 1000)
+    cleaned_reply = reply.strip()
+    log.info("LLM connection test passed: model=%s, latency=%dms, reply='%s'", model, latency_ms, cleaned_reply[:30])
+    return {
+        "ok": True,
+        "model": model,
+        "latency_ms": latency_ms,
+        "reply": cleaned_reply,
+    }
+
+
+async def generate_lyrics(brief: str, style: str, structure: str) -> dict[str, Any]:
+    """Draft original lyrics using the external LLM."""
+    prompt = lyrics.build_prompt(brief, style, structure)
+    log.info("Starting external LLM lyrics generation (structure=%s, brief='%s')", structure, brief[:50])
+
+    messages = [
+        {"role": "system", "content": "You are a professional songwriter and lyricist."},
+        {"role": "user", "content": prompt},
+    ]
+
+    reply = await chat_complete(messages, temperature=0.8)
+    parsed = lyrics.parse(reply)
+
+    if not parsed.get("title"):
+        from app.main import guess_title
+        parsed["title"] = guess_title(parsed.get("lyrics", "")) or brief[:50] or "Untitled"
+
+    log.info(
+        "Finished external LLM lyrics generation: title='%s', sections=%d, problems=%s",
+        parsed["title"], len(parsed.get("sections", [])), parsed.get("problems", []),
+    )
+    return {
+        "title": parsed["title"],
+        "lyrics": parsed["lyrics"],
+        "sections": parsed.get("sections", []),
+        "problems": parsed.get("problems", []),
+    }
+
+
+def clean_style_tags(raw: str, title: str = "") -> str:
+    """Tidy raw LLM output into a comma-separated line of musical style tags."""
+    text = (raw or "").strip().strip("\"'`")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    # If the reply is formatted as bullet points on multiple lines, join them with commas
+    if len(lines) > 1 and all(line.startswith(("-", "*", "•")) for line in lines):
+        text = ", ".join(line.lstrip("-*• ") for line in lines)
+    elif lines:
+        # If the first line is an introductory phrase (e.g. "Here are the tags:"), drop it
+        if re.match(r"^(?:here (?:are|is)|tags?|style|output)\b", lines[0], re.IGNORECASE) and len(lines) > 1:
+            text = lines[1]
+        else:
+            text = lines[0]
+
+    # Strip a song title prefix like "Paper Lanterns - " or "Paper Lanterns:"
+    if title:
+        pattern = re.compile(rf"^(?:song\s*:\s*)?{re.escape(title)}\s*[-:–—]\s*", re.IGNORECASE)
+        text = pattern.sub("", text)
+
+    # Strip generic label prefixes like "Tags:" or "Style:"
+    text = re.sub(r"^(?:tags|style|musical style|genre)\s*:\s*", "", text, flags=re.IGNORECASE)
+
+    # Strip markdown emphasis
+    text = text.replace("**", "").replace("*", "").replace("`", "")
+
+    # Split, clean, deduplicate while preserving order
+    seen = set()
+    cleaned_tags = []
+    for tag in text.split(","):
+        clean_tag = " ".join(tag.split()).lower()
+        if clean_tag and clean_tag not in seen:
+            seen.add(clean_tag)
+            cleaned_tags.append(clean_tag)
+
+    return ", ".join(cleaned_tags)[:300]
+
+
+async def describe_song_style(title: str, lyrics_text: str = "") -> str:
+    """Describe a corpus song's musical style as comma-separated tags using external LLM."""
+    log.info("Starting external LLM style description for '%s'", title)
+
+    user_content = [
+        "Describe the musical style of the following song for a music generator as one line of comma-separated tags: genre, lead instruments, drums and mood. Output only the tags.",
+        f"\nSong: {title}",
+    ]
+    if lyrics_text and lyrics_text.strip():
+        user_content.append(f"Lyrics excerpt:\n{lyrics_text.strip()[:600]}")
+
+    user_prompt = "\n".join(user_content)
+
+    messages = [
+        {"role": "system", "content": "You are an expert musicologist and audio prompt engineer for an AI music generator. Output only the requested comma-separated tags."},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    # Room for a thinking model's thought as well as the tags (see chat_complete).
+    reply = await chat_complete(messages, temperature=0.5, max_tokens=2048)
+    tags = clean_style_tags(reply, title=title)
+    if not re.search(r"[a-z]{3}", tags):
+        # "." or "/" is not a style; failing lets the corpus screen offer Analyse style again.
+        raise RuntimeError(f"the model returned no usable tags ({reply.strip()[:40]!r})")
+    log.info("Finished external LLM style description for '%s': %s", title, tags)
+    return tags
+
+
+# The tags a corpus draft may use: YuE2's own section names.
+SECTION_NAMES = {"intro": "Intro", "verse": "Verse", "pre-chorus": "Pre-Chorus", "prechorus": "Pre-Chorus",
+                 "chorus": "Chorus", "bridge": "Bridge", "outro": "Outro"}
+# A section with no lines is an instrumental one, which only these can be.
+INSTRUMENTAL_SECTIONS = {"Intro", "Bridge", "Outro"}
+
+
+def _section_reply(reply: str, count: int) -> list[tuple[str, int | None, int | None]]:
+    """The model's sections as (tag, first, last) line numbers, checked: every line
+    once, in order, under a known tag.  Raises ValueError otherwise."""
+    found = re.search(r"\[.*\]", reply or "", re.S)
+    if not found:
+        raise ValueError("no list of sections in the reply")
+    items = json.loads(found.group(0))
+    out, expect = [], 1
+    for item in items:
+        name = re.sub(r"[^a-z-]", "", str(item.get("tag", "")).lower().replace(" ", "-")).strip("-")
+        name = re.sub(r"-?\d+$", "", name)
+        tag = SECTION_NAMES.get(name)
+        if not tag:
+            raise ValueError(f"an unknown section {item.get('tag')!r}")
+        first, last = item.get("from"), item.get("to")
+        if first is None and last is None:
+            if tag not in INSTRUMENTAL_SECTIONS:
+                raise ValueError(f"a {tag} with no lines")
+            out.append((tag, None, None))
+            continue
+        if not isinstance(first, int) or not isinstance(last, int) or first != expect or last < first:
+            raise ValueError(f"lines out of order at {tag} {first}-{last}")
+        out.append((tag, first, last))
+        expect = last + 1
+    if expect != count + 1:
+        raise ValueError(f"it covered {expect - 1} of {count} lines")
+    return out
+
+
+# Singing that starts this late has an instrumental intro before it.
+INTRO_SECONDS = 5.0
+
+
+async def tag_sections(lines: list[dict]) -> list[tuple[str, list[str]]]:
+    """Mark where each section of a corpus song begins, from the words as sung.
+
+    The lines stay exactly as heard, in the order heard: the model only says which
+    lines each section holds.  A chorus is found by its words coming back, which the
+    music analysis cannot hear, and a section starts after a longer pause.  Only the
+    lines and their times are sent, never the song's title or artist: it works the
+    same on a recording nobody has heard.  SheetSage's sections are not sent: given
+    them as a guide, the model copied them, a 16-line "verse" included, where from
+    the words alone it found the verses and choruses inside it."""
+    numbered = []
+    before = 0.0
+    for index, line in enumerate(lines, 1):
+        pause = max(0.0, line["start"] - before)
+        numbered.append(f"{index}. [{line['start']:.1f}s, after a {pause:.1f}s pause] {line['text']}")
+        before = max(before, line["end"])
+    prompt = (
+        "These are the sung lines of a song recording, numbered, in the order they are sung, "
+        "with the time each starts and the pause before it.\n\n" + "\n".join(numbered) + "\n\n"
+        "Say which lines each section of the song holds, in order, as a songbook would mark them. "
+        "Use only these tags: Intro, Verse, Pre-Chorus, Chorus, Bridge, Outro. Lines whose words come back "
+        "later are usually the chorus; a new section usually starts after a longer pause. "
+        "Every line must be in exactly one section, in order: never "
+        "change, add, drop or reorder lines. A section with no singing, such as an instrumental intro, "
+        "may be given with no lines.\n\n"
+        'Reply with JSON only: a list like [{"tag": "Intro"}, {"tag": "Verse", "from": 1, "to": 4}, '
+        '{"tag": "Chorus", "from": 5, "to": 8}], where from and to are line numbers.'
+    )
+    messages = [
+        {"role": "system", "content": "You mark the sections of song lyrics. Output only the requested JSON."},
+        {"role": "user", "content": prompt},
+    ]
+    # Room for a thinking model's thought as well as the answer (see chat_complete).
+    # A thinking model can spend 4096 tokens on a long song before it answers.
+    reply = await chat_complete(messages, temperature=0.2, max_tokens=8192)
+    sections = _section_reply(reply, len(lines))
+    texts = [line["text"] for line in lines]
+    blocks = [(tag, [] if first is None else texts[first - 1:last]) for tag, first, last in sections]
+    if lines[0]["start"] >= INTRO_SECONDS and blocks[0][0] != "Intro":
+        blocks.insert(0, ("Intro", []))
+    return blocks
+
+
+def _models_url(base_url: str) -> str:
+    """Normalize the base URL to point to /models endpoint."""
+    cleaned = base_url.strip().rstrip("/")
+    if "generativelanguage.googleapis.com" in cleaned:
+        return "https://generativelanguage.googleapis.com/v1beta/openai/models"
+    if cleaned.endswith("/chat/completions"):
+        cleaned = cleaned[:-17].rstrip("/")
+    if cleaned.endswith("/models"):
+        return cleaned
+    return f"{cleaned}/models"
+
+
+async def fetch_models(config_override: dict[str, str] | None = None) -> list[dict[str, str]]:
+    """Query the provider's /models endpoint to discover available text/chat models."""
+    cfg = get_config()
+    if config_override:
+        cfg.update(config_override)
+    models_url = _models_url(cfg["api_url"])
+    api_key = cfg["api_key"]
+    log.info("Fetching available models from %s...", models_url)
+
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": f"Yeufonic/{config.VERSION}",
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    t0 = time.perf_counter()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(models_url, headers=headers)
+        except Exception as exc:
+            elapsed = time.perf_counter() - t0
+            log.warning("Failed to fetch models from %s after %.2fs: %s", models_url, elapsed, exc)
+            raise RuntimeError(f"Could not reach {models_url}: {exc}") from exc
+
+    elapsed = time.perf_counter() - t0
+    if resp.status_code != 200:
+        err_msg = resp.text[:300]
+        try:
+            err_json = resp.json()
+            if isinstance(err_json, dict) and "error" in err_json:
+                err_msg = err_json["error"].get("message") or err_msg
+        except Exception:
+            pass
+        log.warning("Models endpoint %s returned HTTP %d: %s", models_url, resp.status_code, err_msg)
+        raise RuntimeError(f"HTTP {resp.status_code}: {err_msg}")
+
+    try:
+        data = resp.json()
+    except Exception as exc:
+        raise RuntimeError(f"Invalid JSON from models endpoint: {exc}") from exc
+
+    raw_items = data.get("data") or data.get("models") or []
+    excluded = (
+        "embedding", "tts", "transcribe", "video", "veo", "audio", "lyria",
+        "robotics", "image", "imagen", "dall-e", "whisper", "clip", "aqa",
+        "babbage", "davinci", "moderation", "similarity", "search",
+        "live", "bidi", "computer-use", "realtime", "omni", "deep-research",
+        "antigravity", "customtools", "gemini-2.5-flash", "gemini-2.5-pro",
+    )
+
+    results: list[dict[str, str]] = []
+    seen = set()
+    for item in raw_items:
+        mid = str(item.get("id") or item.get("name") or "").strip()
+        if not mid:
+            continue
+        if mid.startswith("models/"):
+            mid = mid[7:]
+        if any(ex in mid.lower() for ex in excluded):
+            continue
+        if mid in seen:
+            continue
+        seen.add(mid)
+        display_name = item.get("display_name") or item.get("name") or mid
+        if display_name.startswith("models/"):
+            display_name = display_name[7:]
+        label = f"{display_name} ({mid})" if display_name != mid else mid
+        results.append({"id": mid, "name": display_name, "label": label})
+
+    # Sort models nicely: prioritize latest fast models, then flash, pro, mini, others
+    def sort_key(m: dict[str, str]) -> tuple[int, str]:
+        mid = m["id"].lower()
+        if "3.8-flash" in mid or "flash-latest" in mid:
+            priority = 0
+        elif "flash" in mid:
+            priority = 1
+        elif "pro" in mid or "gpt-4o" in mid:
+            priority = 2
+        elif "mini" in mid:
+            priority = 3
+        else:
+            priority = 4
+        return (priority, mid)
+
+    results.sort(key=sort_key)
+    log.info("Discovered %d models from %s in %.2fs", len(results), models_url, elapsed)
+    return results
+
+
+# ------------------------------------------------------- hearing sung lyrics
+HEAR_PROMPT = (
+    "This is an isolated vocal track from a song. Transcribe the sung lyrics exactly as they "
+    "are sung, one line per sung phrase, in order. Write a line out again every time it is "
+    "sung, including repeated choruses. Do not add section labels, notes or commentary, and "
+    "do not add words you cannot hear. If a word is unclear, write your best guess."
+)
+# An upload of a few megabytes and a reply of a few hundred words: measured at 7-13 s
+# for a 3.5 minute song, so a minute is not enough headroom for a long one.
+HEAR_TIMEOUT = 300.0
+
+
+def _hear_lines(reply: str) -> list[str]:
+    """The sung lines from a reply, without the section labels, fences and notes a
+    model adds despite being asked not to.  The app lays out its own sections."""
+    lines = []
+    for raw in (reply or "").splitlines():
+        line = raw.strip().strip("*").strip()
+        if not line or line.startswith("```"):
+            continue
+        if re.fullmatch(r"[\[(].*[\])]", line):            # [Chorus], (instrumental)
+            continue
+        lines.append(line)
+    return lines
+
+
+# A model asked to write out a song it recognises may hold back and say why instead:
+# the Gemini app, given a well-known song's lyrics and asked to lay them out, gave
+# each section's first line and "...", then pointed at "licensed lyrics" on Genius or
+# LyricFind.  Those words all match the song, so the agreement check passes them,
+# and a notice would be laid out as sung lines.  These catch it.
+ELIDED = re.compile(r"(\.\.\.|\u2026)\s*$")
+# A notice talks about lyrics and where to find them, or refuses outright.  A sung
+# line may say "genius" or "complete"; it is very unlikely to say "lyrics" with them.
+NOTICE_REFUSAL = re.compile(r"\b(can(no|')t|unable to|not able to) (provide|reproduce|share|write out|transcribe)\b",
+                            re.IGNORECASE)
+NOTICE_LYRICS = re.compile(r"\blyrics?\b", re.IGNORECASE)
+NOTICE_WHERE = re.compile(r"\b(licen[cs]ed?|copyright(ed)?|genius|lyricfind|musixmatch|azlyrics|full|complete"
+                          r"|database|website|site|search(ing)?)\b", re.IGNORECASE)
+
+
+def held_back(lines: list[str]) -> str | None:
+    """Why a reply is not the whole song, or None when nothing says it is not."""
+    # One line may trail off as sung; a held-back reply cut every section short.
+    if sum(1 for line in lines if ELIDED.search(line)) >= 2:
+        return "cut lines short"
+    if any(NOTICE_REFUSAL.search(line) or (NOTICE_LYRICS.search(line) and NOTICE_WHERE.search(line))
+           for line in lines):
+        return "wrote a notice instead of the full lyrics"
+    return None
+
+
+async def hear_lyrics(vocal: "Path") -> list[str]:
+    """Send a separated vocal to the external LLM and return the lines it hears.
+
+    Works only with a model that accepts audio, such as Gemini through its
+    OpenAI-compatible endpoint.  Nothing in the API says in advance whether a
+    model does, so this simply asks: a model that refuses raises, and the caller
+    falls back to Whisper.  Measured against the real lyrics of two songs, Gemini got
+    1.5% and 23% of words wrong, three runs giving the same answer and adding no words.
+    Whisper, once it listened to the whole vocal, got 1.5% and 25%: most of the gap
+    this was built to close turned out to be Whisper's voice detector, since switched
+    off (see identities.transcribe).
+
+    The vocal goes out as mono 128 kbps MP3: about 1 MB a minute, which keeps the
+    request well inside what providers accept inline."""
+    import asyncio
+    import base64
+    import subprocess
+    import tempfile
+    from pathlib import Path as _Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        mp3 = _Path(tmp) / "vocal.mp3"
+        done = await asyncio.to_thread(
+            subprocess.run,
+            ["ffmpeg", "-v", "error", "-y", "-i", str(vocal), "-ac", "1", "-b:a", "128k", str(mp3)],
+            capture_output=True,
+        )
+        if done.returncode != 0 or not mp3.exists():
+            raise RuntimeError("the vocal could not be encoded for upload")
+        audio = base64.b64encode(mp3.read_bytes()).decode()
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": HEAR_PROMPT},
+        {"type": "input_audio", "input_audio": {"data": audio, "format": "mp3"}},
+    ]}]
+    log.info("Asking the external LLM to hear a vocal (%.1f MB encoded)", len(audio) * 3 / 4 / 1e6)
+    reply = await chat_complete(messages, temperature=0.0, timeout=HEAR_TIMEOUT)
+    lines = _hear_lines(reply)
+    if not lines:
+        raise RuntimeError("the model returned no lyrics")
+    return lines
