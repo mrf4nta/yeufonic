@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -250,31 +251,42 @@ def normalise(rendered: Path) -> Path:
     """Write a copy of a take at the usual loudness beside the file as rendered, and
     return it.  The rendered file is only read, so doing it twice gives the same result.
 
-    Two passes: the first measures, the second applies one gain to the whole take, so
-    its quiet and loud parts keep their distance.  Only when that gain would push a
-    peak past the ceiling does ffmpeg fall back to shaping the level as it goes."""
-    target = f"I={NORMAL_LUFS}:TP={NORMAL_PEAK}:LRA=11"
-    keep = rendered
-    audio = normalised_path(rendered)
-    first = subprocess.run(["ffmpeg", "-v", "info", "-nostats", "-i", str(keep), "-af",
-                            f"loudnorm={target}:print_format=json", "-f", "null", "-"],
+    One gain for the whole take, so its quiet and loud parts keep their distance, then
+    a fast limiter for any peaks that gain would push past the ceiling.  Not loudnorm's
+    own second pass: where the gain would clip, it falls back to riding the level as the
+    song plays, and on a take whose peaks are already high that swung the gain by 10 dB,
+    heard as sudden dips."""
+    first = subprocess.run(["ffmpeg", "-v", "info", "-nostats", "-i", str(rendered), "-af",
+                            f"loudnorm=I={NORMAL_LUFS}:TP={NORMAL_PEAK}:print_format=json", "-f", "null", "-"],
                            capture_output=True, text=True, timeout=300).stderr
     found = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", first)
     if not found:
         raise RuntimeError("ffmpeg could not measure the take's loudness")
     measured = json.loads(found.group(0))
-    rate = "48000"
-    with keep.open("rb") as fh:
+    loudness, peak = float(measured["input_i"]), float(measured["input_tp"])
+    if not math.isfinite(loudness):
+        raise RuntimeError("the take is silent")
+    gain = NORMAL_LUFS - loudness
+    chain = f"volume={gain:.2f}dB"
+    if peak + gain > NORMAL_PEAK:
+        # Four times oversampled, so the peaks between samples are caught too, and a
+        # tenth of a dB under the ceiling for what the resampling back adds.
+        ceiling = 10 ** ((NORMAL_PEAK - 0.1) / 20)
+        chain += f",aresample=192000,alimiter=limit={ceiling:.4f}:attack=5:release=50:level=0"
+    rate, bits = 48000, 16
+    with rendered.open("rb") as fh:
         head = fh.read(26)
     if head[:4] == b"fLaC" and len(head) >= 26:
-        rate = str(int.from_bytes(head[18:26], "big") >> 44 or 48000)
+        packed = int.from_bytes(head[18:26], "big")
+        rate, bits = (packed >> 44) or 48000, ((packed >> 36) & 0x1F) + 1
+    audio = normalised_path(rendered)
     staged = rendered.with_name(f"{rendered.stem}.normalising{rendered.suffix}")
     try:
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(keep), "-af",
-                        f"loudnorm={target}:measured_I={measured['input_i']}:measured_TP={measured['input_tp']}"
-                        f":measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}"
-                        f":offset={measured['target_offset']}:linear=true",
-                        "-ar", rate, "-c:a", "flac", str(staged)],
+        # Back at the rendered file's rate and depth: the filters work in floating
+        # point, which FLAC would otherwise keep at 32 bits, twice the size.
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(rendered), "-af", chain,
+                        "-ar", str(rate), "-sample_fmt", "s16" if bits <= 16 else "s32",
+                        "-c:a", "flac", str(staged)],
                        capture_output=True, text=True, timeout=300, check=True)
         replace_file(staged, audio)
     finally:

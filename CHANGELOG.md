@@ -40,3 +40,9 @@ Everything YuE2 Studio did, Yeufonic does. The version numbers start again.
   - **Windows:** the installer finds a YuE2 Studio installation and moves it into Yeufonic's
     folder. Your library, settings, LoRAs and models come too, so nothing is downloaded again.
   - **Docker:** a script moves them from an old clone into a new one.
+- Clicking a take's *Normalised* label undoes the normalise.
+
+### Fixed
+
+- Normalising a take whose peaks were already high could make its volume dip and swell. It now
+  applies one gain to the whole take, and limits only the peaks that would clip.

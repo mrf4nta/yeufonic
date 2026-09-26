@@ -189,3 +189,64 @@ def test_renaming_files_at_start_keeps_a_normalised_take_on_its_louder_copy(clie
     execute("UPDATE takes SET audio_path = ?, normalised = 1 WHERE id = ?", (str(louder), take["id"]))
     relayout()
     assert one("SELECT audio_path FROM takes WHERE id = ?", (take["id"],))["audio_path"] == str(louder)
+
+
+# ---------- one gain for the whole take ----------
+def peaky_song(path):
+    """A quiet opening, then a louder part with clicks near full scale: a take whose
+    peaks are already high, so the gain it needs would push them past the ceiling."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    expr = "if(lt(t,8), 0.01, 0.08)*sin(2*PI*440*t) + if(gte(t,8)*lt(mod(t,1),0.002), 0.3, 0)"
+    subprocess.run(["ffmpeg", "-v", "quiet", "-f", "lavfi", "-i", f"aevalsrc='{expr}':s=48000:d=20",
+                    "-ac", "2", "-sample_fmt", "s16", str(path)], check=True)
+    return path
+
+
+def measure(path) -> dict:
+    import json, re
+    err = subprocess.run(["ffmpeg", "-v", "info", "-nostats", "-i", str(path), "-af",
+                          "loudnorm=print_format=json", "-f", "null", "-"], capture_output=True, text=True).stderr
+    return json.loads(re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", err).group(0))
+
+
+def short_term(path) -> list[float]:
+    import re
+    err = subprocess.run(["ffmpeg", "-v", "verbose", "-nostats", "-i", str(path), "-af", "ebur128", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    return [float(s) for s in re.findall(r"t:\s*[\d.]+\s+TARGET.*?S:\s*(-?[\d.]+)", err)]
+
+
+def test_the_gain_holds_steady_where_the_peaks_are_already_high(client, tmp_path):
+    from app.library import NORMAL_LUFS, NORMAL_PEAK
+    audio = peaky_song(tmp_path / "takes" / "peaky" / "peaky.flac")
+    take = make_take(title="Peaky", audio_path=str(audio))
+    assert client.post(f"/api/takes/{take['id']}/normalise").json() == {"normalised": True}
+    louder = normalised_path(audio)
+
+    got = measure(louder)
+    assert abs(float(got["input_i"]) - NORMAL_LUFS) < 0.5
+    assert float(got["input_tp"]) <= NORMAL_PEAK + 0.05
+    # Lifted by the same amount from start to end, every two seconds. loudnorm's
+    # dynamic mode rode the level: here by 1.7 dB, on a real take by 10 dB.
+    before, after = short_term(audio), short_term(louder)
+    gains = [after[i] - before[i] for i in range(30, min(len(before), len(after)), 20)]
+    assert min(gains) > 5 and max(gains) - min(gains) < 0.5
+
+
+def test_a_normalised_take_keeps_the_rendered_rate_and_depth(client, tmp_path):
+    audio = peaky_song(tmp_path / "takes" / "depth" / "depth.flac")
+    take = make_take(title="Depth", audio_path=str(audio))
+    client.post(f"/api/takes/{take['id']}/normalise")
+    fmt = subprocess.run(["ffprobe", "-v", "quiet", "-show_entries", "stream=sample_rate,sample_fmt", "-of", "csv=p=0",
+                          str(normalised_path(audio))], capture_output=True, text=True).stdout.strip()
+    assert fmt == "s16,48000"
+
+
+def test_a_silent_take_is_refused_rather_than_amplified(client, tmp_path):
+    audio = tmp_path / "takes" / "silent" / "silent.flac"
+    audio.parent.mkdir(parents=True)
+    subprocess.run(["ffmpeg", "-v", "quiet", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "3", str(audio)],
+                   check=True)
+    take = make_take(title="Silent", audio_path=str(audio))
+    assert client.post(f"/api/takes/{take['id']}/normalise").status_code == 500
+    assert not normalised_path(audio).exists()
