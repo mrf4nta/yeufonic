@@ -76,6 +76,19 @@ SETTINGS_SPEC: list[dict] = [
         "help": "The format for saving stems or takes.",
     },
     {
+        "key": "normalise.level",
+        "label": "Normalise to",
+        "type": "select",
+        # What streaming services play at, and where a render that went well lands.
+        "default": "-14",
+        "options": [
+            {"value": "-16", "label": "\u221216 LUFS, quieter"},
+            {"value": "-14", "label": "\u221214 LUFS, the usual"},
+            {"value": "-11", "label": "\u221211 LUFS, loud"},
+        ],
+        "help": "How loud a normalised take is made. Louder squeezes its peaks harder.",
+    },
+    {
         "key": "stems.model",
         "label": "Stem separation model",
         "type": "select",
@@ -1465,7 +1478,7 @@ def _base_title(title: str) -> str:
 # What Sing again leaves behind: the copy is a new take with its own audio and state.
 _REVOICE_FRESH = {"id", "title", "status", "stage", "error", "audio_path", "duration", "prompt_id", "created_at",
                   "finished_at", "elapsed", "favourite", "vocal_check", "loudness", "sound_seed", "normalised",
-                  "weak_dismissed"}
+                  "normalised_to", "weak_dismissed"}
 
 
 @app.post("/api/takes/{take_id}/revoice")
@@ -2295,9 +2308,10 @@ async def normalise_take(take_id: str, undo: bool = False) -> dict:
         if undo:
             if not take["normalised"]:
                 raise HTTPException(409, "this take has not been normalised")
-            playing = rendered
+            playing, target = rendered, None
         else:
-            playing = await asyncio.to_thread(library.normalise, rendered)
+            target = library.normal_target()
+            playing = await asyncio.to_thread(library.normalise, rendered, target)
     except PermissionError as exc:
         log.warning("Could not normalise take '%s': its file is open in another program (%s)", take["title"] or take_id, exc)
         raise HTTPException(409, "its audio file is open in another program; close it and try again") from exc
@@ -2306,7 +2320,8 @@ async def normalise_take(take_id: str, undo: bool = False) -> dict:
         raise HTTPException(500, "could not normalise this take") from exc
     # The recorded level stays the one it was rendered at: that is what says whether
     # the render went wrong, and normalising does not change that.
-    execute("UPDATE takes SET normalised = ?, audio_path = ? WHERE id = ?", (0 if undo else 1, str(playing), take_id))
+    execute("UPDATE takes SET normalised = ?, normalised_to = ?, audio_path = ? WHERE id = ?",
+            (0 if undo else 1, target, str(playing), take_id))
     if undo:
         # Gone if nothing has it open; a later render clears it otherwise.
         with contextlib.suppress(OSError):

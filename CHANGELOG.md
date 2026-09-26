@@ -41,6 +41,7 @@ Everything YuE2 Studio did, Yeufonic does. The version numbers start again.
     folder. Your library, settings, LoRAs and models come too, so nothing is downloaded again.
   - **Docker:** a script moves them from an old clone into a new one.
 - Clicking a take's *Normalised* label undoes the normalise.
+- **Normalise to** in Settings: how loud a normalised take is made, −16, −14 or −11 LUFS.
 
 ### Fixed
 

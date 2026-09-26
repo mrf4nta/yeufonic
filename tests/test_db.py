@@ -31,6 +31,22 @@ def test_legacy_takes_table_is_rebuilt(tmp_path, monkeypatch):
     assert db.conn().execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS)
 
 
+def test_a_database_from_the_engine_trial_branch_catches_up(tmp_path, monkeypatch):
+    """That branch took version 24 for its engine column.  A database that ran it is
+    at 24 already, and still gains what main added after."""
+    path = tmp_path / "branch.sqlite"
+    monkeypatch.setattr(config, "DB_PATH", path)
+    db.migrate()
+    c = db.conn()
+    c.execute("ALTER TABLE takes DROP COLUMN normalised_to")
+    c.execute("PRAGMA user_version = 24")
+    c.commit()
+    db.migrate()
+    columns = {r["name"] for r in db.rows("PRAGMA table_info(takes)")}
+    assert {"engine", "normalised_to"} <= columns
+    assert c.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS)
+
+
 def test_settings_cache_follows_writes():
     assert db.get_setting("x", "fallback") == "fallback"
     db.set_setting("x", "1")

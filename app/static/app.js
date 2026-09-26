@@ -4660,7 +4660,7 @@ function paintTakes() {
       // rendered keeps saying so, and a listen tells a good quiet take from a bad one.
       live = take.normalised
         ? '<div class="take-status weak with-x" title="Came out at ' + take.loudness.toFixed(1) + ' dB as rendered, far below the usual level, and has been normalised. Takes like this often sound thin or distorted, and some were only quiet.">' +
-          '<button class="status-undo" data-act="unnormalise" data-id="' + take.id + '" title="Click to undo the normalise">' +
+          '<button class="status-undo" data-act="unnormalise" data-id="' + take.id + '" title="' + normalisedTo(take) + ' Click to undo it.">' +
           'Weak render, normalised: try another seed if it sounds thin</button>' +
           '<button class="status-x" data-act="dismiss-weak" data-id="' + take.id + '" title="It sounds fine: dismiss" aria-label="Dismiss">\u00d7</button></div>'
         : '<button class="take-status weak" data-act="normalise"' + ' data-id="' + take.id + '" title="Came out at ' + take.loudness.toFixed(1) +
@@ -4671,7 +4671,7 @@ function paintTakes() {
         ' s cap, but the music kept going and was cut at the cap. The end may loop, wander or stop dead. Another seed usually ends properly.">Ran to the length cap: may not end cleanly</div>';
     } else if (take.normalised) {
       live = '<button class="take-status normalised" data-act="unnormalise" data-id="' + take.id +
-        '" title="Brought to the usual loudness. Click to go back to the level it was rendered at.">Normalised</button>';
+        '" title="' + normalisedTo(take) + ' Click to go back to the level it was rendered at.">Normalised</button>';
     }
     var id = ' data-id="' + take.id + '"';
     var actions = '';
@@ -4760,6 +4760,12 @@ function paintTakes() {
     '</article>';
   }).join('');
   paintBulk();
+}
+
+/* Takes normalised before the level could be chosen have none recorded; all were -14. */
+function normalisedTo(take) {
+  var level = take.normalised_to == null ? -14 : take.normalised_to;
+  return 'Normalised to ' + (level < 0 ? '\u2212' : '') + Math.abs(level) + ' LUFS.';
 }
 
 function startRenameTake(titleEl, takeId) {

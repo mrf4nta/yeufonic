@@ -521,7 +521,8 @@ trained here.
 **Normalise volume.** Tick it in the form and each take made while it is ticked is brought to the
 usual loudness when it finishes, and marked *Normalised*. A take made without it can be normalised
 later with the speaker button at the top of its card. The file as rendered is kept beside it, and
-clicking *Normalised* goes back to it. Unticked, a take keeps the level it was rendered at.
+clicking *Normalised* goes back to it. How loud it is made is set in Settings, under *Normalise to*.
+Unticked, a take keeps the level it was rendered at.
 
 **An instrumental sang.** See *When an instrumental sings* above. It is a model failure; a new seed
 usually fixes it.

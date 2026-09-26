@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 from app import config
-from app.db import execute, one
+from app.db import execute, one, set_setting
 from app.library import loudness, normalised_path, original_path
 
 from conftest import make_take
@@ -83,9 +83,10 @@ def test_a_take_asked_to_be_normalised_is_when_its_render_finishes(monkeypatch, 
     take = make_take(status="queued", abc=ABC, title="Quiet")
     execute("UPDATE takes SET normalise = 1 WHERE id = ?", (take["id"],))
     use(monkeypatch, FakeEngine([render_history()], audio=rendered))
+    set_setting("normalise.level", "-16")
     asyncio.run(jobs.run_job("render", take["id"]))
     row = one("SELECT * FROM takes WHERE id = ?", (take["id"],))
-    assert row["status"] == "done" and row["normalised"] == 1
+    assert row["status"] == "done" and row["normalised"] == 1 and row["normalised_to"] == -16.0
     assert loudness(Path(row["audio_path"])) > config.WEAK_RENDER_DB
     assert row["loudness"] < config.WEAK_RENDER_DB, "still known as weak: the level is the one it was rendered at"
     assert row["audio_path"].endswith("quiet.normalised.flac")
@@ -250,3 +251,27 @@ def test_a_silent_take_is_refused_rather_than_amplified(client, tmp_path):
     take = make_take(title="Silent", audio_path=str(audio))
     assert client.post(f"/api/takes/{take['id']}/normalise").status_code == 500
     assert not normalised_path(audio).exists()
+
+
+# ---------- the level, from Settings ----------
+def test_the_level_comes_from_settings_and_is_recorded(client, tmp_path):
+    audio = peaky_song(tmp_path / "takes" / "level" / "level.flac")
+    take = make_take(title="Level", audio_path=str(audio))
+    listed = lambda: next(t for t in client.get("/api/takes").json() if t["id"] == take["id"])
+
+    client.post(f"/api/takes/{take['id']}/normalise")
+    assert abs(float(measure(normalised_path(audio))["input_i"]) + 14) < 0.5
+    assert listed()["normalised_to"] == -14.0
+
+    client.post(f"/api/takes/{take['id']}/normalise?undo=true")
+    assert listed()["normalised_to"] is None
+    assert client.put("/api/settings", json={"key": "normalise.level", "value": "-11"}).status_code == 200
+    client.post(f"/api/takes/{take['id']}/normalise")
+    assert abs(float(measure(normalised_path(audio))["input_i"]) + 11) < 0.5
+    assert listed()["normalised_to"] == -11.0
+
+
+def test_only_the_offered_levels_can_be_set(client):
+    assert client.put("/api/settings", json={"key": "normalise.level", "value": "-3"}).status_code == 400
+    item = {s["key"]: s for s in client.get("/api/settings").json()["settings"]}["normalise.level"]
+    assert item["value"] == "-14" and [o["value"] for o in item["options"]] == ["-16", "-14", "-11"]

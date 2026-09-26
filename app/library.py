@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from . import config
-from .db import execute, rows
+from .db import execute, get_setting, rows
 
 log = logging.getLogger("yue2.library")
 
@@ -186,6 +186,14 @@ def fill_loudness() -> int:
 # the raised take from clipping.
 NORMAL_LUFS = -14.0
 NORMAL_PEAK = -1.0
+# The levels Settings offers, as the setting stores them.
+NORMAL_LEVELS = ("-16", "-14", "-11")
+
+
+def normal_target() -> float:
+    """The loudness Settings asks a normalised take to be, else the usual."""
+    value = get_setting("normalise.level", None)
+    return float(value) if value in NORMAL_LEVELS else NORMAL_LUFS
 
 
 def replace_file(src: Path, dest: Path, tries: int = 10) -> None:
@@ -247,8 +255,8 @@ def convert_old_normalised() -> int:
     return done
 
 
-def normalise(rendered: Path) -> Path:
-    """Write a copy of a take at the usual loudness beside the file as rendered, and
+def normalise(rendered: Path, target: float = NORMAL_LUFS) -> Path:
+    """Write a copy of a take at the target loudness beside the file as rendered, and
     return it.  The rendered file is only read, so doing it twice gives the same result.
 
     One gain for the whole take, so its quiet and loud parts keep their distance, then
@@ -257,7 +265,7 @@ def normalise(rendered: Path) -> Path:
     song plays, and on a take whose peaks are already high that swung the gain by 10 dB,
     heard as sudden dips."""
     first = subprocess.run(["ffmpeg", "-v", "info", "-nostats", "-i", str(rendered), "-af",
-                            f"loudnorm=I={NORMAL_LUFS}:TP={NORMAL_PEAK}:print_format=json", "-f", "null", "-"],
+                            f"loudnorm=I={target}:TP={NORMAL_PEAK}:print_format=json", "-f", "null", "-"],
                            capture_output=True, text=True, timeout=300).stderr
     found = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", first)
     if not found:
@@ -266,7 +274,7 @@ def normalise(rendered: Path) -> Path:
     loudness, peak = float(measured["input_i"]), float(measured["input_tp"])
     if not math.isfinite(loudness):
         raise RuntimeError("the take is silent")
-    gain = NORMAL_LUFS - loudness
+    gain = target - loudness
     chain = f"volume={gain:.2f}dB"
     if peak + gain > NORMAL_PEAK:
         # Four times oversampled, so the peaks between samples are caught too, and a

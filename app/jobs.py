@@ -18,7 +18,7 @@ from pathlib import Path
 from . import config, identities, instrumental, llm, loras, lyrics, score, stems
 from .db import bump_average, execute, get_setting, one, rows
 from .engine import Engine, load_template
-from .library import (audio_duration, ensure_peaks, loudness, inside, normalise, normalised_path, original_path, remove_tree,
+from .library import (audio_duration, ensure_peaks, loudness, inside, normal_target, normalise, normalised_path, original_path, remove_tree,
                       take_audio_path, vocal_path, write_take_note)
 
 personas = identities
@@ -621,12 +621,13 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
     # The level as rendered, before any normalising: a render far quieter than usual
     # has often gone wrong, and a louder copy of it has not been put right.
     level = await asyncio.to_thread(loudness, dest)
-    normalised = 0
+    normalised, normalised_to = 0, None
     playing = dest
     if record.get("normalise"):
         try:
-            playing = await asyncio.to_thread(normalise, dest)
-            normalised = 1
+            target = normal_target()
+            playing = await asyncio.to_thread(normalise, dest, target)
+            normalised, normalised_to = 1, target
         except Exception as exc:  # noqa: BLE001
             log.warning("Could not normalise '%s'; it keeps the level it was rendered at: %s",
                         record.get("title") or ref_id, exc)
@@ -636,8 +637,8 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
     sung = await asyncio.to_thread(singing_share, dest) if record.get("kind") == "instrumental" else None
     elapsed = time.time() - started
     execute(
-        "UPDATE takes SET status = 'done', stage = NULL, audio_path = ?, duration = ?, finished_at = ?, elapsed = ?, error = NULL, vocal_check = ?, loudness = ?, normalised = ?, weak_dismissed = 0 WHERE id = ?",
-        (str(playing), duration, time.time(), elapsed, sung, level, normalised, ref_id),
+        "UPDATE takes SET status = 'done', stage = NULL, audio_path = ?, duration = ?, finished_at = ?, elapsed = ?, error = NULL, vocal_check = ?, loudness = ?, normalised = ?, normalised_to = ?, weak_dismissed = 0 WHERE id = ?",
+        (str(playing), duration, time.time(), elapsed, sung, level, normalised, normalised_to, ref_id),
     )
     fresh = one("SELECT * FROM takes WHERE id = ?", (ref_id,))
     if fresh:

@@ -420,6 +420,21 @@ def _weak_dismissed() -> None:
         execute("ALTER TABLE takes ADD COLUMN weak_dismissed INTEGER NOT NULL DEFAULT 0")
 
 
+def _engine() -> None:
+    """Which engine planned or rendered a take.  Added on a branch that tried another
+    engine beside ComfyUI; databases that ran it are at this version, so it stays here
+    to keep the numbering in step.  Nothing on main writes it."""
+    if "engine" not in _columns("takes"):
+        execute("ALTER TABLE takes ADD COLUMN engine TEXT")
+
+
+def _normalised_to() -> None:
+    """The loudness a take was normalised to, since Settings can choose it.  Empty for
+    takes normalised before, which were all brought to -14 LUFS."""
+    if "normalised_to" not in _columns("takes"):
+        execute("ALTER TABLE takes ADD COLUMN normalised_to REAL")
+
+
 MIGRATIONS = [
     lambda: (conn().executescript(BASE_SCHEMA), _legacy_takes()),   # -> 1
     _indexes,                                                        # -> 2
@@ -444,6 +459,8 @@ MIGRATIONS = [
     _normalised,                                                     # -> 21
     _rendered_level,                                                 # -> 22
     _weak_dismissed,                                                 # -> 23
+    _engine,                                                         # -> 24
+    _normalised_to,                                                  # -> 25
 ]
 
 
