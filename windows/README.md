@@ -28,10 +28,12 @@ on Windows: no Docker, no WSL and no administrator prompt. **First pass: being t
 4. **Adds shortcuts** to the Start menu and the desktop, and an uninstaller. The uninstaller
    offers to keep the library and the models; a reinstall puts the models back.
 
-**The launcher** (`launcher.py`, run by the shortcut) starts the engine and the app, waits for
-both, and opens the browser. Both run in a Windows job tied to its window, so closing the window
-stops them. Their output goes to `logs\engine.log` and `logs\app.log`, and the install's own log
-to `logs\install.log`. Ports and the library folder can be changed in `settings.ini`:
+**The launcher** (`launcher.py`, run by the shortcut) starts the engine and the app together, and
+opens the browser as soon as the app answers. The engine takes longer: the page says it is
+starting, and a job asked for meanwhile waits for it. Both run in a Windows job tied to the
+launcher's window, so closing the window stops them. Their output goes to `logs\engine.log` and
+`logs\app.log`, how long each took to start to `logs\launcher.log`, and the install's own log to
+`logs\install.log`. Ports and the library folder can be changed in `settings.ini`:
 
 ```ini
 [yue2]

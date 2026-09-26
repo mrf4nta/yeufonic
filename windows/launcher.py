@@ -1,8 +1,11 @@
-"""Start Yeufonic on Windows: the engine (ComfyUI) and the app, then the browser.
+"""Start Yeufonic on Windows: the engine (ComfyUI) and the app together, then the
+browser as soon as the app answers.  The engine takes longer; the page says it is
+starting, and anything asked of it meanwhile waits.
 
 Run by the Start menu shortcut with the app's own Python.  Both programs belong to
 a Windows job that ends when this window does, so closing the window stops them,
-however it is closed.  Their output goes to logs\\engine.log and logs\\app.log.
+however it is closed.  Their output goes to logs\\engine.log and logs\\app.log, and
+how long each took to start to logs\\launcher.log.
 
 Ports and folders can be changed in settings.ini beside this file.
 """
@@ -99,15 +102,29 @@ def tail(path: Path, lines: int = 15) -> str:
         return ""
 
 
-def wait_for(name: str, url: str, process: subprocess.Popen, log: Path, seconds: int) -> None:
-    started = time.time()
-    while time.time() - started < seconds:
-        if answering(url):
-            return
+def windows_uptime() -> float:
+    """Seconds since Windows started: a start soon after a reboot reads everything from
+    disk, and is the slow one."""
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.GetTickCount64.restype = ctypes.c_ulonglong
+    return kernel32.GetTickCount64() / 1000
+
+
+def record(line: str) -> None:
+    """Said in the window, and kept in logs\\launcher.log so start-up times can be compared."""
+    print(line)
+    try:
+        with (LOGS / "launcher.log").open("a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {line}\n")
+    except OSError:
+        pass
+
+
+def check_running(programs) -> None:
+    """Stop with the log of any program that has exited."""
+    for name, process, log in programs:
         if process.poll() is not None:
-            fail(f"The {name} stopped while starting.", log)
-        time.sleep(1)
-    fail(f"The {name} did not start within {seconds // 60} minutes.", log)
+            fail(f"The {name} stopped unexpectedly.", log)
 
 
 def fail(message: str, log: Path | None = None) -> None:
@@ -152,16 +169,18 @@ def main() -> None:
     data.mkdir(parents=True, exist_ok=True)
     no_window = subprocess.CREATE_NO_WINDOW
 
-    print("Starting the engine (ComfyUI)...")
+    # Both at once: the app is up in seconds and copes with an engine still starting,
+    # so the page need not wait for ComfyUI.
+    started = time.time()
+    uptime = windows_uptime()
+    record(f"Starting the engine and the app (Windows up {uptime / 60:.0f} min)...")
     engine_log = LOGS / "engine.log"
     engine = subprocess.Popen(
         [str(engine_python), "-s", str(COMFY / "main.py"), "--windows-standalone-build",
          "--disable-auto-launch", "--listen", "127.0.0.1", "--port", str(engine_port)],
         cwd=str(COMFY), stdout=engine_log.open("w", encoding="utf-8"), stderr=subprocess.STDOUT,
         creationflags=no_window)
-    wait_for("engine", f"http://127.0.0.1:{engine_port}/system_stats", engine, engine_log, 600)
 
-    print("Starting the app...")
     env = dict(os.environ)
     tools = HERE / "tools"
     env.update({
@@ -187,20 +206,36 @@ def main() -> None:
          "--host", "127.0.0.1", "--port", str(app_port), "--no-access-log"],
         cwd=str(HERE / "studio"), env=env, stdout=app_log.open("w", encoding="utf-8"),
         stderr=subprocess.STDOUT, creationflags=no_window)
-    wait_for("app", f"http://127.0.0.1:{app_port}/api/health", app, app_log, 180)
+    programs = (("engine", engine, engine_log), ("app", app, app_log))
+
+    app_url, engine_url = f"http://127.0.0.1:{app_port}/api/health", f"http://127.0.0.1:{engine_port}/system_stats"
+    while not answering(app_url):
+        check_running(programs)
+        if time.time() - started > 180:
+            fail("The app did not start within 3 minutes.", app_log)
+        time.sleep(0.5)
+    record(f"App ready in {time.time() - started:.1f} s.")
 
     print()
     print(f"Yeufonic is running at {url}")
+    if not answering(engine_url):
+        print("The engine is still starting; the page says when it is ready.")
     print("Close this window to stop it.")
+    print()
     if cfg["open_browser"].lower() not in ("no", "false", "0"):
         webbrowser.open(url)
 
+    engine_ready = False
     try:
         while True:
-            time.sleep(2)
-            for name, process, log in (("engine", engine, engine_log), ("app", app, app_log)):
-                if process.poll() is not None:
-                    fail(f"The {name} has stopped unexpectedly.", log)
+            check_running(programs)
+            if not engine_ready:
+                if answering(engine_url):
+                    engine_ready = True
+                    record(f"Engine ready in {time.time() - started:.1f} s.")
+                elif time.time() - started > 600:
+                    fail("The engine did not start within 10 minutes.", engine_log)
+            time.sleep(1 if not engine_ready else 2)
     except KeyboardInterrupt:
         pass
 

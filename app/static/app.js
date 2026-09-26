@@ -218,6 +218,10 @@ async function pollState() {
     if (engine.online && engine.compat && engine.compat.ok) {
       pill.className = 'pill pill-on';
       pill.textContent = 'Engine ready' + (engine.gpu ? ' \u00b7 ' + Math.round(engine.gpu.vram_free / 1073741824) + ' GB free' : '');
+    } else if (engine.starting) {
+      // Up before the engine: the page opens early, and a job asked for now waits.
+      pill.className = 'pill pill-wait';
+      pill.textContent = 'Engine starting\u2026';
     } else if (engine.online) {
       pill.className = 'pill pill-off';
       pill.textContent = 'Engine incompatible: ' + ((engine.compat.missing || []).join(', ') || (engine.compat.notes || []).join('; '));

@@ -22,6 +22,7 @@ def test_a_script_asks_the_browser_to_check_again(client):
 def test_starts_with_the_engine_offline(client):
     state = client.get("/api/state").json()
     assert state["engine"]["online"] is False
+    assert state["engine"]["starting"] is True, "not answered yet, so starting rather than offline"
     assert "{{VERSION}}" not in client.get("/").text
 
 

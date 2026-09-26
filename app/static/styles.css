@@ -117,6 +117,7 @@ a, .link {
 .corpora .count { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .corpora.busy .corpora-dot { animation: none; } }
 .pill-off { color: var(--bad); border-color: rgba(248, 113, 113, 0.35); }
+.pill-wait { color: #fbbf24; border-color: rgba(251, 191, 36, 0.35); }
 
 /* ---------- layout ---------- */
 main {

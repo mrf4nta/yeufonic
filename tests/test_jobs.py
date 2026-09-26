@@ -239,3 +239,50 @@ def test_cancelling_a_running_stem_job(monkeypatch, data_dir):
     asyncio.run(run())
     row = one("SELECT * FROM stem_sets WHERE id = 'st1'")
     assert killed and row["status"] == "failed" and row["error"] == "cancelled"
+
+
+# ---------- an engine still starting ----------
+def test_an_engine_that_has_not_answered_yet_is_starting_for_a_while():
+    from app.engine import Engine
+    engine = Engine("http://127.0.0.1:9")
+    assert engine.starting
+    engine.last_contact = time.time()          # it answered once, then went away
+    assert not engine.starting
+    engine = Engine("http://127.0.0.1:9")
+    engine.created -= Engine.START_GRACE + 1   # never answered, and long past its start
+    assert not engine.starting
+
+
+def test_a_job_waits_for_a_starting_engine_then_goes_ahead(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    engine = SimpleNamespace(starting=True, online=False, options_loaded=False)
+    use(monkeypatch, engine)
+    naps = []
+
+    async def nap(seconds):
+        naps.append(seconds)
+        if len(naps) == 3:     # it answers, and its node list follows a moment later
+            engine.starting, engine.online = False, True
+        if len(naps) == 5:
+            engine.options_loaded = True
+
+    monkeypatch.setattr(jobs.asyncio, "sleep", nap)
+    asyncio.run(jobs.wait_for_engine())
+    assert len(naps) == 5 and engine.options_loaded
+
+
+def test_an_engine_that_is_simply_offline_does_not_hold_a_job(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    use(monkeypatch, SimpleNamespace(starting=False, online=False, options_loaded=False))
+    naps = []
+
+    async def nap(seconds):
+        naps.append(seconds)
+
+    monkeypatch.setattr(jobs.asyncio, "sleep", nap)
+    asyncio.run(jobs.wait_for_engine())
+    assert naps == []   # the job goes on, and fails as it always has

@@ -843,6 +843,7 @@ def state() -> dict:
         "engine": {
             "url": config.ENGINE_URL,
             "online": ENGINE.online,
+            "starting": ENGINE.starting,
             "error": ENGINE.last_error,
             "compat": ENGINE.compat,
             "queue": ENGINE.queue_counts,

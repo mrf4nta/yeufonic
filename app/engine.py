@@ -208,6 +208,7 @@ class Engine:
         self.online = False
         self.last_error: str | None = None
         self.last_contact = 0.0
+        self.created = time.time()
         self.options: dict[str, Any] = {"checkpoints": [], "audio_encoders": [], "harmony": False, "lyrics": False,
                                         "instrumental": False, "trainer": False}
         self.options_loaded = False
@@ -219,6 +220,17 @@ class Engine:
         self.queue: list[dict[str, Any]] = []
         self._running_since: dict[str, float] = {}
         self._seen_engine_logs: collections.deque[tuple[Any, Any]] = collections.deque(maxlen=2000)
+
+    # How long an engine that has not answered yet counts as starting rather than
+    # offline.  The Windows launcher gives ComfyUI as long before it gives up.
+    START_GRACE = 600.0
+
+    @property
+    def starting(self) -> bool:
+        """Not answered once since the app started, and still within the time an
+        engine takes to start.  The app can be up first: the Windows launcher opens the
+        page as soon as the app answers, and Docker starts both together."""
+        return not self.online and not self.last_contact and time.time() - self.created < self.START_GRACE
 
     # ---------- lifecycle ----------
     async def start(self) -> None:

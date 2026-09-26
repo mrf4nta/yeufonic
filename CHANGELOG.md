@@ -33,6 +33,9 @@ Everything YuE2 Studio did, Yeufonic does. The version numbers start again.
 
 - **The name.** The app, its Docker project, containers and images, the Windows installer and its
   install folder are now Yeufonic. "YuE2" still names the model the app runs.
+- **On Windows, the page opens as soon as the app is up,** rather than after the engine. The engine
+  starts alongside it, the header says *Engine starting…*, and anything asked for meanwhile waits.
+  How long each took to start is kept in `logs\launcher.log`.
 
 ### Added
 

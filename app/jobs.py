@@ -1439,10 +1439,23 @@ def waiting_jobs() -> list[dict]:
     return list(QUEUE._queue)   # asyncio.Queue keeps its items in a deque
 
 
+async def wait_for_engine() -> None:
+    """A job asked for while the engine is still starting waits for it rather than
+    failing.  Once it answers, a moment more for its node list, which the keeper reads
+    next; an engine that stays offline is left to fail the job as before."""
+    while ENGINE.starting:
+        await asyncio.sleep(1)
+    for _ in range(15):
+        if not ENGINE.online or ENGINE.options_loaded:
+            return
+        await asyncio.sleep(1)
+
+
 async def worker() -> None:
     while True:
         job = await QUEUE.get()
         try:
+            await wait_for_engine()
             await run_job(job["kind"], job["id"])
         except asyncio.CancelledError:
             raise
