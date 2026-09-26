@@ -2269,21 +2269,22 @@ SAVE_FORMATS = {
 def take_audio(take_id: str, download: bool = False, format: str | None = None) -> FileResponse:
     if format and format not in SAVE_FORMATS:
         raise HTTPException(400, "the format must be flac, wav or mp3")
-    take = one("SELECT audio_path, title FROM takes WHERE id = ?", (take_id,))
+    take = one("SELECT audio_path, title, kind, lyrics FROM takes WHERE id = ?", (take_id,))
     if not take or not take["audio_path"] or not Path(take["audio_path"]).exists():
         raise HTTPException(404, "no audio for this take")
     safe = "".join(ch for ch in (take["title"] or "take") if ch.isalnum() or ch in " -_")[:60].strip() or "take"
+    if not download:   # playing: the FLAC as kept
+        return FileResponse(take["audio_path"], media_type="audio/flac", filename=f"{safe}.flac")
     # A download is in the format asked for, else the one set in Settings.
-    fmt = (format or setting_value("stems.format")) if download else "flac"
-    media, codec = SAVE_FORMATS.get(fmt, SAVE_FORMATS["flac"])
-    if not codec:
-        return FileResponse(take["audio_path"], media_type=media, filename=f"{safe}.flac")
-    # Converted for this download only, and removed once it has been sent.
+    fmt = format or setting_value("stems.format")
+    fmt = fmt if fmt in SAVE_FORMATS else "flac"
+    media, codec = SAVE_FORMATS[fmt]
+    # Made for this download only, with its tags, and removed once it has been sent.
     config.WORK_DIR.mkdir(parents=True, exist_ok=True)
     out = config.WORK_DIR / f"save-{take_id}-{uuid.uuid4().hex[:8]}.{fmt}"
     try:
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", take["audio_path"], *codec, str(out)],
-                       capture_output=True, timeout=300, check=True)
+        library.tagged_copy(Path(take["audio_path"]), out, fmt, codec, take["title"] or "",
+                            library.sung_words(take["kind"], take["lyrics"]))
     except (subprocess.SubprocessError, OSError) as exc:
         out.unlink(missing_ok=True)
         log.warning("Could not convert take '%s' to %s: %s", take["title"] or take_id, fmt, exc)

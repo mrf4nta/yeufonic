@@ -328,6 +328,113 @@ def audio_duration(path: Path) -> float | None:
         return None
 
 
+# ---------- a saved take's tags ----------
+# A take handed over by Save says what it is and what made it.  ComfyUI's own tags
+# (the job's graph, as 'prompt') ride along, as they always have.
+MADE_WITH = "Made with Yeufonic"
+
+
+def sung_words(kind: str | None, lyrics: str | None) -> str | None:
+    """The lyrics as the take has them, section tags and all.  None when nothing is
+    sung: an instrumental, or a structure of section tags alone."""
+    text = (lyrics or "").strip()
+    if kind == "instrumental":
+        return None
+    words = [line for line in text.splitlines() if line.strip() and not re.fullmatch(r"\s*\[[^\]]*\]\s*", line)]
+    return text if words else None
+
+
+def file_tags(path: Path) -> dict[str, str]:
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format_tags", "-of", "json", str(path)],
+                             capture_output=True, text=True, timeout=30, check=True).stdout
+        return json.loads(out).get("format", {}).get("tags", {}) or {}
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return {}
+
+
+def _id3_frame(frame_id: str, body: bytes) -> bytes:
+    return frame_id.encode("ascii") + len(body).to_bytes(4, "big") + b"\0\0" + body
+
+
+def _utf16(text: str) -> bytes:
+    return text.encode("utf-16")   # with its byte order mark, as ID3v2.3 wants
+
+
+def id3_tag(title: str, lyrics: str | None, extra: dict[str, str]) -> bytes:
+    """An ID3v2.3 tag, written here because ffmpeg can only put a comment or lyrics in
+    a custom TXXX frame, which players do not show.  v2.3 rather than v2.4 because it
+    is the one every player reads.  Lyrics are marked 'XXX', language unknown."""
+    software = f"Yeufonic {config.VERSION}"
+    frames = [_id3_frame("TIT2", b"\x01" + _utf16(title)),
+              _id3_frame("TENC", b"\x01" + _utf16(software)),
+              _id3_frame("TSSE", b"\x01" + _utf16(software)),
+              _id3_frame("COMM", b"\x01eng" + _utf16("") + b"\0\0" + _utf16(MADE_WITH))]
+    if lyrics:
+        frames.append(_id3_frame("USLT", b"\x01XXX" + _utf16("") + b"\0\0" + _utf16(lyrics)))
+    for key, value in extra.items():
+        frames.append(_id3_frame("TXXX", b"\x01" + _utf16(key) + b"\0\0" + _utf16(value)))
+    body = b"".join(frames)
+    size = bytes((len(body) >> shift) & 0x7F for shift in (21, 14, 7, 0))
+    return b"ID3\x03\x00\x00" + size + body
+
+
+def vorbis_comments(fields: list[tuple[str, str]]) -> bytes:
+    """A FLAC's tag block, written here because ffmpeg renames COMMENT to DESCRIPTION,
+    a field players rarely show.  The vendor string is what reads as the encoder."""
+    vendor = f"Yeufonic {config.VERSION}".encode()
+    body = len(vendor).to_bytes(4, "little") + vendor + len(fields).to_bytes(4, "little")
+    for key, value in fields:
+        entry = f"{key}={value}".encode()
+        body += len(entry).to_bytes(4, "little") + entry
+    return body
+
+
+def set_flac_comments(path: Path, fields: list[tuple[str, str]]) -> None:
+    """Swap a FLAC's tag block for one holding fields.  The other blocks, and the
+    audio after them, are left as they are."""
+    data = path.read_bytes()
+    if data[:4] != b"fLaC":
+        raise OSError(f"{path.name} is not a FLAC")
+    blocks, at, last = [], 4, False
+    while not last:
+        last, kind = bool(data[at] & 0x80), data[at] & 0x7F
+        size = int.from_bytes(data[at + 1:at + 4], "big")
+        if kind != 4:   # 4 is VORBIS_COMMENT, the tag block
+            blocks.append((kind, data[at + 4:at + 4 + size]))
+        at += 4 + size
+    blocks.insert(1, (4, vorbis_comments(fields)))   # STREAMINFO stays first
+    head = b"".join(bytes([kind | (0x80 if i == len(blocks) - 1 else 0)]) + len(body).to_bytes(3, "big") + body
+                    for i, (kind, body) in enumerate(blocks))
+    path.write_bytes(b"fLaC" + head + data[at:])
+
+
+def tagged_copy(src: Path, dest: Path, fmt: str, codec: list[str] | None, title: str,
+                lyrics: str | None) -> None:
+    """The take at src as a file to hand over, in fmt, with its tags.  A FLAC is copied
+    rather than encoded again, so its audio is the take's to the bit.  WAV has nowhere
+    for lyrics, and ffmpeg's own tags suit it."""
+    carried = {k: v for k, v in file_tags(src).items() if k.lower() != "encoder"}
+    if fmt == "wav":
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), *(codec or []),
+                        "-metadata", f"title={title}", "-metadata", f"comment={MADE_WITH}",
+                        "-metadata", f"encoded_by=Yeufonic {config.VERSION}", str(dest)],
+                       capture_output=True, timeout=300, check=True)
+        return
+    # No tags from ffmpeg: the app writes them.  For an MP3, -write_id3v2 0 still
+    # leaves a v2.4 tag naming ffmpeg; -id3v2_version 0 leaves none.
+    untagged = ["-map_metadata", "-1"] + (["-id3v2_version", "0"] if fmt == "mp3" else [])
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), *(codec or ["-c", "copy"]), *untagged, str(dest)],
+                   capture_output=True, timeout=300, check=True)
+    if fmt == "mp3":
+        dest.write_bytes(id3_tag(title, lyrics, carried) + dest.read_bytes())
+        return
+    fields = [("TITLE", title), ("COMMENT", MADE_WITH)]
+    if lyrics:
+        fields.append(("LYRICS", lyrics))
+    set_flac_comments(dest, fields + list(carried.items()))
+
+
 # The waveform the player draws.  Computed once on the server from an 8 kHz mono
 # decode, instead of the browser decoding the whole file to float PCM on every play.
 PEAK_COLUMNS = 1024

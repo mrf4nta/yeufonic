@@ -40,6 +40,7 @@ Everything YuE2 Studio did, Yeufonic does. The version numbers start again.
   - **Windows:** the installer finds a YuE2 Studio installation and moves it into Yeufonic's
     folder. Your library, settings, LoRAs and models come too, so nothing is downloaded again.
   - **Docker:** a script moves them from an old clone into a new one.
+- A saved take is tagged with its title, its lyrics and "Made with Yeufonic".
 - Clicking a take's *Normalised* label undoes the normalise.
 - **Normalise to** in Settings: how loud a normalised take is made, −16, −14 or −11 LUFS.
 
