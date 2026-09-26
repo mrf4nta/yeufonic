@@ -57,7 +57,7 @@ Writing an instrumental, with the structure built section by section:
 - **Hear what the recording sings.** A cover needs lyrics. **Extract lyrics** separates the vocal,
   listens to it and lays the lines under the sections of the score. It is asked for rather than
   done every time, and it runs on the CPU, so a render is never held up by it. 
-  Configure Yeufonic to use an external LLM for even greater accuracy
+  Configure Yeufonic to use an external LLM for even greater accuracy.
 - **Song from a prompt.** Write a score plan from style and lyrics, read it, repair it, render it.
   A new plan costs seconds, so a bad melody is cheap to discard.
 - **Choose how adventurous the chords are.** YuE2 tends to write one four-chord loop for a whole
@@ -65,7 +65,7 @@ Writing an instrumental, with the structure built section by section:
   just used, without breaking the song's structure.
 - **Instrumentals.** A third mode: style and structure in, a song with no vocal out. Build the
   structure section by section, time each section, or let YuE2 decide. Used in combination with 
-  LoRA ar_lora_inst_v3abc_comfyui.safetensors by Mothersuperior
+  LoRA ar_lora_inst_v3abc_comfyui.safetensors by Mothersuperior.
 - **Draft lyrics from a sentence.** Say what the song is about and pick a structure. Gemma 4
   writes a first draft in YuE2's section layout, or you can call an external LLM if you
   set one up in Settings.
@@ -142,8 +142,8 @@ One corpus, analysed, exported and trained, with each song's key and tempo:
 
 [![A corpus](docs/screenshots/corpus.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/corpus.png)
 
-It does most in a song from a prompt, where the LoRA writes the tune. It usuallt works best with Planner and Sound up to
-about 0.70 but experiment to find the sweet spot and save them as a default for the LoRA. In a cover your recording sets the melody, so keep
+It does most in a song from a prompt, where the LoRA writes the tune. It usually works best with Planner and Sound up to
+about 0.70 but experiment to find the sweet spot and save them as a default for the LoRA. In a cover your recording sets the melody, so
 you may keep Sound nearer to 0.50. The [user guide](app/static/guide.md#corpora-and-training-a-lora) walks
 through it.
 
@@ -229,8 +229,7 @@ are not downloaded again. Deleting that folder removes it.
 - Docker with the NVIDIA container toolkit, so containers can see the GPU.
 - About 35 GB of disk: 15 GB of images, 17 GB of models, and room for your songs.
 - Linux, or Windows with WSL2 or Docker Desktop. WSL2 is what this was built on; Windows with
-  Docker Desktop needs a few settings, below. 
-- Alternatively, on Windows, [the installer](#on-windows-without-docker) needs none of this.
+  Docker Desktop needs a few settings, below.  Alternatively, on Windows, [the installer](#on-windows-without-docker) needs none of this.
 
 ## Quick start
 
