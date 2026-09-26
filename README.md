@@ -1,14 +1,13 @@
 # <img src="app/static/icon.svg" alt="" width="40" align="top"> Yeufonic
 
-> **YuE2 Studio is now Yeufonic.** It's the same app under a new name, with the version numbers
-> starting again at 0.0.1. The old repository,
-> [dynamohum/YuE2gen-studio](https://github.com/dynamohum/YuE2gen-studio), is archived and gets
-> no more updates. If you use YuE2 Studio, your library, settings, LoRAs and models all come
-> across: see [Moving from YuE2 Studio](#moving-from-yue2-studio).
+> **YuE2 Studio is now Yeufonic.** It's the same app under a new name.
+> The old repository, [YuE2gen-studio](https://github.com/dynamohum/YuE2gen-studio), 
+> is archived and gets no more updates. If you use YuE2 Studio, your library, settings, LoRAs
+> and models all come across: see [Moving from YuE2 Studio](#moving-from-yue2-studio).
 
 A web interface for [YuE2](https://github.com/multimodal-art-projection/YuE), the open music
-model. Write a song from a prompt, or cover your own recording. Edit the score either way,
-then pull the stems out of the result.
+model. Write a song from a prompt, or cover your own recording. Create a local LoRA trained on 
+a corpus of music. Edit the score either way, then pull the stems out of the result.
 
 - **Song from a prompt:** write a score plan from a style and lyrics, edit it, render it.
 - **Cover a recording:** transcribe your song, change its melody and chords, render a new version.
@@ -57,27 +56,25 @@ Writing an instrumental, with the structure built section by section:
   The transcription is cached per recording, so re-rendering skips straight to the music.
 - **Hear what the recording sings.** A cover needs lyrics. **Extract lyrics** separates the vocal,
   listens to it and lays the lines under the sections of the score. It is asked for rather than
-  done every time, and it runs on the CPU, so a render is never held up by it. Expect a good draft
-  rather than a transcript: against the real words of two songs, Whisper got 1.5 and 25 per cent
-  wrong, the second where lead and backing vocals overlap. With an external LLM that accepts audio,
-  such as Gemini, a setting lets it hear the words instead, with Whisper keeping the timing; on the
-  same two songs Gemini got 1.5 and 23 per cent.
+  done every time, and it runs on the CPU, so a render is never held up by it. 
+  Configure Yeufonic to use an external LLM for even greater accuracy
 - **Song from a prompt.** Write a score plan from style and lyrics, read it, repair it, render it.
   A new plan costs seconds, so a bad melody is cheap to discard.
 - **Choose how adventurous the chords are.** YuE2 tends to write one four-chord loop for a whole
   song. The Harmony slider, from Familiar to Outside, pushes the planner towards chords it has not
   just used, without breaking the song's structure.
 - **Instrumentals.** A third mode: style and structure in, a song with no vocal out. Build the
-  structure section by section, time each section, or let YuE2 decide.
+  structure section by section, time each section, or let YuE2 decide. Used in combination with 
+  LoRA ar_lora_inst_v3abc_comfyui.safetensors by Mothersuperior
 - **Draft lyrics from a sentence.** Say what the song is about and pick a structure. Gemma 4
-  writes a first draft in YuE2's section layout, on the same engine, or an external LLM if you
+  writes a first draft in YuE2's section layout, or you can call an external LLM if you
   set one up in Settings.
 - **Choose the interpretation.** Six ways to render the same score, from Tight to Wide, and
   **Variations** renders one take in the others, so you can compare them by ear.
 - **Choose the voice.** Chips set female, male or duet and a voice character. YuE2 has no vocal
   parameter, so the chips write into the style text, and the take keeps the choice.
 - **Train a LoRA from your own songs.** Prepare a corpus from a folder of songs, by one artist,
-  in one genre or by a few similar artists, and train a style LoRA from it. It shows most in a
+  in one genre or by a few similar artists, and train a style LoRA from it. It works best in a
   song from a prompt, where the LoRA writes the tune. See Training a LoRA below.
 - **Hear every step of a LoRA's training.** A training run keeps a checkpoint every 50 steps.
   **Checkpoints** renders the same song once on each of them, with one seed, as takes named after
@@ -94,8 +91,7 @@ Writing an instrumental, with the structure built section by section:
 - **Spaces.** Keep takes apart by project: a space per song, per album, or for sketches. Create,
   rename and delete spaces, and move a take from one to another.
 - **A library.** Every take keeps its score, style, lyrics, seed and settings, so it can be
-  reproduced, reworked, starred or deleted. Tick several cards and one button clears them all,
-  after naming what it is about to remove.
+  reproduced, reworked, starred or deleted. Tick several cards and one button clears them all.
 - **A player for reviewing takes.** A real waveform you can click to seek, previous and next through
   the library, ten second skips, repeat, speed and volume, with keyboard shortcuts.
 
@@ -107,7 +103,7 @@ LoRA** list at the bottom of the form, in all three modes. **Download** hands on
 
 [![Style LoRA](docs/screenshots/style-lora.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/style-lora.png)
 
-These are usually files other people have published, mostly on Hugging Face, and
+These are usually files other people have published, e.g. on Hugging Face, and
 the app's job is to make them usable without knowing how they are put together:
 
 - **Two strengths, because a LoRA has two halves.** *Planner* shapes what is played: the score
@@ -146,9 +142,9 @@ One corpus, analysed, exported and trained, with each song's key and tempo:
 
 [![A corpus](docs/screenshots/corpus.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/corpus.png)
 
-It does most in a song from a prompt, where the LoRA writes the tune: Planner and Sound up to
-about 0.70, with Plan variety Calm or Normal. In a cover your recording sets the melody, so keep
-Sound near 0.50. The [user guide](app/static/guide.md#corpora-and-training-a-lora) walks
+It does most in a song from a prompt, where the LoRA writes the tune. It usuallt works best with Planner and Sound up to
+about 0.70 but experiment to find the sweet spot and save them as a default for the LoRA. In a cover your recording sets the melody, so keep
+you may keep Sound nearer to 0.50. The [user guide](app/static/guide.md#corpora-and-training-a-lora) walks
 through it.
 
 How many steps a run trains for, and how much it can learn, can be changed: see
@@ -159,8 +155,9 @@ the trainer out of the engine image.
 
 ## On Windows, without Docker
 
-**A first version, being tested.** A small installer sets Yeufonic up natively on Windows.
-It needs no Docker, no WSL and no administrator rights.
+A small installer sets Yeufonic up natively on Windows.
+It needs no Docker, no WSL and no administrator rights. Running a newer installer will automatically update an existing
+installation.
 
 **You need:**
 
@@ -232,8 +229,8 @@ are not downloaded again. Deleting that folder removes it.
 - Docker with the NVIDIA container toolkit, so containers can see the GPU.
 - About 35 GB of disk: 15 GB of images, 17 GB of models, and room for your songs.
 - Linux, or Windows with WSL2 or Docker Desktop. WSL2 is what this was built on; Windows with
-  Docker Desktop needs a few settings, below. On Windows, [the installer](#on-windows-without-docker)
-  needs none of this.
+  Docker Desktop needs a few settings, below. 
+- Alternatively, on Windows, [the installer](#on-windows-without-docker) needs none of this.
 
 ## Quick start
 
@@ -318,6 +315,9 @@ docker compose up -d --build
 
 The database migrates itself on the first start. Read the release notes for anything to do by
 hand, such as a new setting in `compose.yml`.
+
+If you have installed the standalone Windows app then running a newer release will update the existing
+installation and not require any downloading of existing models.
 
 ## Moving from YuE2 Studio
 
