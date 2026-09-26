@@ -26,9 +26,12 @@ cp "$ROOT/windows/setup.ps1" "$ROOT/windows/launcher.py" "$ROOT/windows/yeufonic
    "$ROOT/windows/terms.txt" "$ROOT/LICENSE" "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/"
 
 EXE="Yeufonic-Setup-$VERSION${TEST_BUILD:+-test}.exe"
+# Yeufonic.exe, what the shortcuts start, is built first and carried by the installer.
+cp "$ROOT/windows/yeufonic-exe.nsi" "$STAGE/"
 # TEST_BUILD=1 makes an installer whose setup skips the 18 GB of models.
 EXTRA=${TEST_BUILD:+-DSETUP_ARGS=${TEST_ARGS:--SkipModels}}
 if command -v makensis >/dev/null 2>&1; then
+  (cd "$STAGE" && makensis -V2 -DVERSION="$VERSION" -DICON=yeufonic.ico -DOUTFILE=Yeufonic.exe yeufonic-exe.nsi)
   makensis -V2 $EXTRA -DVERSION="$VERSION" -DSTAGE="$STAGE" -DOUTFILE="$OUT/$EXE" "$ROOT/windows/installer.nsi"
 else
   NSIS_DIR=${NSIS_DIR:-/mnt/c/Users/Public/yue2-build/nsis-3.12}
@@ -43,6 +46,7 @@ else
   mkdir -p "$WORK"
   cp -r "$STAGE" "$WORK/stage"
   cp "$ROOT/windows/installer.nsi" "$WORK/"
+  (cd "$WORK/stage" && "$NSIS_DIR/makensis.exe" -V2 -DVERSION="$VERSION" -DICON=yeufonic.ico -DOUTFILE=Yeufonic.exe yeufonic-exe.nsi)
   (cd "$WORK" && "$NSIS_DIR/makensis.exe" -V2 $EXTRA -DVERSION="$VERSION" -DSTAGE="$(wslpath -w "$WORK/stage")" \
       -DOUTFILE="$(wslpath -w "$WORK/$EXE")" "$(wslpath -w "$WORK/installer.nsi")")
   cp "$WORK/$EXE" "$OUT/$EXE"

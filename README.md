@@ -184,8 +184,11 @@ The installer checks all of this before it downloads anything.
    publisher and checks it against its published checksum. The window may open behind the
    installer. If a download breaks off, run the installer again: it carries on from where it
    stopped.
-5. **Start Yeufonic** from the Start menu or the desktop. A small window starts the engine and
-   the app, then opens http://localhost:8090 in your browser. Closing that window stops them.
+5. **Start Yeufonic** from the Start menu or the desktop. It opens in a window of its own within a
+   few seconds, while the engine finishes starting. Its icon sits by the clock: click it to open
+   the window, and right-click it to quit. Closing the window leaves Yeufonic running there, so
+   a render or training carries on. *Yeufonic (with console)* in the Start menu starts it with a
+   window that reports as it goes, for when something needs diagnosing.
 
 **Ports and folders:** a `settings.ini` in the install folder changes them. Create it with a
 `[yue2]` section and only the lines you need, then start Yeufonic again:
@@ -197,10 +200,13 @@ engine_port = 8188
 data_dir = D:\YuE2 library
 import_roots = D:\Music
 open_browser = yes
+window = app
 ```
 
 `data_dir` is where the library lives (by default, `data` in the install folder). `import_roots`
 is the folders a corpus may be built from, separated by commas (by default, your user folder).
+`window = browser` opens Yeufonic in your default browser instead of a window of its own, which
+is Microsoft Edge's app mode with its own profile, apart from yours.
 Other settings are environment variables: see [Environment variables](#environment-variables).
 
 **Updating:** run a newer installer over the top. It says it is an update, keeps the models and

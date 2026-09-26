@@ -135,12 +135,13 @@ Section "${APPNAME}" SecCore
   SetOutPath "$INSTDIR"
   ; A running copy holds its files open.  Only its own programs are stopped, never
   ; this installer, which may be running from the same folder.
-  nsExec::Exec '"$PowerShell" -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\*$\' -and $$_.Name -in $\'python.exe$\',$\'pythonw.exe$\',$\'ffmpeg.exe$\',$\'ffprobe.exe$\' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"'
+  nsExec::Exec '"$PowerShell" -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\*$\' -and $$_.Name -in $\'Yeufonic.exe$\',$\'python.exe$\',$\'pythonw.exe$\',$\'ffmpeg.exe$\',$\'ffprobe.exe$\' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"'
   Pop $0
   RMDir /r "$INSTDIR\studio"
   File /r "${STAGE}\studio"
   File "${STAGE}\setup.ps1"
   File "${STAGE}\launcher.py"
+  File "${STAGE}\Yeufonic.exe"
   File "${STAGE}\yeufonic.ico"
   File "${STAGE}\LICENSE"
   File "${STAGE}\THIRD_PARTY_NOTICES.md"
@@ -205,10 +206,12 @@ Section "-Setup"
     Delete "$DESKTOP\${LEGACY_APPNAME}.lnk"
     RMDir /r "$SMPROGRAMS\${LEGACY_APPNAME}"
   ${EndIf}
-  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\venv\Scripts\python.exe" '"$INSTDIR\launcher.py"' "$INSTDIR\yeufonic.ico"
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\Yeufonic.exe"
+  ; The same with a console window that reports as it goes, for diagnosing.
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME} (with console).lnk" "$INSTDIR\venv\Scripts\python.exe" '"$INSTDIR\launcher.py" --console' "$INSTDIR\yeufonic.ico"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\Repair ${APPNAME}.lnk" "$PowerShellLink" '-NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\setup.ps1" -InstallDir "$INSTDIR"' "$INSTDIR\yeufonic.ico"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\Uninstall ${APPNAME}.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\venv\Scripts\python.exe" '"$INSTDIR\launcher.py"' "$INSTDIR\yeufonic.ico"
+  CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\Yeufonic.exe"
 SectionEnd
 
 LangString DESC_Core ${LANG_ENGLISH} "The app, the engine (ComfyUI), and the YuE2 models."
@@ -314,7 +317,7 @@ Var KeepLibrary
 Var KeepModels
 
 Section "Uninstall"
-  nsExec::Exec '"$PowerShell" -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\*$\' -and $$_.Name -in $\'python.exe$\',$\'pythonw.exe$\',$\'ffmpeg.exe$\',$\'ffprobe.exe$\' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"'
+  nsExec::Exec '"$PowerShell" -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\*$\' -and $$_.Name -in $\'Yeufonic.exe$\',$\'python.exe$\',$\'pythonw.exe$\',$\'ffmpeg.exe$\',$\'ffprobe.exe$\' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"'
   Pop $0
   Delete "$DESKTOP\${APPNAME}.lnk"
   RMDir /r "$SMPROGRAMS\${APPNAME}"
@@ -362,6 +365,9 @@ Section "Uninstall"
     RMDir /r "$INSTDIR\logs"
     Delete "$INSTDIR\setup.ps1"
     Delete "$INSTDIR\launcher.py"
+    Delete "$INSTDIR\Yeufonic.exe"
+    ; The page's window's browser profile: sizes and places, nothing of the user's.
+    RMDir /r "$INSTDIR\browser"
     Delete "$INSTDIR\terms.txt"
     Delete "$INSTDIR\LICENSE"
     Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
