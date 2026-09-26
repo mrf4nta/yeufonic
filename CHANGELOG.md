@@ -23,7 +23,7 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## Unreleased
+## 0.0.1 (2026-09-27)
 
 **Yeufonic 0.0.1: YuE2 Studio, renamed.** It carries on from YuE2 Studio 0.0.37, whose history and
 changelog are in the archived repository, [dynamohum/YuE2gen-studio](https://github.com/dynamohum/YuE2gen-studio).
@@ -45,8 +45,8 @@ Everything YuE2 Studio did, Yeufonic does. The version numbers start again.
 ### Added
 
 - **Moving from YuE2 Studio:**
-  - **Windows:** the installer finds a YuE2 Studio installation and moves it into Yeufonic's
-    folder. Your library, settings, LoRAs and models come too, so nothing is downloaded again.
+  - **Windows:** the installer finds a YuE2 Studio installation and updates it where it is, in
+    its own folder. Your library, settings, LoRAs and models stay, so nothing is downloaded again.
   - **Docker:** a script moves them from an old clone into a new one.
 - A saved take is tagged with its title, its lyrics and "Made with Yeufonic".
 - Clicking a take's *Normalised* label undoes the normalise.
