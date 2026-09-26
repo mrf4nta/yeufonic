@@ -45,6 +45,9 @@ secrets.json
 *.pth
 *.bin
 *.onnx
+# ...except the example songs, which are meant to be found in the repository.
+!examples/*.mp3
+!examples/*.flac
 
 # Testing & coverage
 .pytest_cache/
