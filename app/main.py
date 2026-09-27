@@ -89,6 +89,18 @@ SETTINGS_SPEC: list[dict] = [
         "help": "How loud a normalised take is made. Louder squeezes its peaks harder.",
     },
     {
+        "key": "editor.layout",
+        "label": "Editor layout",
+        "type": "select",
+        # Everything in view at once; steps suit someone finding their way.
+        "default": "columns",
+        "options": [
+            {"value": "columns", "label": "Three columns, everything in view"},
+            {"value": "steps", "label": "Steps, one part at a time"},
+        ],
+        "help": "How the window for making and changing takes is laid out.",
+    },
+    {
         "key": "stems.model",
         "label": "Stem separation model",
         "type": "select",

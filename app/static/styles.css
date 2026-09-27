@@ -1436,3 +1436,113 @@ button.take-status.sung:hover { background: rgba(251, 191, 36, 0.16); }
 .lora-group .count { font-weight: 400; opacity: 0.7; }
 .lora-picker-menu .lora-item { padding-left: 24px; }
 .lora-picker-menu .lora-item.flat { padding-left: 10px; }
+
+/* ================================================================ the take sheet
+   The selected take, read-only: how it was made, in short. Making and changing takes
+   happens in the editor window. */
+.sheet-new { display: flex; gap: 8px; margin-bottom: 14px; }
+.sheet-new-btn { flex: 1; border: 0; border-radius: 999px; padding: 10px 6px; font: inherit; font-size: 13.5px;
+  font-weight: 650; cursor: pointer; color: #fff; }
+.sheet-new-btn:hover { filter: brightness(1.08); }
+.sheet-new-btn.type-song { background: linear-gradient(90deg, var(--song-a), var(--song-b)); }
+.sheet-new-btn.type-cover { background: linear-gradient(90deg, var(--cover-a), var(--cover-b)); }
+.sheet-new-btn.type-inst { background: linear-gradient(90deg, var(--inst-b), var(--inst-a)); color: #07140c; }
+#sheet-status:empty { display: none; }
+#sheet-status { margin: -4px 0 12px; }
+.take-sheet .kind { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
+.take-sheet .kind.song { color: var(--song-a); }
+.take-sheet .kind.cover { color: var(--cover-a); }
+.take-sheet .kind.instrumental { color: var(--inst-a); }
+.take-sheet h2 { font-size: 21px; margin: 4px 0; line-height: 1.25; overflow-wrap: anywhere; }
+.take-sheet .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+.take-sheet .note { font-size: 12.5px; color: #fbbf24; background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25); border-radius: 10px; padding: 7px 10px; margin-bottom: 12px; }
+.take-sheet .note.bad { color: #ff8fa3; background: rgba(217, 45, 75, 0.1); border-color: rgba(217, 45, 75, 0.35); }
+.take-sheet .acts { display: flex; gap: 8px; margin-bottom: 16px; }
+.take-sheet .acts .primary { margin: 0; flex: 1; padding: 11px 14px; font-size: 14px; }
+.take-sheet .acts .ghost { flex: 0 0 auto; }
+.primary.tone-song { background: linear-gradient(90deg, var(--song-a), var(--song-b)); }
+.primary.tone-cover { background: linear-gradient(90deg, var(--cover-a), var(--cover-b)); }
+.primary.tone-instrumental { background: linear-gradient(90deg, var(--inst-b), var(--inst-a)); color: #07140c; }
+.sheet-blk { border-top: 1px solid var(--line); padding: 12px 0 6px; }
+.sheet-blk h3 { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  margin: 0 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
+.sheet-blk h3 .link { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.sheet-pairs { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 13px; margin: 0; }
+.sheet-pairs dt { color: var(--muted); }
+.sheet-pairs dd { margin: 0; overflow-wrap: anywhere; }
+.sheet-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.sheet-tag { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+.sheet-words { font-size: 13px; line-height: 1.55; }
+.sheet-words .sec { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+.sheet-words .more { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.sheet-facts { font-size: 13px; margin-bottom: 8px; }
+.sheet-chart { font-size: 12.5px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.sheet-chart .s { color: var(--muted); }
+.sheet-chart .c { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+
+/* ============================================================== the editor window */
+.modal-box.editor { width: min(1560px, 100%); height: min(960px, 100%); padding: 0; gap: 0; overflow: hidden; }
+.ed-head { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.ed-bar { width: 6px; height: 34px; border-radius: 3px; flex: 0 0 auto; background: linear-gradient(var(--cover-a), var(--cover-b)); }
+.ed-bar.song { background: linear-gradient(var(--song-a), var(--song-b)); }
+.ed-bar.inst { background: linear-gradient(var(--inst-b), var(--inst-a)); }
+.ed-head .create-head { flex: 0 1 auto; gap: 10px; flex-wrap: nowrap; }
+.ed-head .create-head h1 { margin: 0; font-size: 20px; white-space: nowrap; }
+.ed-head #sub { display: none; }
+.ed-head .modes { margin: 0; }
+.ed-tabs { display: flex; gap: 4px; margin-left: auto; }
+.ed-tabs button, .ed-steps button { border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit;
+  font-size: 13.5px; padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+.ed-tabs button.on { color: var(--text); border-color: rgba(123, 92, 255, 0.7); background: rgba(123, 92, 255, 0.14); }
+.ed-x { border: 0; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.ed-x:hover { color: var(--text); }
+.ed-main { flex: 1; min-height: 0; display: flex; }
+.ed-body { flex: 1; min-width: 0; overflow: auto; padding: 18px 20px; }
+.ed-page.hidden { display: none; }
+.ed-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.ed-col h4 { margin: 0 0 12px; font-size: 12.5px; color: var(--muted); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+.ed-words #lyrics { min-height: 520px; }
+.ed-col #advanced > summary { color: var(--muted); font-size: 12.5px; }
+/* The score has the window to itself: the box stays open, and its text runs the height. */
+.ed-score #score-box { border: 0; padding: 0; background: none; }
+.ed-score #score-box > summary { list-style: none; cursor: default; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ed-score #score-box > summary::-webkit-details-marker { display: none; }
+/* The score on the left at full height; the chord chart and the tools beside it. */
+.ed-score #abc { float: left; width: calc(62% - 12px); margin-right: 24px; min-height: 460px; height: 62vh; font-size: 12.5px; }
+.ed-score #score-box > .row, .ed-score #score-tools, .ed-score #plan-actions { flex-wrap: wrap; }
+.ed-score #chart { overflow: auto; }
+.ed-score #score-box::after { content: ''; display: block; clear: both; }
+.editor.layout-steps .ed-x { margin-left: auto; }
+.ed-foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); }
+.ed-foot .primary { width: auto; margin: 0; padding: 11px 26px; order: 4; }
+.ed-foot #auto-wrap { margin: 0; order: 1; }
+.ed-foot #render-status { order: 2; flex: 1; min-width: 0; margin: 0; }
+.ed-foot #editor-cancel { order: 3; flex: 0 0 auto; }
+.ed-foot .ed-prev, .ed-foot .ed-next { order: 0; flex: 0 0 auto; }
+.ed-review { display: grid; grid-template-columns: 170px 1fr; gap: 8px 16px; font-size: 13.5px; max-width: 900px; margin: 0; }
+.ed-review dt { color: var(--muted); }
+.ed-review dd { margin: 0; overflow-wrap: anywhere; }
+.ed-review .bad { color: var(--bad); }
+
+/* Three columns: every step at once, so no Back and Next, no step list, no review page. */
+.editor.layout-columns .ed-steps, .editor.layout-columns .ed-prev, .editor.layout-columns .ed-next { display: none; }
+/* Steps: one part at a time, chosen from the list down the side. */
+.editor.layout-steps .ed-tabs { display: none; }
+.ed-steps { width: 210px; flex: 0 0 auto; border-right: 1px solid var(--line); padding: 18px 14px;
+  display: flex; flex-direction: column; gap: 6px; }
+.ed-steps button { text-align: left; border-radius: 12px; display: flex; gap: 10px; align-items: center; padding: 10px 12px; }
+.ed-steps button .n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; border: 1px solid var(--line); flex: 0 0 auto; }
+.ed-steps button.on { color: var(--text); background: rgba(123, 92, 255, 0.14); border-color: rgba(123, 92, 255, 0.6); }
+.ed-steps button.on .n { background: var(--accent-a); border-color: var(--accent-a); color: #fff; }
+.ed-steps .hint { margin-top: auto; }
+.editor.layout-steps .ed-cols { display: block; max-width: 820px; }
+.editor.layout-steps .ed-col { display: none; }
+.editor.layout-steps .ed-col.on { display: block; }
+.editor.layout-steps .ed-words #lyrics { min-height: 58vh; }
+
+@media (max-width: 1100px) {
+  .ed-cols { grid-template-columns: 1fr; }
+  .ed-steps { width: 150px; }
+}
