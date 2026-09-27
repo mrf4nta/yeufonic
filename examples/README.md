@@ -12,9 +12,9 @@ https://github.com/user-attachments/assets/24f0da8a-adee-4d51-aaa4-8d4a8bf7be36
 
 ## test LoRA step50
 
-Rendered with the checkpoint a training run saved at step 50, one of the takes **Checkpoints**
+The whole song, rendered with the checkpoint a training run saved at step 50, one of the takes **Checkpoints**
 makes so each step can be heard.
 
-https://github.com/user-attachments/assets/f9f73ade-a041-4486-a4a2-7cdab990d9aa
+https://github.com/user-attachments/assets/9c3ac36d-4c60-4e9d-86d4-67b12dc36c83
 
 [Download the MP3](test%20LoRA%20step50.mp3)
