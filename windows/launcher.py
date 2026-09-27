@@ -611,7 +611,7 @@ class Launcher:
             cwd=str(COMFY), stdout=engine_log.open("w", encoding="utf-8"), stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW,
             # Its start-up message then sends people to the app, not the engine.
-            env=dict(os.environ, YEUFONIC_APP_URL=self.url))
+            env=dict(os.environ, YEUFONIC_APP_URL=f"http://127.0.0.1:{self.app_port}"))
 
         env = dict(os.environ)
         tools = HERE / "tools"

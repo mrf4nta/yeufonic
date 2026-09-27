@@ -11,7 +11,7 @@ dies, to yeufonic/engine-fault.json in the output folder the app shares, and the
 can say what happened to the job it lost.
 
 ComfyUI's "To see the GUI go to" at start-up sends people to the engine's own page.
-It is reworded to send them to Yeufonic, at YEUFONIC_APP_URL when that is set.
+When YEUFONIC_APP_URL is set, the line gives the app's address instead.
 """
 import json
 import logging
@@ -86,11 +86,9 @@ def job_thread_died(args):
 class PointAtYeufonic(logging.Filter):
     def filter(self, record):
         message = record.msg if isinstance(record.msg, str) else ""
-        if message.startswith("To see the GUI go to:"):
-            engine = message.split(":", 1)[1].strip()
-            app = os.environ.get("YEUFONIC_APP_URL")
-            record.msg = f"Yeufonic's engine is running at {engine}. " + (
-                f"Open Yeufonic at {app}." if app else "Open Yeufonic, not this address.")
+        app = os.environ.get("YEUFONIC_APP_URL")
+        if app and message.startswith("To see the GUI go to:"):
+            record.msg = f"To see the GUI go to: {app}"
             record.args = ()
         return True
 

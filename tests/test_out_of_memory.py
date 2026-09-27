@@ -196,9 +196,12 @@ def test_the_startup_message_points_at_the_app(monkeypatch):
     import logging
     watch = load_watch()
     record = logging.LogRecord("root", logging.INFO, __file__, 1, "To see the GUI go to: http://127.0.0.1:8188", None, None)
-    monkeypatch.setenv("YEUFONIC_APP_URL", "http://localhost:8090")
+    monkeypatch.delenv("YEUFONIC_APP_URL", raising=False)
     watch.PointAtYeufonic().filter(record)
-    assert record.getMessage() == "Yeufonic's engine is running at http://127.0.0.1:8188. Open Yeufonic at http://localhost:8090."
+    assert record.getMessage() == "To see the GUI go to: http://127.0.0.1:8188", "left alone without the app's address"
+    monkeypatch.setenv("YEUFONIC_APP_URL", "http://127.0.0.1:8090")
+    watch.PointAtYeufonic().filter(record)
+    assert record.getMessage() == "To see the GUI go to: http://127.0.0.1:8090"
     other = logging.LogRecord("root", logging.INFO, __file__, 1, "Starting server", None, None)
     watch.PointAtYeufonic().filter(other)
     assert other.getMessage() == "Starting server"
