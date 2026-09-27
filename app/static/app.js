@@ -7014,19 +7014,22 @@ function setSheetCollapsed(collapsed, animate) {
     // A timer rather than an animation frame, which a tab in the background would hold back.
     setSheetCollapsed.timer = setTimeout(function () {
       main.classList.remove('sheet-settle');
-      if (!collapsed) { main.classList.remove('sheet-fading'); }   // and the panel fades in
+      if (!collapsed) { main.classList.remove('sheet-fading'); }   // and the panel slides in
     }, 30);
   };
   if (collapsed) {
-    // Fade the panel out, then give its column away.
+    // Slide the panel out, then give its column away.
     main.classList.add('sheet-fading');
     setSheetCollapsed.timer = setTimeout(function () {
+      // One step, with nothing animating across it: settle first, then the change.
+      main.classList.add('sheet-settle');
       main.classList.add('sheet-collapsed');
       main.classList.remove('sheet-fading');
       settle();
-    }, 200);
+    }, 220);
   } else {
-    // The column comes back with the panel still clear, then it fades in.
+    // The column comes back with the panel still out of view, then it slides in.
+    main.classList.add('sheet-settle');
     main.classList.add('sheet-fading');
     main.classList.remove('sheet-collapsed');
     settle();
