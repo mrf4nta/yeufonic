@@ -32,6 +32,12 @@ cannot creep back in.
   only what still needs it, leaves out and names any song whose analysis fails, and waits for
   anything already using the engine before it trains.
 
+### Fixed
+
+- The New corpus window's folder picker had no way back from one of its starting folders to the
+  list of them, and on Windows listed each subfolder by its whole path. It now has *all folders*
+  there, and shows subfolders by name. Fixes #13.
+
 ## 0.0.3 (2026-09-27)
 
 ### Changed
