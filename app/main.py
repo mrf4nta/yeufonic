@@ -1707,6 +1707,68 @@ def _identity_view(identity: dict) -> dict:
 _persona_view = _identity_view
 
 
+class CheckpointsDeleteIn(BaseModel):
+    names: list[str] = Field(min_length=1, max_length=1000)
+
+
+def _run_label(run: str, base: str, root: Path | None) -> str:
+    """This run, with the day it was trained, or a previous one by its date."""
+    if not run:
+        path = root / f"{base}.safetensors" if root else None
+        if path and path.is_file():
+            when = time.localtime(path.stat().st_mtime)
+            return f"This run · trained {when.tm_mday} {time.strftime('%b', when)}"
+        return "This run"
+    when = time.strptime(run[:8], "%Y%m%d")
+    return f"Previous run · {when.tm_mday} {time.strftime('%b', when)} {when.tm_year}"
+
+
+@app.get("/api/identities/{identity_id}/checkpoints")
+def identity_checkpoints(identity_id: str) -> dict:
+    """The checkpoints this corpus's training runs kept, run by run, with their sizes."""
+    identity = one("SELECT * FROM identities WHERE id = ?", (identity_id,))
+    if not identity:
+        raise HTTPException(404, "no such corpus")
+    base, root = _lora_base(identity), loras.folder()
+    runs: dict[str, dict] = {}
+    for item in loras.checkpoints(base, root):
+        run = runs.setdefault(item["run"], {"run": item["run"], "label": _run_label(item["run"], base, root),
+                                            "checkpoints": []})
+        run["checkpoints"].append(item)
+    return {"base": base, "visible": root is not None, "runs": list(runs.values())}
+
+
+@app.post("/api/identities/{identity_id}/checkpoints/delete")
+async def delete_identity_checkpoints(identity_id: str, body: CheckpointsDeleteIn) -> dict:
+    """Delete some of this corpus's checkpoints.  Only its own step files: never a
+    finished LoRA, and never another corpus's, whatever names are sent."""
+    identity = one("SELECT * FROM identities WHERE id = ?", (identity_id,))
+    if not identity:
+        raise HTTPException(404, "no such corpus")
+    active = _training_run()
+    if active and active["identity_id"] == identity_id:
+        raise HTTPException(409, "this corpus is training. Delete its checkpoints when it has finished.")
+    root = loras.folder()
+    own = {item["name"]: item for item in loras.checkpoints(_lora_base(identity), root)}
+    unknown = [name for name in body.names if name not in own]
+    if unknown:
+        raise HTTPException(400, f"not a checkpoint of this corpus: {unknown[0]}")
+    freed = 0
+    try:
+        for name in dict.fromkeys(body.names):
+            await asyncio.to_thread(loras.remove, name, root)
+            freed += own[name]["bytes"]
+    except (OSError, ValueError) as exc:
+        raise HTTPException(500, f"could not delete a checkpoint: {exc}")
+    finally:
+        try:
+            await ENGINE.refresh_options()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("the engine's list was not re-read: %s", exc)
+    log.info("deleted %d checkpoints of corpus '%s' (%.1f GB)", len(set(body.names)), identity["name"], freed / 1e9)
+    return {"deleted": len(set(body.names)), "bytes": freed}
+
+
 def _previous_lora(identity: dict) -> dict | None:
     base = _lora_base(identity)
     found = loras.previous_run(base, loras.folder())

@@ -1600,3 +1600,16 @@ main.sheet-collapsed .sheet-toggle svg { transform: rotate(180deg); }
 /* Short of GPU memory for training: said before it starts. */
 .train-memory { color: #fbbf24; font-size: 12.5px; margin: 0 0 10px; }
 .train-memory.hidden { display: none; }
+
+/* A corpus's training checkpoints, in its Edit form, to clear out. */
+.identity-checkpoints { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.identity-checkpoints .label-row a { color: var(--muted); }
+.identity-checkpoints .label-row a:hover { color: var(--text); }
+.ck-run { margin: 6px 0 10px; }
+.ck-run-head { font-size: 12.5px; margin-bottom: 6px; }
+.ck-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.ck-step {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line);
+  border-radius: 999px; font-size: 12.5px; cursor: pointer; user-select: none;
+}
+.ck-step:has(input:checked) { border-color: rgba(248, 113, 113, 0.55); background: rgba(248, 113, 113, 0.10); }

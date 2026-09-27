@@ -423,7 +423,10 @@ rest, its trigger word beside it, and the same two strengths apply.
 
 A training run saves a checkpoint every 50 steps, and keeps them under its LoRA in the picker:
 **▸ 9 steps** beside the LoRA's name opens them (Settings can delete them instead, to save the
-space). A checkpoint whose LoRA has been deleted stays under **Training checkpoints**. Each is the LoRA as it stood at
+space). A checkpoint whose LoRA has been deleted stays under **Training checkpoints**. To clear
+some out, press **Edit** on the corpus: **Training checkpoints** there lists each run's, this run's
+and any previous run's, with their sizes. Tick the ones to go and press **Delete**. The finished
+LoRA is not listed; it has **Delete LoRA** of its own. Each is the LoRA as it stood at
 that point in training. They sound about as good as each other, but each has its own weighting of
 what it learned, so each has its own taste while keeping the style and signature sound the LoRA
 was trained on.

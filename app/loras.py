@@ -296,6 +296,28 @@ def set_aside(base: str, root: Path, title: str) -> str:
     return new
 
 
+def checkpoints(base: str, root: Path | None) -> list[dict]:
+    """The checkpoints a corpus's training runs kept: this run's (base_stepN) and any
+    previous run's, set aside under a dated name (base_20260920_stepN).  Each with its
+    run, its step and its size, this run first, then the newest previous one."""
+    if not root:
+        return []
+    pattern = re.compile(rf"{re.escape(base)}(?:_(\d{{8}}(?:_\d{{4}})?))?_step(\d+)")
+    found = []
+    for path in root.glob(f"{base}*_step*.safetensors"):
+        match = pattern.fullmatch(path.stem)
+        if match and path.is_file():
+            found.append({"name": path.name, "run": match.group(1) or "", "step": int(match.group(2)),
+                          "bytes": path.stat().st_size})
+    found.sort(key=lambda item: (item["run"] != "", _reverse(item["run"]), item["step"]))
+    return found
+
+
+def _reverse(text: str) -> str:
+    """Sorts dated run names newest first."""
+    return "".join(chr(0x10FFFF - ord(ch)) for ch in text)
+
+
 def delete_run(base: str, root: Path) -> int:
     """Delete a previous run's LoRA, its checkpoints, their notes and its log."""
     files = run_files(base, root)

@@ -138,7 +138,8 @@ would be of an artist or genre to use when training your LoRA. Each track gets i
 separated, its key, tempo and sections found and its lyrics drafted. You then export it as a
 training set, and train a style LoRA from it. Training holds the GPU until it finishes, and the
 LoRA appears in the Style LoRA list, with a style chip for each song it learned from. Training
-also saves a checkpoint every 50 steps, folded under its LoRA in the list. Each gives its own
+also saves a checkpoint every 50 steps, folded under its LoRA in the list, and a corpus's **Edit**
+form lists them run by run, with their sizes, to delete the ones you don't need. Each gives its own
 take on the style. With the LoRA chosen, **Checkpoints** beside **Delete LoRA** makes what the
 panel would make once on each of them, with one seed, so you can compare them by ear. To save the
 space, **Training checkpoints** in Settings can delete them when training ends. To share a LoRA, press **Download** under the picker: the zip carries

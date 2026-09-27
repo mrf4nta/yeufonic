@@ -392,19 +392,20 @@ function paintStyleLoras() {
   var chosen = select.value;
   var groups = loraGroups(list);
   // A run's checkpoints go under the LoRA they belong to, not in a heap of their
-  // own: four runs came to 61 entries there. Only one whose LoRA is gone stays behind.
+  // own: four runs came to 61 entries there. A previous run's go under its dated
+  // LoRA the same way. Only one whose LoRA is gone stays where it was.
   var byName = {};
   list.forEach(function (item) { byName[item.name] = item; });
   var stepsOf = {};
-  if (groups[LORA_CHECKPOINTS]) {
-    groups[LORA_CHECKPOINTS] = groups[LORA_CHECKPOINTS].filter(function (item) {
+  Object.keys(groups).forEach(function (key) {
+    groups[key] = groups[key].filter(function (item) {
       var run = loraCheckpoint(item.name);
       if (!run || !byName[run.parent] || loraCheckpoint(run.parent)) { return true; }
       (stepsOf[run.parent] = stepsOf[run.parent] || []).push(item);
       return false;
     });
-    if (!groups[LORA_CHECKPOINTS].length) { delete groups[LORA_CHECKPOINTS]; }
-  }
+    if (!groups[key].length) { delete groups[key]; }
+  });
   // Other goes last, and a training run's checkpoints just above it, under every
   // finished LoRA.  Their steps are counted, not spelt: 50 comes before 100.
   var rank = function (name) { return name === 'other' ? 2 : name === LORA_CHECKPOINTS ? 1 : 0; };
@@ -4104,12 +4105,96 @@ function openIdentityEdit() {
     '<div class="field"><label for="pe-desc">The sound, for every song</label><input id="pe-desc" type="text" maxlength="400" ' +
       'value="' + esc(data.description || '') + '" placeholder="pop rock, electric guitars, bass, drums"></div>' +
     '<div class="wide row"><button id="pe-save" class="ghost">Save</button><button id="pe-cancel" class="ghost">Cancel</button>' +
-      '<span id="pe-status" class="status"></span></div>';
+      '<span id="pe-status" class="status"></span></div>' +
+    '<div class="wide identity-checkpoints" id="pe-checkpoints"></div>';
   $('pe-voice').value = data.voice || '';
   box.classList.remove('hidden');
+  loadCorpusCheckpoints();
   $('pe-desc').focus();
 }
 var openPersonaEdit = openIdentityEdit;
+
+/* The checkpoints this corpus's training runs kept, to clear out: a run keeps one
+   every 50 steps, and they add up. Step files only: the finished LoRA has Delete
+   LoRA of its own. Deleting acts at once, apart from Save and Cancel above. */
+function bytesLabel(bytes) {
+  return bytes >= 1e9 ? (bytes / 1e9).toFixed(1) + ' GB' : Math.max(1, Math.round(bytes / 1e6)) + ' MB';
+}
+
+async function loadCorpusCheckpoints(note) {
+  var box = $('pe-checkpoints');
+  if (!box) { return; }
+  var data;
+  try {
+    data = await api('/api/identities/' + IDENTITY.id + '/checkpoints');
+  } catch (err) {
+    box.innerHTML = '<label>Training checkpoints</label><p class="status bad">' + esc(err.message) + '</p>';
+    return;
+  }
+  var all = [];
+  data.runs.forEach(function (run) { all = all.concat(run.checkpoints); });
+  var total = all.reduce(function (sum, item) { return sum + item.bytes; }, 0);
+  var status = '<span id="pe-ck-status" class="status' + (note ? ' good' : '') + '">' + esc(note || '') + '</span>';
+  if (!all.length) {
+    box.innerHTML = '<label>Training checkpoints</label><p class="hint">' +
+      (data.visible ? 'None kept.' : 'The app cannot see the LoRA folder, so it cannot list them.') + ' ' + status + '</p>';
+    return;
+  }
+  box.innerHTML =
+    '<div class="label-row"><label>Training checkpoints</label><span class="muted">' + all.length + ' kept, ' +
+      bytesLabel(total) + ' \u00b7 select <a href="#" data-ck-all="1">all</a> \u00b7 <a href="#" data-ck-all="0">none</a></span></div>' +
+    data.runs.map(function (run) {
+      return '<div class="ck-run"><div class="ck-run-head">' + esc(run.label) + ' <span class="muted">' +
+        run.checkpoints.length + ' \u00d7 ' + bytesLabel(run.checkpoints[0].bytes) + '</span></div><div class="ck-steps">' +
+        run.checkpoints.map(function (item) {
+          return '<label class="ck-step"><input type="checkbox" class="ck-box" value="' + esc(item.name) + '" data-bytes="' +
+            item.bytes + '"> step ' + item.step + '</label>';
+        }).join('') + '</div></div>';
+    }).join('') +
+    '<div class="row"><button id="pe-ck-delete" class="ghost danger" disabled>Delete selected</button>' + status + '</div>';
+}
+
+function checkpointsPicked() {
+  return Array.prototype.slice.call(document.querySelectorAll('#pe-checkpoints .ck-box:checked'));
+}
+
+function paintCheckpointsPicked() {
+  var button = $('pe-ck-delete');
+  if (!button) { return; }
+  var picked = checkpointsPicked();
+  var bytes = picked.reduce(function (sum, box) { return sum + Number(box.dataset.bytes || 0); }, 0);
+  button.disabled = !picked.length;
+  button.textContent = picked.length
+    ? 'Delete ' + picked.length + ' checkpoint' + (picked.length === 1 ? '' : 's') + ' (' + bytesLabel(bytes) + ')'
+    : 'Delete selected';
+}
+
+async function deleteCorpusCheckpoints() {
+  var picked = checkpointsPicked();
+  if (!picked.length) { return; }
+  var bytes = picked.reduce(function (sum, box) { return sum + Number(box.dataset.bytes || 0); }, 0);
+  var what = picked.length + ' checkpoint' + (picked.length === 1 ? '' : 's');
+  if (!confirm('Delete ' + what + ' of ' + (IDENTITY.data.name || 'this corpus') + ', ' + bytesLabel(bytes) + '?\n\n' +
+      'Takes made with them keep their audio but cannot be rendered with them again.')) { return; }
+  var button = $('pe-ck-delete');
+  button.disabled = true;
+  button.textContent = 'Deleting\u2026';
+  try {
+    var done = await api('/api/identities/' + IDENTITY.id + '/checkpoints/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names: picked.map(function (box) { return box.value; }) })
+    });
+    await loadCorpusCheckpoints('Deleted ' + done.deleted + ' checkpoint' + (done.deleted === 1 ? '' : 's') + ', ' +
+      bytesLabel(done.bytes) + ' freed.');
+    // The Style LoRA list loses them too.
+    await pollState();
+    paintStyleLoras();
+  } catch (err) {
+    paintCheckpointsPicked();
+    var status = $('pe-ck-status');
+    if (status) { status.textContent = err.message; status.className = 'status bad'; }
+  }
+}
 
 async function saveIdentityEdit() {
   try {
@@ -4223,6 +4308,17 @@ async function identityClick(event) {
     return;
   }
   if (target.closest('#pe-save')) { saveIdentityEdit(); return; }
+  var every = target.closest('[data-ck-all]');
+  if (every) {
+    event.preventDefault();
+    Array.prototype.forEach.call(document.querySelectorAll('#pe-checkpoints .ck-box'), function (box) {
+      box.checked = every.dataset.ckAll === '1';
+    });
+    paintCheckpointsPicked();
+    return;
+  }
+  if (target.closest('.ck-box')) { paintCheckpointsPicked(); return; }
+  if (target.closest('#pe-ck-delete')) { deleteCorpusCheckpoints(); return; }
   var status = $('identity-status') || $('persona-status');
   if (target.closest('#identity-stop')) {
     try {

@@ -29,7 +29,8 @@ cannot creep back in.
 
 - **A training run's checkpoints fold under their LoRA** in the Style LoRA list, behind a
   "▸ 9 steps" toggle beside its name, in step order, instead of sharing one Training checkpoints
-  group with every other run's. A checkpoint whose LoRA has been deleted stays in that group.
+  group with every other run's. A previous run's fold under its dated LoRA the same way. A
+  checkpoint whose LoRA has been deleted stays in that group.
 
 ### Added
 
@@ -39,6 +40,10 @@ cannot creep back in.
   a new take with the same seed and whatever else the editor shows, leaving the original as it
   was. Untick it to write a new plan for the words. Before, rendering a take's score sang its saved
   words, whatever the editor held.
+- **Delete a corpus's checkpoints from its Edit form.** **Training checkpoints** there lists each
+  run's, this run's and any previous run's, with their sizes, to tick and delete in one go. Only
+  step files: the finished LoRA keeps its own Delete LoRA, and a corpus that is training keeps its
+  checkpoints until it finishes.
 
 ### Fixed
 
