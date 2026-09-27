@@ -23,6 +23,16 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Changed
+
+- **The left panel is now a read-only sheet for the selected take,** and making and changing takes
+  happens in an **editor window**: three columns with the score on a tab of its own, or steps, as
+  **Settings → Editor layout** chooses. The panel's **+ Song**, **+ Cover** and **+ Instrumental**
+  start something new; a card's Score and Again buttons, or a double-click on a card, open the
+  editor. The panel folds away, from a chevron beside it, to give the takes the width.
+
 ## 0.0.1 (2026-09-27)
 
 **Yeufonic 0.0.1: YuE2 Studio, renamed.** It carries on from YuE2 Studio 0.0.37, whose history and
