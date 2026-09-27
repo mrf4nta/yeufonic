@@ -67,6 +67,8 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   Configure Yeufonic to use an external LLM for even greater accuracy.
 - **Song from a prompt.** Write a score plan from style and lyrics, read it, repair it, render it.
   A new plan costs seconds, so a bad melody is cheap to discard.
+- **Same tune, new words.** Change the words of a take you like and **Keep this tune** sings its
+  score with them, as a new take with the same seed. A new plan would be a new tune.
 - **Choose how adventurous the chords are.** YuE2 tends to write one four-chord loop for a whole
   song. The Harmony slider, from Familiar to Outside, pushes the planner towards chords it has not
   just used, without breaking the song's structure.
@@ -396,6 +398,9 @@ server-side change only.
   `[Chorus: bigger]` go into the conditioning. Measured: adding `[Genre: Indie Folk, Chamber
   Pop]` moved a plan from E minor to E flat and changed the chords, while the melody gained no
   notes for the tag's syllables.
+- **Changing one word changes the tune.** The planner reads all the lyrics before it writes a note,
+  so a seed gives the same plan only for the same words. To keep a tune, sing its score with the
+  new words instead of writing a new plan.
 - **Duration is a cap, not a target.** `max_duration` truncates; it never stretches. The real
   length comes from the score: bars x beats per bar x 60 / tempo predicted the finished render
   within about 5 per cent across six takes. The app shows that estimate under the score.

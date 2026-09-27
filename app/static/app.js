@@ -2652,9 +2652,64 @@ function setScoreActions() {
     node.style.opacity = enabled ? '' : '0.45';
     node.style.cursor = enabled ? '' : 'not-allowed';
   });
-  $('score-note').textContent = enabled
-    ? 'Render this score makes audio from the score above, keeping its melody and chords. Write a new plan asks YuE2 for a different melody, same words.'
-    : 'Nothing to render yet. Write a score plan, or press Score on a take in the library.';
+  var fresh = enabled && wordsChanged();
+  $('render-take').textContent = fresh ? 'Sing with new words' : 'Render this score';
+  if ($('words-changed')) { $('words-changed').classList.toggle('hidden', !fresh); }
+  $('score-note').textContent = !enabled
+    ? 'Nothing to render yet. Write a score plan, or press Score on a take in the library.'
+    : (fresh
+      ? 'The words have changed. Sing with new words keeps this score\'s tune and makes a new take; the original stays as it is.'
+      : 'Render this score makes audio from the score above, keeping its melody and chords. Write a new plan asks YuE2 for a different melody, same words.');
+}
+
+/* Same tune, new words. The planner reads every word before it writes a note, so a
+   plan for changed words is a new tune. Sung to the score in the box instead, they
+   keep this one: the take that owns the score, and whether the words have moved on. */
+function scoreOwner() {
+  var id = takeIdInEditor();
+  if (!id) { return null; }
+  return (State.takes || []).find(function (t) { return t.id === id; }) ||
+    (State.formTake && State.formTake.id === id ? State.formTake : null);
+}
+
+function wordsChanged() {
+  var take = scoreOwner();
+  if (!take || take.kind === 'instrumental' || State.mode === 'inst') { return false; }
+  if (($('abc').value || '').trim().length <= 50) { return false; }
+  var norm = function (text) { return (text || '').replace(/\r\n/g, '\n').trim(); };
+  var words = norm($('lyrics').value);
+  return Boolean(words) && words !== norm(take.lyrics);
+}
+
+async function doSingNewWords() {
+  var take = scoreOwner();
+  if (!take) { statusLine('Nothing to sing yet. Write a score plan first.', 'bad'); return; }
+  var payload = {
+    lyrics: $('lyrics').value, abc: $('abc').value, title: $('title').value.trim(),
+    interpretation: $('interpretation').value,
+    realaudio: $('realaudio').checked, normalise: normaliseWanted()
+  };
+  if ($('seed-fixed').checked && !isNaN(parseInt($('seed').value, 10))) {
+    payload.seed = parseInt($('seed').value, 10);
+  }
+  try {
+    var made = await api('/api/takes/' + take.id + '/words', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    // The form now describes the new take, which owns the score and the words.
+    State.formTake = { id: made.id, kind: take.kind, lyrics: payload.lyrics, abc: payload.abc };
+    $('title').value = made.title;
+    scoreBaseline($('abc').value);
+    setSelection({ formTakeId: made.id, boxKind: 'take', boxId: made.id });
+    State.formEdited = false;
+    saveForm();
+    statusLine('Singing the same tune with the new words\u2026');
+    loadTakes();
+    closeEditor();
+  } catch (err) {
+    statusLine('Could not sing: ' + err.message, 'bad');
+  }
 }
 
 function syncEditor() {
@@ -2769,6 +2824,7 @@ async function doRenderTake() {
     $('score-note').textContent = 'Nothing to render yet. Write a score plan, or press Score on a take in the library.';
     return;
   }
+  if (wordsChanged()) { await doSingNewWords(); return; }
   try {
     await api('/api/takes/' + id + '/score', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -4347,6 +4403,7 @@ function selectTake(take) {
     return;
   }
   if (formIsDraft()) { stashDraft(); }
+  State.formTake = take;
   // Songs and instrumentals are both written from a prompt; only a cover has a recording.
   var isInst = take.kind === 'instrumental';
   var isSong = take.kind === 'song' || isInst;
@@ -5909,6 +5966,8 @@ function wire() {
   wireEditor();
   $('create-song').addEventListener('click', doPlan);
   $('render-take').addEventListener('click', doRenderTake);
+  $('lyrics').addEventListener('input', setScoreActions);
+  if ($('sing-new-words')) { $('sing-new-words').addEventListener('click', doSingNewWords); }
   $('sung-cancel').addEventListener('click', closeSungWarning);
   $('sung-render').addEventListener('click', renderAnyway);
   $('sung-replan').addEventListener('click', replanInstead);

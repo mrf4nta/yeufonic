@@ -588,6 +588,14 @@ class RenderIn(BaseModel):
     seed: int | None = Field(None, ge=0, le=MAX_SEED)
 
 
+class WordsIn(RenderIn):
+    lyrics: str = Field(max_length=20_000)
+    # The score as the editor holds it, so an edit to it goes with the words and the
+    # original keeps its own. Omitted, the take's score is used.
+    abc: str | None = Field(None, max_length=200_000)
+    title: str | None = Field(None, max_length=200)
+
+
 class VariationsIn(BaseModel):
     interpretations: list[str] = Field(min_length=1, max_length=len(INTERPRETATIONS))
     # For these takes only; omitted, each keeps the original's.
@@ -1485,7 +1493,7 @@ async def replan_take(take_id: str, body: ReplanIn | None = None) -> dict:
 def _base_title(title: str) -> str:
     """'Night drive · Tight' -> 'Night drive', so a variation of a variation is not 'X · Tight · Loose'."""
     head, sep, tail = title.rpartition(" \u00b7 ")
-    return head if sep and (tail in INTERPRETATION_NAMES.values() or tail in ("new voice", "sung again")) else title
+    return head if sep and (tail in INTERPRETATION_NAMES.values() or tail in ("new voice", "sung again", "new words")) else title
 
 
 # What Sing again leaves behind: the copy is a new take with its own audio and state.
@@ -1517,6 +1525,54 @@ async def revoice(take_id: str) -> dict:
     execute(f"INSERT INTO takes({', '.join(columns)}) VALUES({', '.join(':' + c for c in columns)})", record)
     await QUEUE.put({"kind": "render", "id": record["id"]})
     log.info("Queued Sing again for take '%s' (%s -> %s, seed %d)", take.get("title") or take_id,
+             take_id, record["id"], seed)
+    return {"id": record["id"], "title": record["title"], "seed": seed}
+
+
+@app.post("/api/takes/{take_id}/words")
+async def new_words(take_id: str, body: WordsIn) -> dict:
+    """The same score sung with other words: a new take beside the original, with its seed.
+
+    The planner reads every word before it writes a note, so a plan for changed words
+    is a new tune, even with the same seed.  The render takes the score and the words
+    separately, so a score already liked keeps its melody, key and tempo this way."""
+    _gpu_free_for_rendering()
+    take = one("SELECT * FROM takes WHERE id = ?", (take_id,))
+    if not take:
+        raise HTTPException(404, "no such take")
+    if take["kind"] == "instrumental":
+        raise HTTPException(400, "an instrumental has no words to change")
+    words = body.lyrics.replace("\r\n", "\n")
+    if not words.strip():
+        raise HTTPException(400, "write some lyrics first")
+    abc = take["abc"] if body.abc is None else body.abc
+    if not (abc or "").strip():
+        raise HTTPException(400, "this take has no score to sing. Write a plan first.")
+    _check_score(abc, take["kind"])
+    _checkpoint()
+    record = {key: value for key, value in take.items() if key not in _REVOICE_FRESH}
+    title = " ".join((body.title or "").split())
+    if not title or title == take["title"]:
+        title = f"{_base_title(take['title'])} \u00b7 new words"
+    if body.seed is not None:
+        seed = body.seed
+    elif body.reseed:
+        seed = int.from_bytes(os.urandom(4), "big")
+    else:
+        seed = take["seed"]
+    record.update(id=uuid.uuid4().hex[:12], title=title, lyrics=words, abc=abc, status="queued",
+                  created_at=time.time(), checkpoint=config.CHECKPOINT, seed=seed,
+                  sound_seed=take.get("sound_seed") if seed == take["seed"] else None)
+    if body.interpretation is not None:
+        record["interpretation"] = _interpretation(body.interpretation)
+    if body.realaudio is not None:
+        record["realaudio"] = 1 if body.realaudio else 0
+    if body.normalise is not None:
+        record["normalise"] = 1 if body.normalise else 0
+    columns = list(record)
+    execute(f"INSERT INTO takes({', '.join(columns)}) VALUES({', '.join(':' + c for c in columns)})", record)
+    await QUEUE.put({"kind": "render", "id": record["id"]})
+    log.info("Queued new words for take '%s' (%s -> %s, seed %d)", take.get("title") or take_id,
              take_id, record["id"], seed)
     return {"id": record["id"], "title": record["title"], "seed": seed}
 

@@ -196,6 +196,17 @@ liked can be nudged one setting at a time.
 Tick **fixed seed** to keep the same seed across renders; leave it off and each render rolls a new
 one.
 
+### Same tune, new words
+
+The planner reads all the lyrics before it writes a note, so the same seed gives the same plan only
+for the same words. Change one line and the next plan is a new tune: another melody, often another
+key and tempo, and the voice moves with them.
+
+To keep a tune you like, open the take, change its words, and press **Keep this tune** under the
+lyrics (on the Score page the render button says **Sing with new words**). The take's score is sung
+with the new words, with the same seed, as a new take beside the original, which stays as it is.
+New words that keep the old lines' syllable counts fit the melody best.
+
 ### Production polish
 
 **Production polish** applies Mothersuperior's Realaudio decoder LoRA. Stock YuE2 often sounds boxy

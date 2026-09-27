@@ -1585,3 +1585,7 @@ main.sheet-collapsed .sheet-toggle svg { transform: rotate(180deg); }
   main.sheet-collapsed { grid-template-columns: 1fr; }
   main.sheet-collapsed > .sheet-panel { visibility: visible; padding: 20px; border-width: 1px; }
 }
+
+/* Changed words on a take with a score: the way to keep its tune. */
+.words-changed { margin: 6px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.words-changed.hidden { display: none; }

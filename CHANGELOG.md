@@ -23,6 +23,16 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Added
+
+- **Same tune, new words.** The planner reads all the lyrics before it writes a note, so changed
+  words get a new tune even with the same seed. When a take's words are changed in the editor,
+  **Keep this tune** sings its score with them instead, as a new take with the same seed, and
+  leaves the original as it was. Before, rendering a take's score sang its saved words, whatever
+  the editor held.
+
 ## 0.0.2 (2026-09-27)
 
 ### Changed
