@@ -54,6 +54,9 @@ Writing an instrumental, with the structure built section by section:
 
 [![Instrumental](docs/screenshots/instrumental.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/instrumental.png)
 
+To hear what it makes, there are example songs in **[examples](examples/)**, made with style LoRAs
+trained in the app. They play on that page, and the MP3s can be downloaded.
+
 ## What it does
 
 - **Cover a recording.** Upload a song, transcribe it once, edit the melody and chords, render.
