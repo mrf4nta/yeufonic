@@ -33,6 +33,11 @@ cannot creep back in.
   start something new; a card's Score and Again buttons, or a double-click on a card, open the
   editor. The panel folds away, from a chevron beside it, to give the takes the width.
 
+### Fixed
+
+- Opening a take in the editor now brings back its length cap, which kept whatever the last take
+  had. The take panel shows the cap too.
+
 ## 0.0.1 (2026-09-27)
 
 **Yeufonic 0.0.1: YuE2 Studio, renamed.** It carries on from YuE2 Studio 0.0.37, whose history and

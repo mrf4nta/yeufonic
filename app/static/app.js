@@ -4357,6 +4357,8 @@ function selectTake(take) {
   $('title').value = take.title;
   $('style').value = take.style || '';
   $('style').dataset.touched = '1';
+  // Before the structure: timed sections are laid out against the cap.
+  if (take.max_duration) { $('max-duration').value = Math.round(take.max_duration); }
   // An instrumental keeps its structure where a song keeps its lyrics.  The lyrics box
   // is left alone, so browsing instrumentals cannot wipe the words of a song.
   if (isInst) {
@@ -6801,6 +6803,7 @@ function sheetHTML(take) {
     var level = take.normalised_to == null ? -14 : take.normalised_to;
     sound.push(['Normalised', (level < 0 ? '−' : '') + Math.abs(level) + ' LUFS']);
   }
+  if (take.max_duration) { sound.push(['Length cap', secs(take.max_duration)]); }
   if (take.seed != null) { sound.push(['Seed', take.seed]); }
   html += '<div class="sheet-blk"><h3>Sound</h3><dl class="sheet-pairs">' +
     sound.map(function (pair) { return '<dt>' + pair[0] + '</dt><dd>' + pair[1] + '</dd>'; }).join('') + '</dl></div>';
