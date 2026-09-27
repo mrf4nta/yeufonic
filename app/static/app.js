@@ -57,6 +57,7 @@ function paintTakeHighlights() {
       card.classList.add(tone);
     }
   });
+  if (typeof paintSheet === 'function') { paintSheet(); }
 }
 
 function setSelection(next) {
@@ -102,6 +103,10 @@ var State = { normalising: {}, sources: [], takes: [], options: {}, filter: 'all
   picked: {},
   formEdited: false, spaces: [], spaceId: 'default', moveTakeId: null };
 var LAYOUT_KEY = 'yue2.layout';
+var SHEET_KEY = 'yue2.sheet';   // the take panel folded away, or not
+// Set here, before the page is wired, which happens partway through this file.
+var SHEET_KIND = { song: 'Song from a prompt', cover: 'Cover of a recording', instrumental: 'Instrumental' };
+var Editor = { page: 'song', step: 0 };   // the editor window's page and step
 var WIDTH_KEY = 'yue2.width';
 var SPACE_KEY = 'yue2.space';
 var FILTER_KEY = 'yue2.filter';
@@ -2119,6 +2124,7 @@ function adoptSettings(spec) {
   var values = {};
   State.settingSpec.forEach(function (item) { values[item.key] = item.value; });
   State.settings = values;
+  if (typeof editorOpen === 'function' && editorOpen()) { paintEditor(); }
 }
 
 function openBrandMenu() {
@@ -2477,6 +2483,12 @@ function statusLine(message, kind) {
   var node = $('render-status');
   node.textContent = message;
   node.className = 'status' + (kind ? ' ' + kind : '');
+  // The editor may be closed: the sheet says it too, when it is news rather than a hint.
+  var mirror = $('sheet-status');
+  if (mirror && (kind || !message)) {
+    mirror.textContent = message;
+    mirror.className = 'status' + (kind ? ' ' + kind : '');
+  }
 }
 
 /* ---------------------------------------------------------------- harmony ---
@@ -2744,6 +2756,7 @@ async function doPlan() {
     setSelection({ formTakeId: take.id, boxKind: 'none', boxId: null, awaiting: take.id });
     statusLine('Writing the score plan…');
     loadTakes();
+    editorAfterPlan();
   } catch (err) {
     statusLine('Could not start: ' + err.message, 'bad');
   }
@@ -2778,6 +2791,7 @@ async function doRenderTake() {
     setSelection({ formTakeId: takeIdInEditor() || selectedTakeId(), boxKind: 'take', boxId: takeIdInEditor() || selectedTakeId() });
     statusLine('Rendering…');
     loadTakes();
+    closeEditor();
   } catch (err) {
     statusLine('Could not render: ' + err.message, 'bad');
   }
@@ -3161,6 +3175,7 @@ async function doInstrumental() {
     setSelection({ formTakeId: take.id, boxKind: 'none', boxId: null, awaiting: take.id });
     statusLine('Writing the score plan\u2026');
     loadTakes();
+    editorAfterPlan();
   } catch (err) {
     statusLine('Could not start: ' + err.message, 'bad');
   }
@@ -4768,6 +4783,7 @@ function paintTakes() {
     '</article>';
   }).join('');
   paintBulk();
+  paintSheet();
 }
 
 /* Takes normalised before the level could be chosen have none recorded; all were -14. */
@@ -5394,6 +5410,7 @@ async function doRender() {
     await api('/api/takes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     status.textContent = '';
     loadTakes();
+    closeEditor();
   } catch (err) {
     status.textContent = 'Could not queue: ' + err.message;
     status.className = 'status bad';
@@ -5887,6 +5904,7 @@ function wire() {
   });
   $('transcribe').addEventListener('click', doTranscribe);
   $('create-cover').addEventListener('click', doRender);
+  wireEditor();
   $('create-song').addEventListener('click', doPlan);
   $('render-take').addEventListener('click', doRenderTake);
   $('sung-cancel').addEventListener('click', closeSungWarning);
@@ -6017,7 +6035,18 @@ function wire() {
 
   $('takes').addEventListener('dblclick', function (event) {
     var titleEl = event.target.closest('.take-title');
-    if (!titleEl) { return; }
+    if (!titleEl) {
+      // Anywhere else on a card, away from its controls, opens it in the editor, on the
+      // page its sheet's main button would: the plan to review, or the song.
+      if (event.target.closest('button, a, input, select, textarea, label, .take-title-input')) { return; }
+      var card = event.target.closest('.take');
+      var take = card && takeById(card.dataset.id);
+      if (!take || typeof openEditor !== 'function' || !$('editor-modal')) { return; }
+      if (window.getSelection) { window.getSelection().removeAllRanges(); }   // the word the double-click picked
+      selectTake(take);
+      openEditor(take.status === 'planned' ? 'score' : 'song');
+      return;
+    }
     var id = titleEl.dataset.id || (titleEl.closest('.take') && titleEl.closest('.take').dataset.id);
     if (id) {
       event.preventDefault();
@@ -6210,7 +6239,7 @@ function wire() {
       if (!opened) { return; }
       selectTake(opened);
       statusLine('Showing the score for ' + opened.title + '.', 'good');
-      $('score-box').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if ($('editor-modal')) { openEditor('score'); } else { $('score-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     }
     if (act === 'save') {
       var saveTake = takeById(id);
@@ -6366,8 +6395,12 @@ function wire() {
       $('seed-fixed').dispatchEvent(new Event('change', { bubbles: true }));
       saveForm();
       statusLine('Loaded settings and seed ' + previous.seed + ' (fixed) from ' + (previous.title || 'take') + '.', 'good');
-      var createButton = $({ song: 'create-song', instrumental: 'create-inst' }[previous.kind] || 'create-cover');
-      if (createButton) { createButton.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      if ($('editor-modal')) {
+        openEditor('sound');
+      } else {
+        var createButton = $({ song: 'create-song', instrumental: 'create-inst' }[previous.kind] || 'create-cover');
+        if (createButton) { createButton.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      }
     }
   }
 
@@ -6613,6 +6646,7 @@ function wire() {
     if (event.key === 'Escape' && !$('settings-modal').classList.contains('hidden')) { closeSettings(); return; }
     if (event.key === 'Escape' && $('logs-panel') && !$('logs-panel').classList.contains('hidden')) { closeLogsModal(); return; }
     if (event.key === 'Escape' && !$('score-modal').classList.contains('hidden')) { closeScoreEditor(); return; }
+    if (event.key === 'Escape' && typeof editorOpen === 'function' && editorOpen()) { closeEditor(); return; }
 
     // Undo and redo of the score, from either box.
     var focus = document.activeElement;
@@ -6680,3 +6714,346 @@ every(3000, function () {
 document.addEventListener('visibilitychange', function () {
   if (!document.hidden) { pollState(); loadTakes(); }
 });
+
+/* ============================================================ the take sheet
+   The left panel shows the take the form describes, read-only: how it was made, in
+   short. Making and changing takes happens in the editor window below. */
+
+function sheetTake() {
+  return takeById(selectedTakeId()) || takeById(awaitingPlanId()) || null;
+}
+
+function sheetAgo(when) {
+  var gone = Date.now() / 1000 - when;
+  if (gone < 3600) { return Math.max(1, Math.round(gone / 60)) + ' min ago'; }
+  if (gone < 86400) { return Math.round(gone / 3600) + ' h ago'; }
+  return Math.round(gone / 86400) + ' d ago';
+}
+
+/* The score's key facts and each section's chords, in the order they come. */
+function sheetScore(abc) {
+  var pick = function (key) { var m = abc.match(new RegExp('^' + key + ':\\s*(.*)$', 'm')); return m ? m[1].trim() : ''; };
+  var tempo = (pick('Q').match(/=(\d+)/) || [])[1] || '';
+  var sections = [], current = null, voice = null, bars = 0;
+  abc.split('\n').forEach(function (raw) {
+    var line = raw.trim();
+    if (line.charAt(0) === '%') { current = { name: line.replace(/^%\s*/, '') || 'section', chords: [] }; sections.push(current); return; }
+    if (line.indexOf('V:') === 0) { voice = line.slice(2).trim().split(/\s+/)[0]; return; }
+    if (!line || voice !== 'Vocal' || /^[XTMLQK]:/.test(line)) { return; }
+    if (!current) { current = { name: 'song', chords: [] }; sections.push(current); }
+    line.split('|').forEach(function (bar) {
+      if (!bar.trim()) { return; }
+      bars += 1;
+      (bar.match(/"([A-G][#b]?[^"\s]*)"/g) || []).forEach(function (chord) {
+        chord = chord.replace(/"/g, '');
+        if (current.chords[current.chords.length - 1] !== chord) { current.chords.push(chord); }
+      });
+    });
+  });
+  return { key: pick('K'), tempo: tempo, bars: bars, sections: sections.filter(function (s) { return s.chords.length; }) };
+}
+
+function sheetHTML(take) {
+  if (!take) {
+    return '<p class="sub">Choose a take to see how it was made, or start something new above.</p>';
+  }
+  var kind = take.kind || 'cover';
+  var busy = take.status === 'queued' || take.status === 'running';
+  var hasScore = Boolean(take.abc && take.abc.length > 50);
+  var html = '<div class="kind kind-' + kind + '">' + (SHEET_KIND[kind] || kind) + '</div>' +
+    '<h2>' + esc(take.title) + '</h2>' +
+    '<div class="meta">' + [take.duration ? secs(take.duration) : '', take.created_at ? sheetAgo(take.created_at) : '']
+      .filter(Boolean).join(' · ') + '</div>';
+  if (busy) {
+    html += '<div class="note">' + (take.status === 'running' ? 'Being made now.' : 'Waiting in the queue.') + '</div>';
+  } else if (take.status === 'failed') {
+    html += '<div class="note bad">It did not finish' + (take.error ? ': ' + esc(take.error) : '.') + '</div>';
+  }
+  var main = busy ? 'Open' : (take.status === 'planned' || (hasScore && !take.has_audio) ? 'Review the plan and render' : 'Edit and render again');
+  html += '<div class="acts"><button type="button" class="primary tone-' + kind + '" data-sheet="' +
+    (take.status === 'planned' ? 'score' : 'edit') + '">' + main + '</button>' +
+    (take.has_audio ? '<button type="button" class="ghost" data-sheet="play">' + (State.playing === take.id ? 'Pause' : 'Play') + '</button>' : '') +
+    '</div>';
+
+  if (kind === 'cover') {
+    var source = take.source_id ? sourceById(take.source_id) : null;
+    html += '<div class="sheet-blk"><h3>Recording</h3><div class="sheet-facts">' +
+      (source ? esc(source.title || source.filename || 'a recording') : '<span class="muted">not in this library any more</span>') + '</div></div>';
+  }
+  var tags = (take.style || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  if (tags.length) {
+    html += '<div class="sheet-blk"><h3>Style</h3><div class="sheet-tags">' +
+      tags.map(function (tag) { return '<span class="sheet-tag">' + esc(tag) + '</span>'; }).join('') + '</div></div>';
+  }
+
+  var sound = [];
+  if (kind !== 'cover') {
+    sound.push(['Harmony', HARMONY_WORDS[take.harmony || 0] || 'Familiar']);
+    sound.push(['Plan variety', take.variety || 'normal']);
+  }
+  sound.push(['Interpretation', (INTERPRETATIONS[take.interpretation] || INTERPRETATIONS.standard).name]);
+  if (take.style_lora) {
+    sound.push(['Style LoRA', esc(take.style_lora.replace(/\.safetensors$/, '')) + ' <span class="muted">(planner ' +
+      Number(take.style_lora_clip || 0).toFixed(2) + ', sound ' + Number(take.style_lora_model || 0).toFixed(2) + ')</span>']);
+  }
+  sound.push(['Production polish', take.realaudio ? 'on' : 'off']);
+  if (take.normalised) {
+    var level = take.normalised_to == null ? -14 : take.normalised_to;
+    sound.push(['Normalised', (level < 0 ? '−' : '') + Math.abs(level) + ' LUFS']);
+  }
+  if (take.seed != null) { sound.push(['Seed', take.seed]); }
+  html += '<div class="sheet-blk"><h3>Sound</h3><dl class="sheet-pairs">' +
+    sound.map(function (pair) { return '<dt>' + pair[0] + '</dt><dd>' + pair[1] + '</dd>'; }).join('') + '</dl></div>';
+
+  var lines = (take.lyrics || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  var isTag = function (line) { return /^\[.*\]$/.test(line); };
+  if (kind === 'instrumental') {
+    var parts = lines.filter(isTag).map(function (l) { return l.slice(1, -1); });
+    html += '<div class="sheet-blk"><h3>Structure</h3><div class="sheet-tags">' + (parts.length
+      ? parts.map(function (p) { return '<span class="sheet-tag">' + esc(p) + '</span>'; }).join('')
+      : '<span class="muted">YuE2 decides</span>') + '</div></div>';
+  } else if (lines.length) {
+    var shown = [], sung = 0;
+    for (var i = 0; i < lines.length && sung < 5; i++) {
+      if (isTag(lines[i])) { shown.push('<div class="sec">' + esc(lines[i].slice(1, -1)) + '</div>'); }
+      else { shown.push('<div>' + esc(lines[i]) + '</div>'); sung += 1; }
+    }
+    var rest = lines.filter(function (l) { return !isTag(l); }).length - sung;
+    html += '<div class="sheet-blk"><h3>Words <button type="button" class="link" data-sheet="words">Open</button></h3>' +
+      '<div class="sheet-words">' + shown.join('') + (rest > 0 ? '<div class="more">and ' + rest + ' more lines</div>' : '') + '</div></div>';
+  }
+
+  if (hasScore) {
+    var facts = sheetScore(take.abc);
+    html += '<div class="sheet-blk"><h3>Score <button type="button" class="link" data-sheet="score">Open</button></h3>' +
+      '<div class="sheet-facts">' + [facts.key && ('Key ' + esc(facts.key)), facts.tempo && (facts.tempo + ' BPM'),
+        facts.bars && (facts.bars + ' bars')].filter(Boolean).join(' · ') + '</div>' +
+      '<div class="sheet-chart">' + facts.sections.slice(0, 10).map(function (s) {
+        return '<span class="s">' + esc(s.name) + '</span><span class="c">' + esc(s.chords.slice(0, 8).join(' ')) +
+          (s.chords.length > 8 ? ' …' : '') + '</span>';
+      }).join('') + (facts.sections.length > 10 ? '<span class="s">…</span><span></span>' : '') + '</div></div>';
+  } else {
+    html += '<div class="sheet-blk"><h3>Score</h3><div class="muted small">' + (busy && kind !== 'cover'
+      ? 'The plan is being written.' : 'No score yet.') + '</div></div>';
+  }
+  return html;
+}
+
+function paintSheet() {
+  var host = $('take-sheet');
+  if (!host) { return; }
+  var take = sheetTake();
+  // The new button of the take's own kind stays bright; the other two step back.
+  var current = take ? ({ song: 'song', cover: 'cover', instrumental: 'inst' }[take.kind] || '') : '';
+  var row = document.querySelector('.sheet-new');
+  if (row) {
+    row.classList.toggle('has-current', Boolean(current));
+    Array.prototype.forEach.call(row.querySelectorAll('[data-new]'), function (button) {
+      button.classList.toggle('current', button.dataset.new === current);
+    });
+  }
+  var html = sheetHTML(take);
+  if (host.dataset.html !== html) {
+    host.innerHTML = html;
+    host.dataset.html = html;
+  }
+}
+
+/* ========================================================== the editor window
+   Every control for making or changing a take, in one window: three columns with the
+   score on a tab of its own, or steps, as Settings chooses. The controls are the ones
+   the left panel used to hold, so everything they do works as it did. */
+
+function editorLayout() { return setting('editor.layout', 'columns') === 'steps' ? 'steps' : 'columns'; }
+function editorOpen() { return Boolean($('editor-modal')) && !$('editor-modal').classList.contains('hidden'); }
+
+function openEditor(where) {
+  if (!$('editor-modal')) { return; }
+  Editor.page = where === 'score' ? 'score' : 'song';
+  Editor.step = { words: 1, sound: 2, score: 3 }[where] || 0;
+  $('editor-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  paintEditor();
+  if (where === 'words' && $('lyrics') && $('lyrics').offsetParent) { $('lyrics').focus(); }
+}
+
+function closeEditor() {
+  if (!editorOpen()) { return; }
+  $('editor-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+  paintSheet();
+}
+
+function paintEditor() {
+  var ed = $('editor');
+  if (!ed) { return; }
+  var steps = editorLayout() === 'steps';
+  ed.classList.toggle('layout-steps', steps);
+  ed.classList.toggle('layout-columns', !steps);
+  var page = steps ? (Editor.step === 3 ? 'score' : (Editor.step === 4 ? 'review' : 'song')) : Editor.page;
+  Array.prototype.forEach.call(ed.querySelectorAll('[data-edpage]'), function (el) {
+    el.classList.toggle('hidden', el.dataset.edpage !== page);
+  });
+  Array.prototype.forEach.call(ed.querySelectorAll('.ed-col'), function (el) {
+    el.classList.toggle('on', Number(el.dataset.edstep) === Editor.step);
+  });
+  Array.prototype.forEach.call(ed.querySelectorAll('#ed-tabs [data-edtab]'), function (b) {
+    b.classList.toggle('on', b.dataset.edtab === Editor.page);
+  });
+  Array.prototype.forEach.call(ed.querySelectorAll('#ed-steps [data-edstep]'), function (b) {
+    b.classList.toggle('on', Number(b.dataset.edstep) === Editor.step);
+  });
+  var names = [State.mode === 'cover' ? 'Recording and style' : 'Idea', State.mode === 'inst' ? 'Structure' : 'Words', 'Sound', 'Score', 'Make it'];
+  Array.prototype.forEach.call(ed.querySelectorAll('#ed-steps .ed-step-name'), function (el, i) { el.textContent = names[i]; });
+  if ($('ed-words-head')) { $('ed-words-head').textContent = State.mode === 'inst' ? 'The structure' : 'The words'; }
+  if ($('ed-bar')) { $('ed-bar').className = 'ed-bar ' + ({ song: 'song', inst: 'inst' }[State.mode] || 'cover'); }
+  $('ed-prev').disabled = Editor.step === 0;
+  $('ed-next').disabled = Editor.step === 4;
+  if (page === 'score') { $('score-box').open = true; }
+  if (page === 'review') { paintEditorReview(); }
+}
+
+/* Steps: what will be sent, and anything that stops it. */
+function paintEditorReview() {
+  var mode = State.mode;
+  var problem = mode === 'cover' ? coverProblem() : (mode === 'inst' ? instProblem() : songProblem());
+  var lines = ($('lyrics').value || '').split('\n').filter(function (l) { return l.trim() && !/^\s*\[.*\]\s*$/.test(l); });
+  var lora = $('style-lora') ? $('style-lora').value : '';
+  var rows = [['Making', { cover: 'a cover of a recording', song: 'a song from a prompt', inst: 'an instrumental' }[mode]],
+              ['Title', esc($('title').value) || '<span class="muted">from the first lyric line</span>']];
+  if (mode === 'cover') {
+    var source = sourceById($('source-select').value);
+    rows.push(['Recording', source ? esc(source.title || source.filename) : '<span class="bad">none chosen</span>']);
+  }
+  rows.push(['Style', esc($('style').value) || '<span class="muted">none</span>']);
+  rows.push(mode === 'inst' ? ['Structure', esc(($('structure-preview') || {}).textContent || '')] : ['Words', lines.length + ' lines']);
+  if (mode !== 'cover') {
+    rows.push(['Harmony', esc($('harmony-word').textContent)]);
+    rows.push(['Plan variety', esc($('variety').value)]);
+  }
+  rows.push(['Interpretation', (INTERPRETATIONS[$('interpretation').value] || INTERPRETATIONS.standard).name]);
+  rows.push(['Style LoRA', lora ? esc(lora.replace(/\.safetensors$/, '')) + ' <span class="muted">(planner ' +
+    Number($('style-lora-clip').value).toFixed(2) + ', sound ' + Number($('style-lora-model').value).toFixed(2) + ')</span>' : 'none']);
+  rows.push(['Length cap', esc($('max-duration').value) + ' s']);
+  rows.push(['Seed', $('seed-fixed').checked ? esc($('seed').value) : 'a new one']);
+  rows.push(['Production polish', $('realaudio').checked ? 'on' : 'off']);
+  rows.push(['Score', $('abc').value.trim().length > 50 ? 'ready, as it stands on the Score step'
+    : (mode === 'cover' ? 'from the recording' : 'written first, then sung')]);
+  if (problem) { rows.push(['Before it can be made', '<span class="bad">' + esc(problem) + '</span>']); }
+  $('ed-review').innerHTML = rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>'; }).join('');
+}
+
+/* After the main button: a render is queued, so the window closes and the card shows
+   its progress. A plan arrives on the Score page to read, unless it renders by itself. */
+function editorAfterPlan() {
+  if ($('auto-render') && $('auto-render').checked) { closeEditor(); return; }
+  Editor.page = 'score';
+  Editor.step = 3;
+  paintEditor();
+}
+
+function newTake(kind) {
+  setMode(kind);
+  startFresh();
+  openEditor('song');
+}
+
+function wireEditor() {
+  if (!$('editor-modal') || !$('sheet-panel')) { return; }   // a page from before the editor window
+  $('sheet-panel').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-new],[data-sheet]');
+    if (!button) { return; }
+    if (button.dataset.new) { newTake(button.dataset.new); return; }
+    var take = sheetTake();
+    var act = button.dataset.sheet;
+    if (act === 'play' && take) { togglePlay(take.id); setTimeout(paintSheet, 300); return; }
+    openEditor(act === 'edit' ? 'song' : act);
+  });
+  $('editor-close').addEventListener('click', closeEditor);
+  $('editor-cancel').addEventListener('click', closeEditor);
+  $('editor-modal').addEventListener('click', function (event) {
+    if (backdropClick(event, $('editor-modal'))) { closeEditor(); }
+  });
+  $('ed-tabs').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-edtab]');
+    if (!button) { return; }
+    Editor.page = button.dataset.edtab;
+    paintEditor();
+  });
+  $('ed-steps').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-edstep]');
+    if (!button) { return; }
+    Editor.step = Number(button.dataset.edstep);
+    paintEditor();
+  });
+  $('ed-prev').addEventListener('click', function () { Editor.step = Math.max(0, Editor.step - 1); paintEditor(); });
+  $('ed-next').addEventListener('click', function () { Editor.step = Math.min(4, Editor.step + 1); paintEditor(); });
+  // The mode buttons change what the window shows: its colour, its headings, its steps.
+  Array.prototype.forEach.call(document.querySelectorAll('.modes .mode'), function (button) {
+    button.addEventListener('click', function () { setTimeout(paintEditor, 0); });
+  });
+  // The score box belongs open in its own page.
+  $('score-box').addEventListener('toggle', function () {
+    if (editorOpen() && !$('score-box').open) { $('score-box').open = true; }
+  });
+  wireSheetToggle();
+  paintSheet();
+}
+
+
+/* Fold the take panel away, or bring it back. Clicking takes still updates it, so
+   it is current when it opens. Remembered in this browser, like the layout. */
+function setSheetCollapsed(collapsed, animate) {
+  var main = document.querySelector('main');
+  var toggle = $('sheet-toggle');
+  if (!main || !toggle) { return; }
+  setSheetCollapsed.wanted = collapsed;   // what was asked for, which a fade may not have reached yet
+  toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  toggle.title = collapsed ? 'Show the take panel' : 'Hide the take panel';
+  try { localStorage.setItem(SHEET_KEY, collapsed ? 'collapsed' : 'open'); } catch (err) { /* private mode */ }
+  var still = !animate || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  clearTimeout(setSheetCollapsed.timer);
+  if (still) {
+    main.classList.remove('sheet-fading', 'sheet-settle');
+    main.classList.toggle('sheet-collapsed', collapsed);
+    return;
+  }
+  // The takes come back up from a dip once the columns have changed.
+  var settle = function () {
+    main.classList.add('sheet-settle');
+    void main.offsetWidth;   // lay out once at the dip, so the rise animates
+    // A timer rather than an animation frame, which a tab in the background would hold back.
+    setSheetCollapsed.timer = setTimeout(function () {
+      main.classList.remove('sheet-settle');
+      if (!collapsed) { main.classList.remove('sheet-fading'); }   // and the panel slides in
+    }, 30);
+  };
+  if (collapsed) {
+    // Slide the panel out, then give its column away.
+    main.classList.add('sheet-fading');
+    setSheetCollapsed.timer = setTimeout(function () {
+      // One step, with nothing animating across it: settle first, then the change.
+      main.classList.add('sheet-settle');
+      main.classList.add('sheet-collapsed');
+      main.classList.remove('sheet-fading');
+      settle();
+    }, 220);
+  } else {
+    // The column comes back with the panel still out of view, then it slides in.
+    main.classList.add('sheet-settle');
+    main.classList.add('sheet-fading');
+    main.classList.remove('sheet-collapsed');
+    settle();
+  }
+}
+
+function wireSheetToggle() {
+  var toggle = $('sheet-toggle');
+  if (!toggle) { return; }   // a page from before the fold
+  var saved = null;
+  try { saved = localStorage.getItem(SHEET_KEY); } catch (err) { saved = null; }
+  setSheetCollapsed(saved === 'collapsed');
+  toggle.addEventListener('click', function () {
+    setSheetCollapsed(!setSheetCollapsed.wanted, true);
+  });
+}

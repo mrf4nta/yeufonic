@@ -47,251 +47,21 @@
 </header>
 
 <main>
-  <section class="panel create">
-    <div class="create-head">
-      <h1 id="headline">Cover a song</h1>
-      <button id="start-fresh" class="ghost" title="Clear the title, lyrics and score, and keep your settings">New cover</button>
+  <!-- The selected take, read-only. Making and changing takes happens in the editor
+       window, which opens from here. -->
+  <section class="panel sheet-panel" id="sheet-panel">
+    <div class="sheet-new">
+      <button type="button" class="sheet-new-btn type-song" data-new="song" title="Write a new song from a prompt">+ Song</button>
+      <button type="button" class="sheet-new-btn type-cover" data-new="cover" title="Cover a recording">+ Cover</button>
+      <button type="button" class="sheet-new-btn type-inst" data-new="inst" title="Write a new instrumental">+ Instrumental</button>
     </div>
-    <p class="sub" id="sub">Your own recording in. A new arrangement, new vocals, and an editable score out.</p>
-
-    <div class="modes">
-      <button class="mode active" data-mode="cover" title="Cover a recording"><span class="dot"></span>Cover</button>
-      <button class="mode" data-mode="song" title="Song from a prompt"><span class="dot"></span>Song</button>
-      <button class="mode" data-mode="inst" title="Instrumental from a prompt"><span class="dot"></span>Instrumental</button>
-    </div>
-
-    <div id="draft-bar" class="draft hidden" role="status">
-      <span id="draft-text">Your unsaved words were kept.</span>
-      <button id="draft-restore" class="chip action compact">Restore</button>
-      <button id="draft-dismiss" class="chip action compact">Dismiss</button>
-    </div>
-
-    <div class="field">
-      <label>Song title</label>
-      <input id="title" type="text" placeholder="Leave blank and the first lyric line is used">
-    </div>
-
-    <div class="field" id="cover-only">
-      <label>Source recording</label>
-      <div id="drop" class="drop">
-        <input id="file" type="file" accept="audio/*" hidden>
-        <div class="drop-inner">
-          <strong>Drop an audio file</strong>
-          <span>or <button id="browse" class="link">browse</button> &middot; mp3, wav, flac, m4a</span>
-        </div>
-      </div>
-      <div class="source-row">
-        <div class="source-picker" id="source-picker">
-          <select id="source-select" class="hidden"></select>
-          <button type="button" class="source-picker-btn" id="source-picker-btn" aria-haspopup="listbox" aria-expanded="false" title="Choose a recording">
-            <span id="source-picker-label" class="source-picker-label">Choose a recording…</span>
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-          </button>
-          <div id="source-picker-menu" class="source-picker-menu hidden" role="listbox"></div>
-        </div>
-        <button id="transcribe" class="ghost">Transcribe</button>
-        <button id="source-lyrics" class="ghost" title="Write down the words this recording sings">Extract lyrics</button>
-        <button id="audition" class="ghost" title="Play this recording through the player">Audition</button>
-        <button id="source-delete" class="ghost" title="Delete this recording">Delete</button>
-      </div>
-      <div id="lyrics-hear-job" class="hear-job hidden">
-        <div class="bar"><div id="lyrics-hear-bar"></div></div>
-        <div class="hear-job-line"><span id="lyrics-hear-stage" class="muted">Waiting</span><button id="lyrics-hear-stop" class="chip action compact">stop</button></div>
-      </div>
-      <div id="source-status" class="status"></div>
-      <div id="source-tempo" class="status"></div>
-    </div>
-
-    <details id="score-box" class="block">
-      <summary>
-        <span id="score-label">Score</span> <span id="score-badge" class="badge">no score</span>
-        <button id="score-expand" class="chip action compact" title="Open a full size editor">Expand</button>
-      </summary>
-      <p class="hint">Chords live in the quoted symbols. Change them and the next render follows your harmony.</p>
-      <textarea id="abc" spellcheck="false" placeholder="Transcribe a recording, or write a score plan, to fill this in."></textarea>
-      <div class="row">
-        <button id="save-score" class="ghost">Save score</button>
-        <button id="chord-chart" class="ghost">Chord chart</button>
-      </div>
-      <div class="row" id="score-tools" style="margin-top:8px">
-        <input id="find-chord" type="text" placeholder="find, e.g. D#m" style="max-width:140px">
-        <input id="replace-chord" type="text" placeholder="replace with D#" style="max-width:140px">
-        <button id="do-replace" class="ghost">Replace all</button>
-      </div>
-      <div class="row" id="plan-actions" style="margin-top:8px">
-        <button id="render-take" class="ghost">Render this score</button>
-        <button id="reroll" class="ghost">Write a new plan</button>
-      </div>
-      <div id="score-note" class="hint"></div>
-      <div id="plan-length" class="hint"></div>
-      <pre id="chart" class="chart"></pre>
-    </details>
-
-    <div class="field">
-      <label>Style</label>
-      <textarea id="style" class="style-box" rows="1" autocomplete="off" title="Drag the corner to show more of the style"></textarea>
-      <div id="lora-presets-wrap" class="hidden" style="margin-top: 8px;">
-        <div id="lora-presets-label" class="muted small" style="margin-bottom: 4px;"></div>
-        <div id="lora-presets" class="chips" style="margin-top: 0;"></div>
-      </div>
-      <div id="presets" class="chips"></div>
-    </div>
-
-    <div class="field" id="vocal-field">
-      <div class="label-row">
-        <label>Vocal</label>
-      </div>
-      <div id="vocal-sex" class="chips"></div>
-      <div id="vocal-tone" class="chips"></div>
-    </div>
-
-    <div class="field" id="harmony-field">
-      <div class="label-row">
-        <label for="harmony">Harmony</label>
-        <span id="harmony-word" class="harmony-word">Familiar</span>
-      </div>
-      <input id="harmony" type="range" min="0" max="4" step="1" value="0" list="harmony-ticks" aria-describedby="harmony-hint">
-      <datalist id="harmony-ticks"><option value="0"></option><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option></datalist>
-      <div id="harmony-hint" class="hint"></div>
-    </div>
-
-    <div class="field">
-      <label>Length cap <span class="muted">(the song stops here at the latest)</span></label>
-      <input id="max-duration" type="number" value="360" step="10" min="10" max="900">
-    </div>
-
-    <div class="field" id="structure-field" style="display:none">
-      <div class="label-row">
-        <label>Structure</label>
-        <span id="structure-total" class="muted structure-total"></span>
-      </div>
-      <div class="seg" id="structure-kind" role="tablist">
-        <button data-kind="free" class="active">Let YuE2 decide</button>
-        <button data-kind="sections">Sections</button>
-        <button data-kind="timed">Timed sections</button>
-      </div>
-      <div id="structure-body"></div>
-      <div class="structure-sent"><span class="muted">Sent to YuE2:</span> <code id="structure-preview"></code></div>
-    </div>
-
-    <div class="field" id="lyrics-field">
-      <div class="label-row">
-        <label for="lyrics">Lyrics</label>
-        <span class="label-actions">
-          <button id="lyrics-write" class="chip action compact" title="Draft lyrics from a short description">Write lyrics</button>
-          <button id="lyrics-expand" class="chip action compact" title="Open a full size editor">Expand</button>
-        </span>
-      </div>
-      <textarea id="lyrics" class="lyrics" spellcheck="false" placeholder="[Verse]&#10;First line&#10;Second line&#10;&#10;[Chorus]&#10;..."></textarea>
-    </div>
-
-    <details class="block">
-      <summary>Advanced</summary>
-      <div class="grid2">
-        <div class="field" id="mode-field">
-          <label>Mode</label>
-          <select id="mode">
-            <option value="full">full &mdash; keep the chords</option>
-            <option value="melody">melody &mdash; free accompaniment</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Seed</label>
-          <div class="row tight">
-            <input id="seed" type="number" value="0">
-            <button id="dice" class="ghost icon" title="Random seed">&#127922;</button>
-          </div>
-          <label class="check"><input id="seed-fixed" type="checkbox" checked> keep this seed</label>
-        </div>
-        <div class="field">
-          <label for="interpretation">Interpretation</label>
-          <select id="interpretation">
-            <option value="standard" selected>Standard</option>
-            <option value="tight">Tight</option>
-            <option value="loose">Loose</option>
-            <option value="settled">Settled</option>
-            <option value="restless">Restless</option>
-            <option value="wide">Wide</option>
-          </select>
-          <div id="interpretation-hint" class="hint"></div>
-        </div>
-        <div class="field" id="variety-field">
-          <label>Plan variety</label>
-          <select id="variety">
-            <option value="calm">calm &mdash; the steadiest</option>
-            <option value="normal" selected>normal</option>
-            <option value="lively">lively &mdash; a few more chords and turns</option>
-            <option value="bold">bold &mdash; richer harmony, the same kind of tune</option>
-            <option value="quirky">quirky &mdash; restless chords and leaps in register</option>
-            <option value="wild">wild &mdash; the most restless; may change key</option>
-          </select>
-        </div>
-      </div>
-    </details>
-
-    <div class="field" id="realaudio-field" style="margin-top:10px">
-      <label class="check" title="Applies Mothersuperior v9 real-audio decoder LoRA to clean up frequency clashing, boost punch, and make vocals and instruments sound studio-separated.">
-        <input id="realaudio" type="checkbox" checked title="Applies Mothersuperior v9 real-audio decoder LoRA to clean up frequency clashing, boost punch, and make vocals and instruments sound studio-separated.">
-        <span>Production polish <span class="muted">(Realaudio)</span></span>
-        <span class="info-tip" title="Why use Production polish? Stock YuE2 renders often have a boxy mid-range haze with muffled instruments. Enabling this applies Mothersuperior's decoder LoRA so drums, bass, guitars, and lead vocals sit in their own clean frequency pockets with studio clarity.">&#9432;</span>
-      </label>
-      <div class="hint">Applies Mothersuperior v9 real-audio decoder LoRA for studio clarity and balanced frequency spectrum.</div>
-    </div>
-
-    <div class="field" id="normalise-field" style="margin-top:10px">
-      <label class="check" title="Brings each finished take to the usual loudness. The file as rendered is kept beside it.">
-        <input id="normalise" type="checkbox">
-        <span>Normalise volume</span>
-      </label>
-    </div>
-
-    <div class="field hidden" id="style-lora-field" style="margin-top:10px">
-      <label for="style-lora">Style LoRA</label>
-      <select id="style-lora"><option value="">None</option></select>
-      <!-- Folding groups over the select above, which stays the source of truth. Shown only
-           once it has drawn; if it fails, the select stays in view and works as before. -->
-      <div class="source-picker lora-picker hidden" id="lora-picker">
-        <button type="button" class="source-picker-btn" id="lora-picker-btn" aria-haspopup="listbox" aria-expanded="false">
-          <span id="lora-picker-label" class="source-picker-label">None</span>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div id="lora-picker-menu" class="source-picker-menu lora-picker-menu hidden" role="listbox"></div>
-      </div>
-      <div class="grid2 hidden" id="style-lora-strengths">
-        <div class="field">
-          <label for="style-lora-clip">Planner
-            <input id="style-lora-clip-value" class="lora-value" type="number" min="0" max="3" step="0.01"
-                   inputmode="decimal" title="Type an exact strength">
-          </label>
-          <input id="style-lora-clip" type="range" min="0" max="3" step="0.01" value="1">
-        </div>
-        <div class="field">
-          <label for="style-lora-model">Sound
-            <input id="style-lora-model-value" class="lora-value" type="number" min="0" max="3" step="0.01"
-                   inputmode="decimal" title="Type an exact strength">
-          </label>
-          <input id="style-lora-model" type="range" min="0" max="3" step="0.01" value="1">
-        </div>
-      </div>
-      <div class="hint" id="style-lora-hint">Planner shapes what is played, Sound how it sounds.</div>
-      <div class="row lora-share">
-        <button id="lora-reload" type="button" class="chip action" title="Read models/loras again, so a LoRA file added by hand shows in the list">Rescan</button>
-        <a id="lora-download" class="chip action hidden" href="#" title="This LoRA and its note, learned styles included, in one zip to give to someone else">Download</a>
-        <button id="lora-install" type="button" class="chip action" title="Add a LoRA someone shared: the zip from their Download, or a .safetensors file">Install</button>
-        <button id="lora-strengths" type="button" class="chip action hidden" title="Remember the current Planner and Sound for this LoRA: it starts at them whenever you choose it. Kept in its note, so they travel when you share it">Save strengths</button>
-        <button id="lora-delete" type="button" class="chip action hidden" title="Remove this LoRA, its note and its group line from models/loras">Delete LoRA</button>
-        <button id="lora-steps" type="button" class="chip action hidden">Checkpoints</button>
-        <input id="lora-install-file" type="file" accept=".zip,.safetensors" class="hidden">
-        <span id="lora-install-status" class="status"></span>
-      </div>
-    </div>
-
-    <label class="check" id="auto-wrap"><input id="auto-render" type="checkbox"> render as soon as the plan is ready</label>
-    <button id="create-cover" class="primary">Create cover</button>
-    <button id="create-song" class="primary" style="display:none">Write score plan</button>
-    <button id="create-inst" class="primary" style="display:none">Write score plan</button>
-    <div id="render-status" class="status"></div>
+    <div id="sheet-status" class="status"></div>
+    <div id="take-sheet" class="take-sheet"><p class="sub">Choose a take to see how it was made, or start something new.</p></div>
   </section>
+  <!-- Folds the take panel away, so the takes have the width. -->
+  <button type="button" id="sheet-toggle" class="sheet-toggle" aria-controls="sheet-panel" aria-expanded="true" title="Hide the take panel">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
 
   <section class="library">
     <div id="job-card" class="job hidden">
@@ -329,6 +99,297 @@
     <div id="empty" class="empty">Nothing yet. Load a recording, write some lyrics, and press create.</div>
   </section>
 </main>
+
+<!-- The editor window: every control for making or changing a take. Three columns with
+     the score on a tab of its own, or steps, as Settings chooses. -->
+<div id="editor-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Editor">
+  <div class="modal-box editor" id="editor">
+    <div class="ed-head">
+      <span class="ed-bar" id="ed-bar"></span>
+      <div class="create-head">
+        <h1 id="headline">Cover a song</h1>
+        <button id="start-fresh" class="ghost" title="Clear the title, lyrics and score, and keep your settings">New cover</button>
+      </div>
+      <p class="sub" id="sub">Your own recording in. A new arrangement, new vocals, and an editable score out.</p>
+
+      <div class="modes">
+        <button class="mode active" data-mode="cover" title="Cover a recording"><span class="dot"></span>Cover</button>
+        <button class="mode" data-mode="song" title="Song from a prompt"><span class="dot"></span>Song</button>
+        <button class="mode" data-mode="inst" title="Instrumental from a prompt"><span class="dot"></span>Instrumental</button>
+      </div>
+
+      <div class="ed-tabs" id="ed-tabs">
+        <button type="button" data-edtab="song" class="on" id="ed-tab-song">Song</button>
+        <button type="button" data-edtab="score" id="ed-tab-score">Score</button>
+      </div>
+      <button type="button" class="ed-x" id="editor-close" title="Close (Esc). What you typed is kept.">&times;</button>
+    </div>
+    <div class="ed-main">
+      <nav class="ed-steps" id="ed-steps" aria-label="Steps">
+        <button type="button" data-edstep="0"><span class="n">1</span><span class="ed-step-name">Idea</span></button>
+        <button type="button" data-edstep="1"><span class="n">2</span><span class="ed-step-name">Words</span></button>
+        <button type="button" data-edstep="2"><span class="n">3</span><span class="ed-step-name">Sound</span></button>
+        <button type="button" data-edstep="3"><span class="n">4</span><span class="ed-step-name">Score</span></button>
+        <button type="button" data-edstep="4"><span class="n">5</span><span class="ed-step-name">Make it</span></button>
+        <p class="hint">Visit the steps in any order. <b>Make it</b> shows what will be sent.</p>
+      </nav>
+      <div class="ed-body" id="ed-body">
+        <div id="draft-bar" class="draft hidden" role="status">
+          <span id="draft-text">Your unsaved words were kept.</span>
+          <button id="draft-restore" class="chip action compact">Restore</button>
+          <button id="draft-dismiss" class="chip action compact">Dismiss</button>
+        </div>
+
+        <div class="ed-page ed-cols" data-edpage="song">
+          <div class="ed-col" data-edstep="0">
+            <h4>The song</h4>
+            <div class="field">
+              <label>Song title</label>
+              <input id="title" type="text" placeholder="Leave blank and the first lyric line is used">
+            </div>
+
+            <div class="field" id="cover-only">
+              <label>Source recording</label>
+              <div id="drop" class="drop">
+                <input id="file" type="file" accept="audio/*" hidden>
+                <div class="drop-inner">
+                  <strong>Drop an audio file</strong>
+                  <span>or <button id="browse" class="link">browse</button> &middot; mp3, wav, flac, m4a</span>
+                </div>
+              </div>
+              <div class="source-row">
+                <div class="source-picker" id="source-picker">
+                  <select id="source-select" class="hidden"></select>
+                  <button type="button" class="source-picker-btn" id="source-picker-btn" aria-haspopup="listbox" aria-expanded="false" title="Choose a recording">
+                    <span id="source-picker-label" class="source-picker-label">Choose a recording…</span>
+                    <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+                  <div id="source-picker-menu" class="source-picker-menu hidden" role="listbox"></div>
+                </div>
+                <button id="transcribe" class="ghost">Transcribe</button>
+                <button id="source-lyrics" class="ghost" title="Write down the words this recording sings">Extract lyrics</button>
+                <button id="audition" class="ghost" title="Play this recording through the player">Audition</button>
+                <button id="source-delete" class="ghost" title="Delete this recording">Delete</button>
+              </div>
+              <div id="lyrics-hear-job" class="hear-job hidden">
+                <div class="bar"><div id="lyrics-hear-bar"></div></div>
+                <div class="hear-job-line"><span id="lyrics-hear-stage" class="muted">Waiting</span><button id="lyrics-hear-stop" class="chip action compact">stop</button></div>
+              </div>
+              <div id="source-status" class="status"></div>
+              <div id="source-tempo" class="status"></div>
+            </div>
+
+            <div class="field">
+              <label>Style</label>
+              <textarea id="style" class="style-box" rows="1" autocomplete="off" title="Drag the corner to show more of the style"></textarea>
+              <div id="lora-presets-wrap" class="hidden" style="margin-top: 8px;">
+                <div id="lora-presets-label" class="muted small" style="margin-bottom: 4px;"></div>
+                <div id="lora-presets" class="chips" style="margin-top: 0;"></div>
+              </div>
+              <div id="presets" class="chips"></div>
+            </div>
+
+            <div class="field" id="vocal-field">
+              <div class="label-row">
+                <label>Vocal</label>
+              </div>
+              <div id="vocal-sex" class="chips"></div>
+              <div id="vocal-tone" class="chips"></div>
+            </div>
+
+          </div>
+          <div class="ed-col ed-words" data-edstep="1">
+            <h4 id="ed-words-head">The words</h4>
+            <div class="field" id="lyrics-field">
+              <div class="label-row">
+                <label for="lyrics">Lyrics</label>
+                <span class="label-actions">
+                  <button id="lyrics-write" class="chip action compact" title="Draft lyrics from a short description">Write lyrics</button>
+                  <button id="lyrics-expand" class="chip action compact" title="Open a full size editor">Expand</button>
+                </span>
+              </div>
+              <textarea id="lyrics" class="lyrics" spellcheck="false" placeholder="[Verse]&#10;First line&#10;Second line&#10;&#10;[Chorus]&#10;..."></textarea>
+            </div>
+
+            <div class="field" id="structure-field" style="display:none">
+              <div class="label-row">
+                <label>Structure</label>
+                <span id="structure-total" class="muted structure-total"></span>
+              </div>
+              <div class="seg" id="structure-kind" role="tablist">
+                <button data-kind="free" class="active">Let YuE2 decide</button>
+                <button data-kind="sections">Sections</button>
+                <button data-kind="timed">Timed sections</button>
+              </div>
+              <div id="structure-body"></div>
+              <div class="structure-sent"><span class="muted">Sent to YuE2:</span> <code id="structure-preview"></code></div>
+            </div>
+
+          </div>
+          <div class="ed-col" data-edstep="2">
+            <h4>The sound</h4>
+            <div class="field" id="harmony-field">
+              <div class="label-row">
+                <label for="harmony">Harmony</label>
+                <span id="harmony-word" class="harmony-word">Familiar</span>
+              </div>
+              <input id="harmony" type="range" min="0" max="4" step="1" value="0" list="harmony-ticks" aria-describedby="harmony-hint">
+              <datalist id="harmony-ticks"><option value="0"></option><option value="1"></option><option value="2"></option><option value="3"></option><option value="4"></option></datalist>
+              <div id="harmony-hint" class="hint"></div>
+            </div>
+
+            <div class="field">
+              <label>Length cap <span class="muted">(the song stops here at the latest)</span></label>
+              <input id="max-duration" type="number" value="360" step="10" min="10" max="900">
+            </div>
+
+            <details class="block" id="advanced" open>
+              <summary>Advanced</summary>
+              <div class="grid2">
+                <div class="field" id="mode-field">
+                  <label>Mode</label>
+                  <select id="mode">
+                    <option value="full">full &mdash; keep the chords</option>
+                    <option value="melody">melody &mdash; free accompaniment</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Seed</label>
+                  <div class="row tight">
+                    <input id="seed" type="number" value="0">
+                    <button id="dice" class="ghost icon" title="Random seed">&#127922;</button>
+                  </div>
+                  <label class="check"><input id="seed-fixed" type="checkbox" checked> keep this seed</label>
+                </div>
+                <div class="field">
+                  <label for="interpretation">Interpretation</label>
+                  <select id="interpretation">
+                    <option value="standard" selected>Standard</option>
+                    <option value="tight">Tight</option>
+                    <option value="loose">Loose</option>
+                    <option value="settled">Settled</option>
+                    <option value="restless">Restless</option>
+                    <option value="wide">Wide</option>
+                  </select>
+                  <div id="interpretation-hint" class="hint"></div>
+                </div>
+                <div class="field" id="variety-field">
+                  <label>Plan variety</label>
+                  <select id="variety">
+                    <option value="calm">calm &mdash; the steadiest</option>
+                    <option value="normal" selected>normal</option>
+                    <option value="lively">lively &mdash; a few more chords and turns</option>
+                    <option value="bold">bold &mdash; richer harmony, the same kind of tune</option>
+                    <option value="quirky">quirky &mdash; restless chords and leaps in register</option>
+                    <option value="wild">wild &mdash; the most restless; may change key</option>
+                  </select>
+                </div>
+              </div>
+            </details>
+
+            <div class="field" id="realaudio-field" style="margin-top:10px">
+              <label class="check" title="Applies Mothersuperior v9 real-audio decoder LoRA to clean up frequency clashing, boost punch, and make vocals and instruments sound studio-separated.">
+                <input id="realaudio" type="checkbox" checked title="Applies Mothersuperior v9 real-audio decoder LoRA to clean up frequency clashing, boost punch, and make vocals and instruments sound studio-separated.">
+                <span>Production polish <span class="muted">(Realaudio)</span></span>
+                <span class="info-tip" title="Why use Production polish? Stock YuE2 renders often have a boxy mid-range haze with muffled instruments. Enabling this applies Mothersuperior's decoder LoRA so drums, bass, guitars, and lead vocals sit in their own clean frequency pockets with studio clarity.">&#9432;</span>
+              </label>
+              <div class="hint">Applies Mothersuperior v9 real-audio decoder LoRA for studio clarity and balanced frequency spectrum.</div>
+            </div>
+
+            <div class="field" id="normalise-field" style="margin-top:10px">
+              <label class="check" title="Brings each finished take to the usual loudness. The file as rendered is kept beside it.">
+                <input id="normalise" type="checkbox">
+                <span>Normalise volume</span>
+              </label>
+            </div>
+
+            <div class="field hidden" id="style-lora-field" style="margin-top:10px">
+              <label for="style-lora">Style LoRA</label>
+              <select id="style-lora"><option value="">None</option></select>
+              <!-- Folding groups over the select above, which stays the source of truth. Shown only
+                   once it has drawn; if it fails, the select stays in view and works as before. -->
+              <div class="source-picker lora-picker hidden" id="lora-picker">
+                <button type="button" class="source-picker-btn" id="lora-picker-btn" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="lora-picker-label" class="source-picker-label">None</span>
+                  <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div id="lora-picker-menu" class="source-picker-menu lora-picker-menu hidden" role="listbox"></div>
+              </div>
+              <div class="grid2 hidden" id="style-lora-strengths">
+                <div class="field">
+                  <label for="style-lora-clip">Planner
+                    <input id="style-lora-clip-value" class="lora-value" type="number" min="0" max="3" step="0.01"
+                           inputmode="decimal" title="Type an exact strength">
+                  </label>
+                  <input id="style-lora-clip" type="range" min="0" max="3" step="0.01" value="1">
+                </div>
+                <div class="field">
+                  <label for="style-lora-model">Sound
+                    <input id="style-lora-model-value" class="lora-value" type="number" min="0" max="3" step="0.01"
+                           inputmode="decimal" title="Type an exact strength">
+                  </label>
+                  <input id="style-lora-model" type="range" min="0" max="3" step="0.01" value="1">
+                </div>
+              </div>
+              <div class="hint" id="style-lora-hint">Planner shapes what is played, Sound how it sounds.</div>
+              <div class="row lora-share">
+                <button id="lora-reload" type="button" class="chip action" title="Read models/loras again, so a LoRA file added by hand shows in the list">Rescan</button>
+                <a id="lora-download" class="chip action hidden" href="#" title="This LoRA and its note, learned styles included, in one zip to give to someone else">Download</a>
+                <button id="lora-install" type="button" class="chip action" title="Add a LoRA someone shared: the zip from their Download, or a .safetensors file">Install</button>
+                <button id="lora-strengths" type="button" class="chip action hidden" title="Remember the current Planner and Sound for this LoRA: it starts at them whenever you choose it. Kept in its note, so they travel when you share it">Save strengths</button>
+                <button id="lora-delete" type="button" class="chip action hidden" title="Remove this LoRA, its note and its group line from models/loras">Delete LoRA</button>
+                <button id="lora-steps" type="button" class="chip action hidden">Checkpoints</button>
+                <input id="lora-install-file" type="file" accept=".zip,.safetensors" class="hidden">
+                <span id="lora-install-status" class="status"></span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <div class="ed-page ed-score hidden" data-edpage="score" data-edstep="3">
+        <details id="score-box" class="block">
+          <summary>
+            <span id="score-label">Score</span> <span id="score-badge" class="badge">no score</span>
+            <button id="score-expand" class="chip action compact" title="Open a full size editor">Expand</button>
+          </summary>
+          <p class="hint">Chords live in the quoted symbols. Change them and the next render follows your harmony.</p>
+          <textarea id="abc" spellcheck="false" placeholder="Transcribe a recording, or write a score plan, to fill this in."></textarea>
+          <div class="row">
+            <button id="save-score" class="ghost">Save score</button>
+            <button id="chord-chart" class="ghost">Chord chart</button>
+          </div>
+          <div class="row" id="score-tools" style="margin-top:8px">
+            <input id="find-chord" type="text" placeholder="find, e.g. D#m" style="max-width:140px">
+            <input id="replace-chord" type="text" placeholder="replace with D#" style="max-width:140px">
+            <button id="do-replace" class="ghost">Replace all</button>
+          </div>
+          <div class="row" id="plan-actions" style="margin-top:8px">
+            <button id="render-take" class="ghost">Render this score</button>
+            <button id="reroll" class="ghost">Write a new plan</button>
+          </div>
+          <div id="score-note" class="hint"></div>
+          <div id="plan-length" class="hint"></div>
+          <pre id="chart" class="chart"></pre>
+        </details>
+
+        </div>
+        <div class="ed-page hidden" data-edpage="review" data-edstep="4">
+          <dl class="ed-review" id="ed-review"></dl>
+        </div>
+      </div>
+    </div>
+    <div class="ed-foot">
+      <button type="button" class="ghost ed-prev" id="ed-prev">Back</button>
+      <button type="button" class="ghost ed-next" id="ed-next">Next</button>
+      <label class="check" id="auto-wrap"><input id="auto-render" type="checkbox"> render as soon as the plan is ready</label>
+      <button id="create-cover" class="primary">Create cover</button>
+      <button id="create-song" class="primary" style="display:none">Write score plan</button>
+      <button id="create-inst" class="primary" style="display:none">Write score plan</button>
+      <div id="render-status" class="status"></div>
+      <button type="button" class="ghost ed-cancel" id="editor-cancel">Close</button>
+    </div>
+  </div>
+</div>
 
 <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Settings">
   <form id="settings-form" class="modal-box narrow settings" autocomplete="off" onsubmit="return false;">

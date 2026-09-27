@@ -16,6 +16,8 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 - **Lyrics:** draft them from a sentence, or extract them from a recording.
 - **Stems:** split any take into vocals, drums, bass and more.
 - **A library:** spaces, stars, and every take's settings kept so it can be made again.
+- **A take panel and an editor:** the left panel shows how the selected take was made, and a large
+  window, in three columns or as steps, is where takes are made and changed.
 - **Windows without Docker:** an installer that sets it all up natively, for people who would
   rather not use Docker. [It is new, and being tested](#on-windows-without-docker).
 
@@ -32,17 +34,19 @@ If you want to buy me a beer, then please use [PayPal](https://paypal.me/dynamoh
 
 ## What it looks like
 
-Covering a recording, with the score editor open:
+Covering a recording: the editor window on its Score page, with the transcribed score and its chord
+chart:
 
 [![Cover a recording](docs/screenshots/cover-a-recording.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/cover-a-recording.png)
 
-The same library with **Wide** and **Comfy** on: the page fills the window, and the cards are
-wider, with room for the full title. Hover over a card's settings or prompt to read all of it.
-Compact cards are what you start with:
+The library with **Wide** and **Comfy** on, and the take panel on the left showing how the selected
+take was made. The cards are wider, with room for the full title; hover over a card's settings or
+prompt to read all of it. Compact cards are what you start with, and the chevron beside the panel
+folds it away:
 
 [![Comfy layout](docs/screenshots/comfy-layout.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/comfy-layout.png)
 
-Writing a song from a prompt:
+Writing a song from a prompt, in the editor's three columns:
 
 [![Write a song](docs/screenshots/write-a-song.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/write-a-song.png)
 
@@ -99,7 +103,8 @@ Writing an instrumental, with the structure built section by section:
 
 A LoRA is a small file that leans YuE2 towards a sound: a genre, a tradition, a production style.
 Put one in `models/loras/` and press **Rescan**, or use **Install**, and it appears in the **Style
-LoRA** list at the bottom of the form, in all three modes. **Download** hands one to someone else.
+LoRA** list in the editor's sound settings, in all three modes. **Download** hands one to someone
+else. Here it is in the editor's other layout, steps, on the Sound step:
 
 [![Style LoRA](docs/screenshots/style-lora.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/style-lora.png)
 
@@ -357,7 +362,7 @@ LoRAs, stems, the library and what to do when something is wrong.
 
 It is also in the app itself, under the menu in the top left, or at
 <http://localhost:8090/guide> — which is where it is most useful, since trigger words and LoRA
-strengths are things you need while filling the form.
+strengths are things you need while working in the editor.
 
 How it is built — the two containers, how the app drives ComfyUI, what YuE2 does inside it, the
 LLMs and the API, with diagrams — is in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
@@ -370,6 +375,7 @@ any browser and survive a rebuild.
 | Setting | What it does |
 |---|---|
 | Output audio format | FLAC (the default), WAV, or MP3 at 320 kbps. The format stems and a take's **Save** start with; each can choose another at the time |
+| Editor layout | Three columns with the score on a tab of its own (the default), or steps, one part at a time |
 | Normalise to | How loud a normalised take is made: −16, −14 (the default) or −11 LUFS |
 | Stem separation model | Which model a run starts with |
 | Stem save folder | Where stems are written. It must sit inside the data folder |

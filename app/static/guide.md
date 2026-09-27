@@ -12,17 +12,34 @@ thrown away; a render costs minutes. So the app lets you look at the plan first.
 
 ## Your first song
 
-1. **Type a style.** A sentence, not a tag list: *"warm indie rock, expressive female lead, jangly
+1. Press **+ Song** at the top of the left panel. The editor window opens.
+2. **Type a style.** A sentence, not a tag list: *"warm indie rock, expressive female lead, jangly
    guitars, 96 BPM"*. This is the single biggest influence on what comes out.
-2. **Add lyrics**, or press **Write lyrics** and let Gemma draft them from a description.
-3. Press **Write score plan**. Nothing is rendered yet.
-4. **Read the plan** when it lands. If the melody is wrong, **Write a new plan** rerolls it for the
+3. **Add lyrics**, or press **Write lyrics** and let Gemma draft them from a description.
+4. Press **Write score plan**. Nothing is rendered yet: the window turns to its **Score** page.
+5. **Read the plan** when it lands. If the melody is wrong, **Write a new plan** rerolls it for the
    cost of a few seconds.
-5. Press **Render this score**.
+6. Press **Render this score**. The window closes.
 
 Tick *render as soon as the plan is ready* to run both steps without stopping in between.
 
 The take appears in the library on the right, and plays in the bar at the bottom.
+
+### The take panel and the editor
+
+The **left panel** shows the take you last clicked, read-only: its style, its sound settings, the
+first lines of its words, and its score as a key, a tempo, a length and each section's chords.
+**+ Song**, **+ Cover** and **+ Instrumental** at the top start something new; the one for the
+take's own kind stands out. The chevron beside the panel folds it away, so the takes have the width,
+and brings it back.
+
+Making and changing a take happens in the **editor window**. Its main button on the panel says what
+fits: *Edit and render again*, or *Review the plan and render* when a plan is waiting. A card's
+**Score** and **Again** buttons open it too, and so does double-clicking a card. It has three
+columns (the song, the words and the sound) with the score on a tab of its own. **Settings → Editor
+layout** offers steps instead, one part at a time, with a summary of what will be sent at the end.
+
+Closing the window, with **Close**, the cross or Escape, keeps what you typed.
 
 ### What to put in the Style box
 
@@ -166,14 +183,15 @@ The score fixes the notes. The **interpretation** sets how they are performed.
 The sparkle button on a card renders **the same score and the same seed** in the other
 interpretations. Because only the interpretation changes, what you hear between them is the
 interpretation — not a different roll of the dice. Each lands as its own take, titled
-*Night drive · Loose*. The window has its own length cap, which starts at the panel's and applies
+*Night drive · Loose*. The window has its own length cap, which starts at the editor's and applies
 only to these takes.
 
 ### Seed, and reproducing a take
 
-Every take records its seed and every setting that shaped it. The card names them, and clicking a
-card loads all of it back into the form. **Again** re-renders from exactly that, so a take you liked
-can be reproduced, and a take you nearly liked can be nudged one setting at a time.
+Every take records its seed and every setting that shaped it. The card names them, clicking a card
+shows them in the take panel, and opening it in the editor loads all of it back. **Again** opens the
+editor with exactly that, seed included, so a take you liked can be reproduced, and a take you nearly
+liked can be nudged one setting at a time.
 
 Tick **fixed seed** to keep the same seed across renders; leave it off and each render rolls a new
 one.
@@ -387,9 +405,9 @@ that point in training. They sound about as good as each other, but each has its
 what it learned, so each has its own taste while keeping the style and signature sound the LoRA
 was trained on.
 
-To hear them side by side, choose the LoRA, set up the panel as you would for one take, and press
+To hear them side by side, choose the LoRA, set up the editor as you would for one take, and press
 **Checkpoints** beside **Delete LoRA**. It is greyed out for a LoRA without checkpoints. Tick the
-steps you want, set a length cap for these takes if you like, and press **Render**. The panel's
+steps you want, set a length cap for these takes if you like, and press **Render**. The editor's
 own action runs once on each checkpoint, all with one seed, and each take is named after its step:
 *Night drive · step 250*, *Night drive · full*. A song or an instrumental writes its plan and goes
 straight on to render.
@@ -435,10 +453,10 @@ the engine is working on. Deleting a take stops its job and removes its stems. *
 recording removes the file and its stems; covers made from it keep their audio and score, but cannot
 be rendered again.
 
-**New song** — or **New cover** — beside the heading starts again from the take on show. It clears
-the title, the lyrics and the score, and **keeps your settings**: style, vocal, Harmony, plan
-variety, length cap, interpretation, LoRA and seed. The take being shown lets go of the panel, so
-Render cannot act on it by mistake.
+**+ Song**, **+ Cover** and **+ Instrumental** on the take panel, or **New song** beside the
+editor's heading, start again from the take on show. They clear the title, the lyrics and the score,
+and **keep your settings**: style, vocal, Harmony, plan variety, length cap, interpretation, LoRA and
+seed. The take being shown lets go of the editor, so Render cannot act on it by mistake.
 
 Words you had typed but not used are not thrown away: a bar offers to restore them.
 
@@ -518,7 +536,7 @@ brings it up to the usual loudness and marks it *Normalised*. If it still sounds
 seed, and keep that LoRA's Sound at 0.5 or below. It happens most in covers through a style LoRA
 trained here.
 
-**Normalise volume.** Tick it in the form and each take made while it is ticked is brought to the
+**Normalise volume.** Tick it in the editor and each take made while it is ticked is brought to the
 usual loudness when it finishes, and marked *Normalised*. A take made without it can be normalised
 later with the speaker button at the top of its card. The file as rendered is kept beside it, and
 clicking *Normalised* goes back to it. How loud it is made is set in Settings, under *Normalise to*.
