@@ -1555,13 +1555,16 @@ button.take-status.sung:hover { background: rgba(251, 191, 36, 0.16); }
    A chevron halfway down the gap beside the panel. Folded, the panel's column goes to
    nothing and the takes take the width; the chevron stays, pointing the other way. */
 /* No animation of the column itself: every frame of it lays out every card again, and
-   cards jump rows mid-way. The width changes at once; the panel fades in as it opens. */
+   cards jump rows mid-way. The width changes in one step; around it the panel fades, and
+   the takes dip and come back, so the change reads as smooth. Only opacity animates. */
 main { position: relative; }
+main > .sheet-panel { transition: opacity 0.2s ease; }
+main.sheet-fading > .sheet-panel { opacity: 0; }
+main > .library { transition: opacity 0.28s ease; }
+main.sheet-settle > .library { opacity: 0.35; transition: none; }
 main.sheet-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
 main.sheet-collapsed > .sheet-panel { visibility: hidden; padding-left: 0; padding-right: 0; border-width: 0; }
-main:not(.sheet-collapsed) > .sheet-panel { animation: sheet-in 0.18s ease-out; }
-@keyframes sheet-in { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { main:not(.sheet-collapsed) > .sheet-panel { animation: none; } }
+
 .sheet-toggle { position: absolute; top: 50%; left: 433px; transform: translate(-50%, -50%); z-index: 6;
   width: 24px; height: 48px; padding: 0; border-radius: 12px; border: 1px solid var(--line);
   background: var(--card-2); color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }

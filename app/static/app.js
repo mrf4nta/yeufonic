@@ -6992,14 +6992,45 @@ function wireEditor() {
 
 /* Fold the take panel away, or bring it back. Clicking takes still updates it, so
    it is current when it opens. Remembered in this browser, like the layout. */
-function setSheetCollapsed(collapsed) {
+function setSheetCollapsed(collapsed, animate) {
   var main = document.querySelector('main');
   var toggle = $('sheet-toggle');
   if (!main || !toggle) { return; }
-  main.classList.toggle('sheet-collapsed', collapsed);
+  setSheetCollapsed.wanted = collapsed;   // what was asked for, which a fade may not have reached yet
   toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   toggle.title = collapsed ? 'Show the take panel' : 'Hide the take panel';
   try { localStorage.setItem(SHEET_KEY, collapsed ? 'collapsed' : 'open'); } catch (err) { /* private mode */ }
+  var still = !animate || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  clearTimeout(setSheetCollapsed.timer);
+  if (still) {
+    main.classList.remove('sheet-fading', 'sheet-settle');
+    main.classList.toggle('sheet-collapsed', collapsed);
+    return;
+  }
+  // The takes come back up from a dip once the columns have changed.
+  var settle = function () {
+    main.classList.add('sheet-settle');
+    void main.offsetWidth;   // lay out once at the dip, so the rise animates
+    // A timer rather than an animation frame, which a tab in the background would hold back.
+    setSheetCollapsed.timer = setTimeout(function () {
+      main.classList.remove('sheet-settle');
+      if (!collapsed) { main.classList.remove('sheet-fading'); }   // and the panel fades in
+    }, 30);
+  };
+  if (collapsed) {
+    // Fade the panel out, then give its column away.
+    main.classList.add('sheet-fading');
+    setSheetCollapsed.timer = setTimeout(function () {
+      main.classList.add('sheet-collapsed');
+      main.classList.remove('sheet-fading');
+      settle();
+    }, 200);
+  } else {
+    // The column comes back with the panel still clear, then it fades in.
+    main.classList.add('sheet-fading');
+    main.classList.remove('sheet-collapsed');
+    settle();
+  }
 }
 
 function wireSheetToggle() {
@@ -7009,6 +7040,6 @@ function wireSheetToggle() {
   try { saved = localStorage.getItem(SHEET_KEY); } catch (err) { saved = null; }
   setSheetCollapsed(saved === 'collapsed');
   toggle.addEventListener('click', function () {
-    setSheetCollapsed(!document.querySelector('main').classList.contains('sheet-collapsed'));
+    setSheetCollapsed(!setSheetCollapsed.wanted, true);
   });
 }
