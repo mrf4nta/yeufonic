@@ -1436,6 +1436,13 @@ button.take-status.sung:hover { background: rgba(251, 191, 36, 0.16); }
 .lora-group .count { font-weight: 400; opacity: 0.7; }
 .lora-picker-menu .lora-item { padding-left: 24px; }
 .lora-picker-menu .lora-item.flat { padding-left: 10px; }
+/* A LoRA's training checkpoints fold under its row. */
+.lora-steps-toggle {
+  flex-shrink: 0; padding: 2px 8px; border-radius: 999px; color: var(--muted); font-size: 11.5px;
+  font-weight: 400; white-space: nowrap;
+}
+.lora-steps-toggle:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.lora-picker-menu .lora-item.lora-step { padding-left: 40px; font-size: 12.5px; padding-top: 5px; padding-bottom: 5px; }
 
 /* ================================================================ the take sheet
    The selected take, read-only: how it was made, in short. Making and changing takes

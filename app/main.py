@@ -138,7 +138,7 @@ SETTINGS_SPEC: list[dict] = [
             {"value": "keep", "label": "Keep them"},
             {"value": "delete", "label": "Delete when training ends"},
         ],
-        "help": "A training run saves a checkpoint every 50 steps, listed under Training checkpoints. "
+        "help": "A training run saves a checkpoint every 50 steps, folded under its LoRA in the Style LoRA list. "
                 "Each gives its own take on the style. Each is as big as the LoRA itself.",
     },
     {

@@ -25,6 +25,12 @@ cannot creep back in.
 
 ## Unreleased
 
+### Changed
+
+- **A training run's checkpoints fold under their LoRA** in the Style LoRA list, behind a
+  "▸ 9 steps" toggle beside its name, in step order, instead of sharing one Training checkpoints
+  group with every other run's. A checkpoint whose LoRA has been deleted stays in that group.
+
 ### Added
 
 - **Same tune, new words.** The planner reads all the lyrics before it writes a note, so changed

@@ -138,7 +138,7 @@ would be of an artist or genre to use when training your LoRA. Each track gets i
 separated, its key, tempo and sections found and its lyrics drafted. You then export it as a
 training set, and train a style LoRA from it. Training holds the GPU until it finishes, and the
 LoRA appears in the Style LoRA list, with a style chip for each song it learned from. Training
-also saves a checkpoint every 50 steps, listed under **Training checkpoints**. Each gives its own
+also saves a checkpoint every 50 steps, folded under its LoRA in the list. Each gives its own
 take on the style. With the LoRA chosen, **Checkpoints** beside **Delete LoRA** makes what the
 panel would make once on each of them, with one seed, so you can compare them by ear. To save the
 space, **Training checkpoints** in Settings can delete them when training ends. To share a LoRA, press **Download** under the picker: the zip carries
@@ -403,7 +403,7 @@ any browser and survive a rebuild.
 | Normalise to | How loud a normalised take is made: −16, −14 (the default) or −11 LUFS |
 | Stem separation model | Which model a run starts with |
 | Stem save folder | Where stems are written. It must sit inside the data folder |
-| Training checkpoints | Keep them, listed under Training checkpoints (the default), or delete them when training ends |
+| Training checkpoints | Keep them, folded under their LoRA in the Style LoRA list (the default), or delete them when training ends |
 
 A settings sheet is generated from a specification on the server, so a new setting is a
 server-side change only.

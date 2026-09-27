@@ -421,8 +421,9 @@ rest, its trigger word beside it, and the same two strengths apply.
 
 ### Trying the checkpoints
 
-A training run saves a checkpoint every 50 steps, and keeps them under **Training checkpoints** in
-the picker (Settings can delete them instead, to save the space). Each is the LoRA as it stood at
+A training run saves a checkpoint every 50 steps, and keeps them under its LoRA in the picker:
+**▸ 9 steps** beside the LoRA's name opens them (Settings can delete them instead, to save the
+space). A checkpoint whose LoRA has been deleted stays under **Training checkpoints**. Each is the LoRA as it stood at
 that point in training. They sound about as good as each other, but each has its own weighting of
 what it learned, so each has its own taste while keeping the style and signature sound the LoRA
 was trained on.

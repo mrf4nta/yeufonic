@@ -357,6 +357,12 @@ function loraGroupKey(item) {
 
 var LORA_CHECKPOINTS = 'Training checkpoints';
 
+/* A training run's checkpoint (name_stepN) and the finished LoRA it belongs to. */
+function loraCheckpoint(name) {
+  var found = /^(.*)_step(\d+)\.safetensors$/i.exec(name || '');
+  return found ? { parent: found[1] + '.safetensors', step: parseInt(found[2], 10) } : null;
+}
+
 function loraGroups(list) {
   var counts = {};
   list.forEach(function (item) {
@@ -379,6 +385,20 @@ function paintStyleLoras() {
   $('style-lora-field').classList.remove('hidden');
   var chosen = select.value;
   var groups = loraGroups(list);
+  // A run's checkpoints go under the LoRA they belong to, not in a heap of their
+  // own: four runs came to 61 entries there. Only one whose LoRA is gone stays behind.
+  var byName = {};
+  list.forEach(function (item) { byName[item.name] = item; });
+  var stepsOf = {};
+  if (groups[LORA_CHECKPOINTS]) {
+    groups[LORA_CHECKPOINTS] = groups[LORA_CHECKPOINTS].filter(function (item) {
+      var run = loraCheckpoint(item.name);
+      if (!run || !byName[run.parent] || loraCheckpoint(run.parent)) { return true; }
+      (stepsOf[run.parent] = stepsOf[run.parent] || []).push(item);
+      return false;
+    });
+    if (!groups[LORA_CHECKPOINTS].length) { delete groups[LORA_CHECKPOINTS]; }
+  }
   // Other goes last, and a training run's checkpoints just above it, under every
   // finished LoRA.  Their steps are counted, not spelt: 50 comes before 100.
   var rank = function (name) { return name === 'other' ? 2 : name === LORA_CHECKPOINTS ? 1 : 0; };
@@ -390,18 +410,27 @@ function paintStyleLoras() {
       return (a.title || a.name).localeCompare(b.title || b.name, undefined, { numeric: true });
     });
   }
-  var option = function (item) {
+  var option = function (item, parent) {
     var note = LORA_KINDS[item.kind] ? ' \u2014 ' + LORA_KINDS[item.kind] : '';
     // The author's own name for it beats a file name every time.
     var label = item.title || loraShortLabel(item.name);
     // On the option itself, so the list can be read before anything is chosen.
     var tip = [item.trigger ? 'Trigger: ' + item.trigger : '', plainNote(item.note), item.name]
       .filter(Boolean).join('\n\n');
-    return '<option value="' + esc(item.name) + '" title="' + esc(tip) + '">' +
+    // A step keeps its full name here, for the picker's button, and a short one
+    // for the menu, where its LoRA is the row above it.
+    var step = parent ? ' data-parent="' + esc(parent) + '" data-short="step ' + loraCheckpoint(item.name).step + '"' : '';
+    return '<option value="' + esc(item.name) + '" title="' + esc(tip) + '"' + step + '>' +
       esc(label) + esc(note) + '</option>';
   };
+  var withSteps = function (item) {
+    var steps = (stepsOf[item.name] || []).slice().sort(function (a, b) {
+      return loraCheckpoint(a.name).step - loraCheckpoint(b.name).step;
+    });
+    return option(item) + steps.map(function (step) { return option(step, item.name); }).join('');
+  };
   select.innerHTML = '<option value="">None</option>' + names.map(function (family) {
-    var inner = groups[family].map(option).join('');
+    var inner = groups[family].map(withSteps).join('');
     // One group and nothing to compare it with: the heading is noise.
     if (names.length < 2) { return inner; }
     // A named family is already its heading; an unnamed one is a bare file-name
@@ -499,10 +528,24 @@ function paintLoraPicker() {
     var current = select.options[select.selectedIndex];
     $('lora-picker-label').textContent = current ? current.textContent : 'None';
     var open = loraOpenGroups();
+    // A LoRA with a run's checkpoints folds them under its own row, remembered
+    // with the groups as "steps:" and its name.
+    var stepCount = {};
+    Array.prototype.forEach.call(select.querySelectorAll('option[data-parent]'), function (option) {
+      stepCount[option.dataset.parent] = (stepCount[option.dataset.parent] || 0) + 1;
+    });
     var entry = function (option, flat) {
-      return '<div class="source-picker-item lora-item' + (flat ? ' flat' : '') + (option.value === chosen ? ' selected' : '') +
+      var parent = option.dataset.parent;
+      if (parent && open.indexOf('steps:' + parent) < 0) { return ''; }
+      var count = stepCount[option.value];
+      var stepsOpen = open.indexOf('steps:' + option.value) >= 0;
+      var toggle = count ? '<span class="lora-steps-toggle" role="button" aria-expanded="' + stepsOpen + '" data-steps="' +
+        esc(option.value) + '" title="' + (stepsOpen ? 'Hide' : 'Show') + ' the checkpoints its training run kept">' +
+        (stepsOpen ? '\u25BE' : '\u25B8') + ' ' + count + ' step' + (count === 1 ? '' : 's') + '</span>' : '';
+      return '<div class="source-picker-item lora-item' + (flat ? ' flat' : '') + (parent ? ' lora-step' : '') +
+        (option.value === chosen ? ' selected' : '') +
         '" role="option" data-value="' + esc(option.value) + '" title="' + esc(option.title || '') + '">' +
-        '<span class="source-item-title">' + esc(option.textContent) + '</span></div>';
+        '<span class="source-item-title">' + esc(parent ? option.dataset.short : option.textContent) + '</span>' + toggle + '</div>';
     };
     var html = '';
     Array.prototype.forEach.call(select.children, function (child) {
@@ -510,7 +553,7 @@ function paintLoraPicker() {
       var isOpen = open.indexOf(child.label) >= 0;
       html += '<div class="lora-group" role="button" aria-expanded="' + isOpen + '" data-group="' + esc(child.label) + '">' +
         '<span class="fold">' + (isOpen ? '\u25BE' : '\u25B8') + '</span><span>' + esc(child.label) + '</span>' +
-        '<span class="count">' + child.children.length + '</span></div>';
+        '<span class="count">' + child.querySelectorAll('option:not([data-parent])').length + '</span></div>';
       if (isOpen) { Array.prototype.forEach.call(child.children, function (option) { html += entry(option, false); }); }
     });
     // The state poll repaints every few seconds; an unchanged menu is left alone so
@@ -531,6 +574,11 @@ function openLoraPicker() {
   var group = chosenLoraGroup();
   var open = loraOpenGroups();
   if (group && open.indexOf(group) < 0) { open.push(group); saveLoraOpenGroups(open); }
+  // And a chosen checkpoint's LoRA opens its steps.
+  var select = $('style-lora');
+  var current = select && select.options[select.selectedIndex];
+  var parent = current && current.dataset.parent;
+  if (parent && open.indexOf('steps:' + parent) < 0) { open.push('steps:' + parent); saveLoraOpenGroups(open); }
   paintLoraPicker();
   // It sits near the bottom of the column, so it opens whichever way has the room.
   var box = btn.getBoundingClientRect();
@@ -6219,9 +6267,9 @@ function wire() {
     // Folding redraws the menu, which detaches the heading clicked; left to bubble, the
     // outside-click check above would no longer find it inside and close the menu.
     event.stopPropagation();
-    var group = event.target.closest('.lora-group');
+    var group = event.target.closest('.lora-group, .lora-steps-toggle');
     if (group) {
-      var name = group.dataset.group;
+      var name = group.dataset.group || 'steps:' + group.dataset.steps;
       var open = loraOpenGroups();
       var at = open.indexOf(name);
       if (at >= 0) { open.splice(at, 1); } else { open.push(name); }
