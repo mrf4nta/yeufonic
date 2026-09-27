@@ -1,0 +1,425 @@
+<!doctype html>
+<!-- A mockup of the editor window (feature/editor-window). The left panel becomes a
+     read-only sheet for the selected take; creating and editing move to a large window,
+     tried two ways: A, three columns with the score on its own tab; B, steps.
+     It reads the library through the app's API and saves nothing. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Editor window mockup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  body { margin: 0; }
+  .mk-top { display: flex; align-items: center; gap: 14px; padding: 14px 22px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  .mk-top h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  .mk-top .note { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+  .mk-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 3px; }
+  .mk-switch button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px;
+    padding: 6px 13px; border-radius: 999px; cursor: pointer; }
+  .mk-switch button.on { background: rgba(123, 92, 255, 0.18); color: var(--text); }
+  .mk-main { display: grid; grid-template-columns: 380px 1fr; gap: 22px; padding: 22px; align-items: start; }
+
+  /* ---------- the take sheet */
+  .mk-new { display: flex; gap: 8px; margin-bottom: 14px; }
+  .mk-new button { flex: 1; border: 0; border-radius: 999px; padding: 10px 6px; font: inherit; font-size: 13.5px;
+    font-weight: 650; cursor: pointer; color: #fff; }
+  .mk-new .song { background: linear-gradient(90deg, var(--song-a), var(--song-b)); }
+  .mk-new .cover { background: linear-gradient(90deg, var(--cover-a), var(--cover-b)); }
+  .mk-new .inst { background: linear-gradient(90deg, var(--inst-b), var(--inst-a)); color: #07140c; }
+  .sheet { position: sticky; top: 76px; max-height: calc(100vh - 100px); overflow-y: auto; }
+  .kind { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
+  .kind.song { color: var(--song-a); } .kind.cover { color: var(--cover-a); } .kind.instrumental { color: var(--inst-a); }
+  .sheet h2 { font-size: 21px; margin: 4px 0 4px; line-height: 1.25; }
+  .sheet .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  .sheet .busy { font-size: 12.5px; color: #fbbf24; background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.25); border-radius: 10px; padding: 7px 10px; margin-bottom: 12px; }
+  .sheet .acts { display: flex; gap: 8px; margin-bottom: 16px; }
+  .sheet .acts .primary { margin: 0; flex: 1; padding: 11px 14px; font-size: 14px; }
+  .primary.song { background: linear-gradient(90deg, var(--song-a), var(--song-b)); }
+  .primary.cover { background: linear-gradient(90deg, var(--cover-a), var(--cover-b)); }
+  .primary.instrumental { background: linear-gradient(90deg, var(--inst-b), var(--inst-a)); color: #07140c; }
+  .sheet .acts .ghost { flex: 0 0 auto; }
+  .blk { border-top: 1px solid var(--line); padding: 12px 0 4px; }
+  .blk h3 { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    margin: 0 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  .blk h3 a { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--accent-a); cursor: pointer; }
+  .pairs { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 13px; }
+  .pairs dt { color: var(--muted); } .pairs dd { margin: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); }
+  .words { font-size: 13px; line-height: 1.55; }
+  .words .sec { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+  .words .more { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .chart { font-size: 12.5px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+  .chart .s { color: var(--muted); } .chart .c { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .facts { font-size: 13px; margin-bottom: 8px; }
+
+  /* ---------- the list (stands in for the take cards) */
+  .mk-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .mk-list .row { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+    cursor: pointer; display: flex; gap: 10px; align-items: center; }
+  .mk-list .row.sel { border-color: rgba(123, 92, 255, 0.7); background: #24242e; }
+  .mk-list .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+  .dot.song { background: var(--song-a); } .dot.cover { background: var(--cover-a); } .dot.instrumental { background: var(--inst-a); }
+  .mk-list .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+  .mk-list .d { color: var(--muted); font-size: 11.5px; }
+
+  /* ---------- the editor window */
+  .ed-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 20; display: flex;
+    align-items: center; justify-content: center; }
+  .ed-back.hidden { display: none; }
+  .ed { width: min(1500px, 95vw); height: min(940px, 92vh); background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+  .ed-head { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  .ed-head .bar { width: 6px; height: 30px; border-radius: 3px; flex: 0 0 auto; }
+  .bar.song { background: linear-gradient(var(--song-a), var(--song-b)); }
+  .bar.cover { background: linear-gradient(var(--cover-a), var(--cover-b)); }
+  .bar.instrumental { background: linear-gradient(var(--inst-b), var(--inst-a)); }
+  .ed-head input { font-size: 19px; font-weight: 650; background: transparent; border-color: transparent; max-width: 520px; }
+  .ed-head input:hover, .ed-head input:focus { border-color: var(--line); }
+  .ed-tabs { display: flex; gap: 4px; margin-left: auto; }
+  .ed-tabs button, .steps button { border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit;
+    font-size: 13.5px; padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+  .ed-tabs button.on { color: var(--text); border-color: rgba(123, 92, 255, 0.7); background: rgba(123, 92, 255, 0.14); }
+  .ed-x { border: 0; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; padding: 0 4px; }
+  .ed-ro { font-size: 12.5px; color: #fbbf24; padding: 8px 20px; background: rgba(251, 191, 36, 0.07);
+    border-bottom: 1px solid rgba(251, 191, 36, 0.2); }
+  .ed-body { flex: 1; min-height: 0; overflow: auto; padding: 18px 20px; }
+  .ed-foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); }
+  .ed-foot .primary { width: auto; margin: 0 0 0 auto; padding: 11px 26px; }
+  .ed-foot .ghost { flex: 0 0 auto; }
+  .cols3 { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 22px; height: 100%; }
+  .col { display: flex; flex-direction: column; min-height: 0; }
+  .col h4 { margin: 0 0 12px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .col.grow textarea { flex: 1; min-height: 300px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .score2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 22px; height: 100%; }
+  .score2 textarea { height: 100%; min-height: 360px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .score2 .side { overflow: auto; }
+  .find { display: flex; gap: 6px; margin: 12px 0; }
+  .find input { flex: 1; }
+  .rowbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .range-row { display: flex; align-items: center; gap: 10px; }
+  .range-row input[type=range] { flex: 1; }
+  .range-row .v { min-width: 90px; text-align: right; font-size: 12.5px; }
+  .drop { border: 1px dashed rgba(255,255,255,0.18); border-radius: 14px; padding: 22px; text-align: center; color: var(--muted); }
+  /* B: steps down the side */
+  .ed-b { display: grid; grid-template-columns: 220px 1fr; height: 100%; gap: 0; }
+  .steps { border-right: 1px solid var(--line); padding: 18px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .steps button { text-align: left; border-radius: 12px; display: flex; gap: 10px; align-items: center; padding: 10px 12px; }
+  .steps button .n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; border: 1px solid var(--line); }
+  .steps button.on { color: var(--text); background: rgba(123, 92, 255, 0.14); border-color: rgba(123, 92, 255, 0.6); }
+  .steps button.on .n { background: var(--accent-a); border-color: var(--accent-a); color: #fff; }
+  .steps .hint { color: var(--muted); font-size: 12px; margin-top: auto; line-height: 1.5; }
+  .stepbody { padding: 22px 28px; overflow: auto; }
+  .stepbody h3 { margin: 0 0 4px; font-size: 20px; }
+  .stepbody .lead { color: var(--muted); margin: 0 0 18px; font-size: 13.5px; }
+  .narrow { max-width: 760px; }
+  .review { display: grid; grid-template-columns: 170px 1fr; gap: 8px 16px; font-size: 13.5px; max-width: 900px; }
+  .review dt { color: var(--muted); } .review dd { margin: 0; }
+</style>
+</head>
+<body>
+<div class="mk-top">
+  <h1>Editor window: mockup</h1>
+  <div class="mk-switch" id="dir">
+    <button data-dir="A" class="on">A · three columns</button>
+    <button data-dir="B">B · steps</button>
+  </div>
+  <span class="note">Your takes, read from a copy of the library. Nothing here saves.</span>
+</div>
+
+<div class="mk-main">
+  <aside>
+    <div class="mk-new">
+      <button class="song" data-new="song">+ Song</button>
+      <button class="cover" data-new="cover">+ Cover</button>
+      <button class="inst" data-new="instrumental">+ Instrumental</button>
+    </div>
+    <div class="panel sheet" id="sheet"></div>
+  </aside>
+  <section class="mk-list" id="list"></section>
+</div>
+
+<div class="ed-back hidden" id="ed-back"><div class="ed" id="ed"></div></div>
+
+<script>
+var HARMONY = ['Familiar', 'Varied', 'Colourful', 'Adventurous', 'Outside'];
+var INTERP = { standard: 'Standard', tight: 'Tight', loose: 'Loose', settled: 'Settled', restless: 'Restless', wide: 'Wide' };
+var VARIETY = ['calm', 'normal', 'lively', 'bold', 'quirky', 'wild'];
+var GENRES = ['warm indie rock', 'soulful jazz-pop', 'synthwave', 'acoustic ballad', 'heavy rock'];
+var VOICE = ['Any', 'Female', 'Male', 'Duet'];
+var CHARACTER = ['breathy', 'raspy', 'powerful', 'soft', 'deep', 'youthful', 'airy', 'gritty'];
+var KIND_NAME = { song: 'Song from a prompt', cover: 'Cover of a recording', instrumental: 'Instrumental' };
+var takes = [], selected = null, dir = 'A', tab = 'song', step = 0, editing = null;
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function ago(t) {
+  var s = Date.now() / 1000 - t;
+  if (s < 3600) { return Math.max(1, Math.round(s / 60)) + ' min ago'; }
+  if (s < 86400) { return Math.round(s / 3600) + ' h ago'; }
+  return Math.round(s / 86400) + ' d ago';
+}
+function mmss(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+
+/* The score's key facts and each section's chords, as the app's chord chart reads them. */
+function scoreFacts(abc) {
+  var pick = function (k) { var m = abc.match(new RegExp('^' + k + ':\\s*(.*)$', 'm')); return m ? m[1].trim() : ''; };
+  var tempo = (pick('Q').match(/=(\d+)/) || [])[1];
+  var sections = [], cur = null, voice = null, bars = 0;
+  abc.split('\n').forEach(function (raw) {
+    var line = raw.trim();
+    if (line.charAt(0) === '%') { cur = { name: line.replace(/^%\s*/, '') || 'section', chords: [] }; sections.push(cur); return; }
+    if (line.indexOf('V:') === 0) { voice = line.slice(2).trim().split(/\s+/)[0]; return; }
+    if (!line || voice !== 'Vocal' || /^[XTMLQK]:/.test(line)) { return; }
+    if (!cur) { cur = { name: 'song', chords: [] }; sections.push(cur); }
+    line.split('|').forEach(function (bar) {
+      if (!bar.trim()) { return; }
+      bars += 1;
+      (bar.match(/"([A-G][#b]?[^"\s]*)"/g) || []).forEach(function (c) {
+        c = c.replace(/"/g, '');
+        if (cur.chords[cur.chords.length - 1] !== c) { cur.chords.push(c); }
+      });
+    });
+  });
+  return { key: pick('K'), tempo: tempo, bars: bars, sections: sections.filter(function (s) { return s.chords.length; }) };
+}
+
+function lyricLines(text) {
+  return (text || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+}
+
+function sheetHTML(t) {
+  if (!t) {
+    return '<p class="sub">Choose a take to see how it was made, or start something new above.</p>';
+  }
+  var busy = t.status === 'queued' || t.status === 'running';
+  var sound = [];
+  if (t.kind !== 'cover') { sound.push(['Harmony', HARMONY[t.harmony || 0] || 'Familiar']); sound.push(['Plan variety', t.variety || 'normal']); }
+  sound.push(['Interpretation', INTERP[t.interpretation] || 'Standard']);
+  if (t.style_lora) {
+    sound.push(['Style LoRA', t.style_lora.replace(/\.safetensors$/, '') + ' <span class="sub">(planner ' +
+      Number(t.style_lora_clip || 0).toFixed(2) + ', sound ' + Number(t.style_lora_model || 0).toFixed(2) + ')</span>']);
+  }
+  sound.push(['Production polish', t.realaudio ? 'on' : 'off']);
+  if (t.normalised) { sound.push(['Normalised', (t.normalised_to || -14) + ' LUFS']); }
+  sound.push(['Seed', t.seed]);
+
+  var html = '<div class="kind ' + t.kind + '">' + (KIND_NAME[t.kind] || t.kind) + '</div>' +
+    '<h2>' + esc(t.title) + '</h2>' +
+    '<div class="meta">' + (t.duration ? mmss(t.duration) + ' · ' : '') + ago(t.created_at) + '</div>' +
+    (busy ? '<div class="busy">' + (t.status === 'running' ? 'Rendering now' : 'Waiting in the queue') +
+      ': the editor opens read-only until it finishes.</div>' : '') +
+    '<div class="acts"><button class="primary ' + t.kind + '" id="edit-take">' + (busy ? 'Open' : 'Edit and render again') + '</button>' +
+    '<button class="ghost">Play</button></div>';
+
+  html += '<div class="blk"><h3>Style</h3><div class="tags">' +
+    (t.style || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+      .map(function (s) { return '<span class="tag">' + esc(s) + '</span>'; }).join('') + '</div></div>';
+
+  html += '<div class="blk"><h3>Sound</h3><dl class="pairs">' +
+    sound.map(function (p) { return '<dt>' + p[0] + '</dt><dd>' + p[1] + '</dd>'; }).join('') + '</dl></div>';
+
+  var lines = lyricLines(t.lyrics);
+  if (t.kind !== 'instrumental' && lines.length) {
+    var shown = [], words = 0;
+    for (var i = 0; i < lines.length && words < 5; i++) {
+      if (/^\[.*\]$/.test(lines[i])) { shown.push('<div class="sec">' + esc(lines[i].slice(1, -1)) + '</div>'); }
+      else { shown.push('<div>' + esc(lines[i]) + '</div>'); words++; }
+    }
+    var rest = lines.filter(function (l) { return !/^\[.*\]$/.test(l); }).length - words;
+    html += '<div class="blk"><h3>Words <a data-open="words">Open</a></h3><div class="words">' + shown.join('') +
+      (rest > 0 ? '<div class="more">and ' + rest + ' more lines</div>' : '') + '</div></div>';
+  } else if (t.kind === 'instrumental') {
+    var parts = lines.filter(function (l) { return /^\[.*\]$/.test(l); }).map(function (l) { return l.slice(1, -1); });
+    html += '<div class="blk"><h3>Structure</h3><div class="tags">' +
+      (parts.length ? parts.map(function (p) { return '<span class="tag">' + esc(p) + '</span>'; }).join('') : '<span class="sub">YuE2 decides</span>') + '</div></div>';
+  }
+
+  if (t.abc && t.abc.length > 50) {
+    var f = scoreFacts(t.abc);
+    var bars = f.bars ? f.bars + ' bars' : '';
+    html += '<div class="blk"><h3>Score <a data-open="score">Open</a></h3>' +
+      '<div class="facts">' + [f.key && ('Key ' + esc(f.key)), f.tempo && (f.tempo + ' BPM'), bars].filter(Boolean).join(' · ') + '</div>' +
+      '<div class="chart">' + f.sections.slice(0, 9).map(function (s) {
+        return '<span class="s">' + esc(s.name) + '</span><span class="c">' + esc(s.chords.slice(0, 8).join(' ')) +
+          (s.chords.length > 8 ? ' …' : '') + '</span>';
+      }).join('') + (f.sections.length > 9 ? '<span class="s">…</span><span></span>' : '') + '</div></div>';
+  } else {
+    html += '<div class="blk"><h3>Score</h3><div class="sub">No plan yet. It is written when the song is made.</div></div>';
+  }
+  return html;
+}
+
+function paintList() {
+  document.getElementById('list').innerHTML = takes.slice(0, 60).map(function (t) {
+    return '<div class="row' + (selected && t.id === selected.id ? ' sel' : '') + '" data-id="' + t.id + '">' +
+      '<span class="dot ' + t.kind + '"></span><span class="t">' + esc(t.title) + '</span><span class="d">' + ago(t.created_at) + '</span></div>';
+  }).join('');
+}
+function select(t) { selected = t; document.getElementById('sheet').innerHTML = sheetHTML(t); paintList(); }
+
+/* ---------------------------------------------------------------- the editor */
+function field(label, inner) { return '<div class="field"><label>' + label + '</label>' + inner + '</div>'; }
+function chips(list, on) {
+  return '<div class="chips">' + list.map(function (c) { return '<button class="chip' + (c === on ? ' active' : '') + '">' + esc(c) + '</button>'; }).join('') + '</div>';
+}
+function harmonyRow(v) {
+  return '<div class="range-row"><input type="range" min="0" max="4" value="' + v + '" oninput="this.nextElementSibling.textContent = HARMONY[this.value]"><span class="v">' + HARMONY[v] + '</span></div>';
+}
+function strengthRow(label, v) {
+  return '<div class="range-row"><span class="sub" style="margin:0;min-width:60px">' + label + '</span><input type="range" min="0" max="1.5" step="0.05" value="' + v + '" oninput="this.nextElementSibling.textContent = Number(this.value).toFixed(2)"><span class="v">' + Number(v).toFixed(2) + '</span></div>';
+}
+
+function songPart(e) {
+  var cover = e.kind === 'cover';
+  return (cover ? field('Source recording', '<div class="drop"><b>Drop an audio file</b><br>or browse · mp3, wav, flac, m4a</div>' +
+      '<div class="rowbtns"><button class="chip action">Transcribe</button><button class="chip action">Extract lyrics</button><button class="chip action">Audition</button></div>') : '') +
+    field('Style', '<textarea rows="4">' + esc(e.style) + '</textarea>' + chips(GENRES)) +
+    (e.kind !== 'instrumental' ? field('Vocal', chips(VOICE, 'Any') + chips(CHARACTER)) : '');
+}
+function wordsPart(e) {
+  if (e.kind === 'instrumental') {
+    return field('Structure', chips(['Let YuE2 decide', 'Sections', 'Timed sections'], 'Sections') +
+      '<div class="chips">' + ['intro', 'verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus', 'outro']
+        .map(function (s) { return '<span class="tag">' + s + '</span>'; }).join('') + '</div>');
+  }
+  return '<div class="label-row"><label>Lyrics</label><button class="chip action">Write lyrics</button></div>' +
+    '<textarea class="lyrics" style="flex:1;min-height:360px">' + esc(e.lyrics) + '</textarea>' +
+    '<div class="sub" style="margin-top:6px">' + lyricLines(e.lyrics).filter(function (l) { return !/^\[.*\]$/.test(l); }).length + ' lines</div>';
+}
+function soundPart(e) {
+  var lora = e.style_lora ? e.style_lora.replace(/\.safetensors$/, '') : 'None';
+  return (e.kind !== 'cover' ? field('Harmony', harmonyRow(e.harmony || 0)) + field('Plan variety', chips(VARIETY, e.variety || 'normal')) : '') +
+    field('Interpretation', '<select>' + Object.keys(INTERP).map(function (k) { return '<option' + (k === (e.interpretation || 'standard') ? ' selected' : '') + '>' + INTERP[k] + '</option>'; }).join('') + '</select>') +
+    field('Style LoRA', '<select><option>' + esc(lora) + '</option><option>None</option></select>' +
+      (e.style_lora ? strengthRow('Planner', e.style_lora_clip || 0.7) + strengthRow('Sound', e.style_lora_model || 0.7) : '')) +
+    field('Length cap', '<input type="number" value="' + (e.max_duration || 360) + '">') +
+    '<label class="check"><input type="checkbox"' + (e.realaudio !== false ? ' checked' : '') + '> Production polish (Realaudio)</label>' +
+    '<label class="check"><input type="checkbox"' + (e.normalise ? ' checked' : '') + '> Normalise volume</label>' +
+    field('<br>Seed', '<div class="range-row"><input type="number" value="' + (e.seed || '') + '" placeholder="random"><button class="chip action">&#127922;</button></div>');
+}
+function scorePart(e) {
+  if (!e.abc || e.abc.length < 50) {
+    return '<div class="sub">No plan yet. ' + (e.kind === 'cover' ? 'Transcribe the recording to get its score.' : 'Write a score plan and it appears here, to read and edit before it is sung.') + '</div>';
+  }
+  var f = scoreFacts(e.abc);
+  return '<div class="score2"><textarea spellcheck="false">' + esc(e.abc) + '</textarea><div class="side">' +
+    '<div class="facts">' + [f.key && ('Key ' + esc(f.key)), f.tempo && (f.tempo + ' BPM'), f.bars && (f.bars + ' bars')].filter(Boolean).join(' · ') + '</div>' +
+    '<div class="chart">' + f.sections.map(function (s) { return '<span class="s">' + esc(s.name) + '</span><span class="c">' + esc(s.chords.join(' ')) + '</span>'; }).join('') + '</div>' +
+    '<div class="find"><input type="text" placeholder="find, e.g. D#m"><input type="text" placeholder="replace with"><button class="chip action">Replace all</button></div>' +
+    '<div class="rowbtns"><button class="chip action">Save score</button><button class="chip action">Show notation</button><button class="chip action">Write a new plan</button></div>' +
+    '<p class="sub" style="margin-top:14px">Rendering this score keeps its melody and chords. Writing a new plan asks YuE2 for a different tune to the same words.</p>' +
+    '</div></div>';
+}
+
+function editorA(e) {
+  var body = tab === 'score' ? scorePart(e) :
+    '<div class="cols3"><div class="col"><h4>The song</h4>' + songPart(e) + '</div>' +
+    '<div class="col grow"><h4>' + (e.kind === 'instrumental' ? 'The structure' : 'The words') + '</h4>' + wordsPart(e) + '</div>' +
+    '<div class="col"><h4>The sound</h4>' + soundPart(e) + '</div></div>';
+  return '<div class="ed-head"><span class="bar ' + e.kind + '"></span><input type="text" value="' + esc(e.title) + '" placeholder="Song title">' +
+    '<div class="ed-tabs"><button data-tab="song" class="' + (tab === 'song' ? 'on' : '') + '">' + (e.kind === 'cover' ? 'Cover' : 'Song') + '</button>' +
+    '<button data-tab="score" class="' + (tab === 'score' ? 'on' : '') + '">Score</button></div>' +
+    '<button class="ed-x" data-close>&times;</button></div>' +
+    readOnlyNote(e) + '<div class="ed-body">' + body + '</div>' + footer(e);
+}
+
+var STEPS = [
+  { name: 'Idea', lead: 'What it is, and how it should sound.' },
+  { name: 'Words', lead: 'What is sung, in sections.' },
+  { name: 'Sound', lead: 'How the planner writes it and how it is performed.' },
+  { name: 'Score', lead: 'The melody and chords YuE2 wrote, to read and change before it is sung.' },
+  { name: 'Make it', lead: 'A last look before it goes to the engine.' }
+];
+function editorB(e) {
+  var steps = STEPS.map(function (s, i) {
+    var name = i === 0 && e.kind === 'cover' ? 'Recording' : (i === 1 && e.kind === 'instrumental' ? 'Structure' : s.name);
+    return '<button data-step="' + i + '" class="' + (i === step ? 'on' : '') + '"><span class="n">' + (i + 1) + '</span>' + name + '</button>';
+  }).join('');
+  var inner;
+  if (step === 0) { inner = '<div class="narrow">' + field('Title', '<input type="text" value="' + esc(e.title) + '" placeholder="Leave blank and the first lyric line is used">') + songPart(e) + '</div>'; }
+  else if (step === 1) { inner = '<div class="narrow" style="display:flex;flex-direction:column;height:100%">' + wordsPart(e) + '</div>'; }
+  else if (step === 2) { inner = '<div class="narrow">' + soundPart(e) + '</div>'; }
+  else if (step === 3) { inner = scorePart(e); }
+  else {
+    inner = '<dl class="review">' +
+      [['Title', esc(e.title) || '<span class="sub">from the first lyric line</span>'], ['Style', esc(e.style)],
+       ['Words', lyricLines(e.lyrics).filter(function (l) { return !/^\[.*\]$/.test(l); }).length + ' lines'],
+       ['Harmony', HARMONY[e.harmony || 0]], ['Plan variety', e.variety || 'normal'],
+       ['Style LoRA', e.style_lora ? esc(e.style_lora.replace(/\.safetensors$/, '')) : 'none'],
+       ['Score', e.abc && e.abc.length > 50 ? 'ready, ' + scoreFacts(e.abc).bars + ' bars' : 'written first, then sung']]
+        .map(function (p) { return '<dt>' + p[0] + '</dt><dd>' + p[1] + '</dd>'; }).join('') + '</dl>';
+  }
+  var s = STEPS[step];
+  return '<div class="ed-head"><span class="bar ' + e.kind + '"></span><strong style="font-size:17px">' +
+    (e.id ? esc(e.title) : 'New ' + (e.kind === 'instrumental' ? 'instrumental' : e.kind)) + '</strong>' +
+    '<button class="ed-x" data-close style="margin-left:auto">&times;</button></div>' + readOnlyNote(e) +
+    '<div class="ed-body" style="padding:0"><div class="ed-b"><div class="steps">' + steps +
+    '<div class="hint">Every step can be visited in any order. <b>Make it</b> shows what will be sent.</div></div>' +
+    '<div class="stepbody"><h3>' + s.name + '</h3><p class="lead">' + s.lead + '</p>' + inner + '</div></div></div>' +
+    footer(e, true);
+}
+
+function readOnlyNote(e) {
+  return e.status === 'queued' || e.status === 'running'
+    ? '<div class="ed-ro">This take is ' + (e.status === 'running' ? 'rendering' : 'waiting in the queue') + ', so it can be read but not changed.</div>' : '';
+}
+function footer(e, stepper) {
+  var hasScore = e.abc && e.abc.length > 50;
+  var main = e.kind === 'cover' ? (hasScore ? 'Render this cover' : 'Create cover') : (hasScore ? 'Render this score' : 'Write score plan');
+  return '<div class="ed-foot">' +
+    (stepper ? '<button class="ghost" data-prev' + (step === 0 ? ' disabled' : '') + '>Back</button><button class="ghost" data-next' + (step === STEPS.length - 1 ? ' disabled' : '') + '>Next</button>' : '') +
+    (e.kind !== 'cover' && !hasScore ? '<label class="check" style="margin:0"><input type="checkbox"> render as soon as the plan is ready</label>' : '') +
+    '<button class="ghost" data-close style="margin-left:auto">Cancel</button>' +
+    '<button class="primary ' + e.kind + '" style="margin-left:0">' + main + '</button></div>';
+}
+
+function paintEditor() {
+  var ed = document.getElementById('ed');
+  ed.innerHTML = dir === 'A' ? editorA(editing) : editorB(editing);
+  if (editing.status === 'queued' || editing.status === 'running') {
+    Array.prototype.forEach.call(ed.querySelectorAll('.ed-body input, .ed-body textarea, .ed-body select, .ed-body .chip, .ed-foot .primary'),
+      function (el) { el.disabled = true; });
+  }
+}
+function openEditor(take, kind, where) {
+  editing = take || { kind: kind, title: '', style: '', lyrics: '', harmony: 0, variety: 'normal', realaudio: true, abc: '' };
+  tab = where === 'score' ? 'score' : 'song';
+  step = where === 'score' ? 3 : (where === 'words' ? 1 : 0);
+  paintEditor();
+  document.getElementById('ed-back').classList.remove('hidden');
+}
+
+document.addEventListener('click', function (ev) {
+  var el = ev.target.closest('[data-id],[data-new],[data-open],#edit-take,[data-close],[data-tab],[data-step],[data-prev],[data-next],[data-dir]');
+  if (!el) { if (ev.target.id === 'ed-back') { document.getElementById('ed-back').classList.add('hidden'); } return; }
+  if (el.dataset.dir) {
+    dir = el.dataset.dir;
+    document.querySelectorAll('#dir button').forEach(function (b) { b.classList.toggle('on', b.dataset.dir === dir); });
+    if (!document.getElementById('ed-back').classList.contains('hidden')) { paintEditor(); }
+  } else if (el.dataset.id) { select(takes.filter(function (t) { return t.id === el.dataset.id; })[0]); }
+  else if (el.dataset.new) { openEditor(null, el.dataset.new); }
+  else if (el.dataset.open) { openEditor(selected, null, el.dataset.open); }
+  else if (el.id === 'edit-take') { openEditor(selected); }
+  else if ('close' in el.dataset) { document.getElementById('ed-back').classList.add('hidden'); }
+  else if (el.dataset.tab) { tab = el.dataset.tab; paintEditor(); }
+  else if (el.dataset.step) { step = Number(el.dataset.step); paintEditor(); }
+  else if ('prev' in el.dataset) { step = Math.max(0, step - 1); paintEditor(); }
+  else if ('next' in el.dataset) { step = Math.min(STEPS.length - 1, step + 1); paintEditor(); }
+});
+document.addEventListener('keydown', function (ev) {
+  if (ev.key === 'Escape') { document.getElementById('ed-back').classList.add('hidden'); }
+});
+
+fetch('/api/takes?limit=300').then(function (r) { return r.json(); }).then(function (all) {
+  takes = all;
+  var pick = takes.filter(function (t) { return t.kind === 'song' && t.abc && t.style_lora && t.status === 'done'; })[0] || takes[0];
+  select(pick);
+});
+</script>
+</body>
+</html>
