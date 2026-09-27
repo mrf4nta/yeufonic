@@ -222,7 +222,13 @@ async function pollState() {
     if (corporaRow) { corporaRow.classList.toggle('hidden', !trainingAvailable()); }
     paintCorporaBadge();
     lockGpuControls();
-    if (engine.online && engine.compat && engine.compat.ok) {
+    pill.title = '';
+    if (engine.stuck) {
+      // Its job thread died and it stayed up: it takes jobs and never runs them.
+      pill.className = 'pill pill-off';
+      pill.textContent = 'Engine needs a restart';
+      pill.title = 'A job ran out of GPU memory and the engine stopped running jobs. Restart the engine; jobs wait until then.';
+    } else if (engine.online && engine.compat && engine.compat.ok) {
       pill.className = 'pill pill-on';
       pill.textContent = 'Engine ready' + (engine.gpu ? ' \u00b7 ' + Math.round(engine.gpu.vram_free / 1073741824) + ' GB free' : '');
     } else if (engine.starting) {

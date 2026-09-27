@@ -48,8 +48,11 @@ cannot creep back in.
   another reason says the engine stopped during it. The engine notes the error that kills its job
   thread for the app before it goes, and the app also keeps the error the engine sends for each
   job, so this does not rely on reading the engine's log, which is kept only as a fallback for an
-  engine built before this. Rebuild the engine to get it. The Train window warns before a run when
-  less GPU memory is free than training needs. Fixes #12.
+  engine built before this. Rebuild the engine to get it. When the engine stays up without its
+  job thread, still listing the dead job as running, the job fails at once instead of waiting out
+  its time limit, the header says **Engine needs a restart**, and new jobs wait for the restart
+  instead of queueing behind the dead one. The Train window warns before a run when less GPU
+  memory is free than training needs. Fixes #12.
 - The engine's start-up message, "To see the GUI go to", gave the engine's own address, and on
   Docker as 0.0.0.0, which a browser cannot open. It now gives the app's. On Docker the app's port
   can be moved with `APP_PORT` in `.env`, and the message follows it. Rebuild the engine to get

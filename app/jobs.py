@@ -401,6 +401,12 @@ async def _wait_for(kind: str, ref_id: str, prompt_id: str) -> tuple[str, dict |
             state = await ENGINE.prompt_state(prompt_id)
             if state == "running" and deadline is None:
                 deadline = now + limit
+            elif state == "running" and _engine_fault(prompt_id):
+                # Its thread died and the engine stayed up, still listing the job as
+                # running: nothing more will happen to it, or to anything after it.
+                ENGINE.stuck_on = prompt_id
+                log.warning("the engine's job thread died on %s; the engine needs a restart", prompt_id)
+                return "dead", None
             elif state == "gone":
                 # Finished between the two calls, or the engine restarted.
                 try:
@@ -513,7 +519,8 @@ async def run_job(kind: str, ref_id: str) -> None:
             if outcome in ("cancelled", "timeout"):
                 await ENGINE.cancel(prompt_id)
             messages = {"cancelled": "cancelled", "timeout": "timed out while the engine was working",
-                        "lost": _lost(kind, started, prompt_id) or "the engine lost this job, or stopped answering"}
+                        "lost": _lost(kind, started, prompt_id) or "the engine lost this job, or stopped answering",
+                        "dead": (_lost(kind, started, prompt_id) or "the engine stopped running jobs.") + RESTART}
             fail(kind, ref_id, messages[outcome])
             return
         await _finish(kind, ref_id, record, job, started)
@@ -985,9 +992,10 @@ def _engine_failure(kind: str, job: dict) -> str | None:
 ENGINE_FAULT = "yeufonic/engine-fault.json"
 
 
-def _engine_fault(since: float, prompt_id: str) -> dict | None:
+def _engine_fault(prompt_id: str, since: float = 0.0) -> dict | None:
     """The engine's note of the error that killed its job thread, if it is about
-    this job: the job it was running, written after this one was sent."""
+    this job: the job it was running, written after this one was sent. A note with
+    no job id is taken on its time alone."""
     if not config.ENGINE_OUTPUT_DIR:
         return None
     try:
@@ -998,7 +1006,12 @@ def _engine_fault(since: float, prompt_id: str) -> dict | None:
         return None
     if fault.get("prompt_id") and fault["prompt_id"] != prompt_id:
         return None
+    if not fault.get("prompt_id") and not since:
+        return None
     return fault
+
+
+RESTART = " The engine can't run anything else until it is restarted."
 
 
 def _lost(kind: str, since: float, prompt_id: str) -> str | None:
@@ -1008,7 +1021,7 @@ def _lost(kind: str, since: float, prompt_id: str) -> str | None:
     sent = ENGINE.failure(prompt_id) if hasattr(ENGINE, "failure") else None
     if sent:
         return out_of_memory(kind) if OUT_OF_MEMORY.search(sent) else "engine error: " + sent
-    fault = _engine_fault(since, prompt_id)
+    fault = _engine_fault(prompt_id, since)
     if fault:
         if fault.get("out_of_memory"):
             return out_of_memory(kind)
@@ -1105,6 +1118,8 @@ async def _run_graph(kind: str, ref_id: str, graph: dict) -> dict:
         if outcome != "done":
             if outcome in ("cancelled", "timeout"):
                 await ENGINE.cancel(prompt_id)
+            if outcome == "dead":
+                raise RuntimeError((_lost(kind, since, prompt_id) or "the engine stopped running jobs.") + RESTART)
             raise RuntimeError({"cancelled": "cancelled", "timeout": "timed out"}.get(outcome)
                                or _lost(kind, since, prompt_id) or "the engine lost the job")
         if job.get("status", {}).get("status_str") != "success":
@@ -1505,6 +1520,10 @@ async def wait_for_engine() -> None:
     next; an engine that stays offline is left to fail the job as before."""
     while ENGINE.starting:
         await asyncio.sleep(1)
+    # An engine whose job thread died would take the job and never run it: wait for
+    # the restart instead, which the keeper notices.
+    while getattr(ENGINE, "stuck_on", None):
+        await asyncio.sleep(2)
     for _ in range(15):
         if not ENGINE.online or ENGINE.options_loaded:
             return

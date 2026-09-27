@@ -872,6 +872,7 @@ def state() -> dict:
             "url": config.ENGINE_URL,
             "online": ENGINE.online,
             "starting": ENGINE.starting,
+            "stuck": bool(ENGINE.stuck_on),
             "error": ENGINE.last_error,
             "compat": ENGINE.compat,
             "queue": ENGINE.queue_counts,

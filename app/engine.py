@@ -218,6 +218,9 @@ class Engine:
         # answering: a job it lost since then was lost to that.
         self.oom_at = 0.0
         self.offline_at = 0.0
+        # A job whose thread died while the engine stayed up: it still lists the job as
+        # running, and runs nothing else, until it is restarted.
+        self.stuck_on: str | None = None
         self.options: dict[str, Any] = {"checkpoints": [], "audio_encoders": [], "harmony": False, "lyrics": False,
                                         "instrumental": False, "trainer": False}
         self.options_loaded = False
@@ -287,6 +290,10 @@ class Engine:
         self._contact()
         self.stats = stats.json()
         raw = queue.json()
+        # Restarted: the dead job is no longer listed, and the engine runs jobs again.
+        if self.stuck_on and self.stuck_on not in {item[1] for item in raw.get("queue_running", []) if len(item) > 1}:
+            log.info("the engine no longer lists job %s, so it has been restarted", self.stuck_on)
+            self.stuck_on = None
         self.queue_counts = {"running": len(raw.get("queue_running", [])), "pending": len(raw.get("queue_pending", []))}
         self.queue = queue_items(raw, self._running_since, time.time())
         try:

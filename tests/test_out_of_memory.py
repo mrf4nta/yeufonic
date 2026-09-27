@@ -205,3 +205,67 @@ def test_the_startup_message_points_at_the_app(monkeypatch):
     other = logging.LogRecord("root", logging.INFO, __file__, 1, "Starting server", None, None)
     watch.PointAtYeufonic().filter(other)
     assert other.getMessage() == "Starting server"
+
+
+# ---------------------------------------------------------------- an engine left without a job thread
+
+def test_a_job_whose_engine_thread_died_fails_at_once_and_marks_the_engine(monkeypatch, tmp_path):
+    """The engine stayed up, still listing the job as running: without the note the
+    wait would last until the time limit, hours for training."""
+    monkeypatch.setattr(jobs.config, "ENGINE_OUTPUT_DIR", tmp_path)
+    take = make_take(status="queued")
+    engine = use(monkeypatch, FakeEngine([], started=True, state="running"))
+    engine.stuck_on = None
+    write_fault(tmp_path, prompt_id="pid", at=time.time() + 1, out_of_memory=True, type="AcceleratorError", message="x")
+    started = time.time()
+    asyncio.run(jobs.run_job("render", take["id"]))
+    error = one("SELECT error FROM takes WHERE id = ?", (take["id"],))["error"]
+    assert error.startswith("the GPU ran out of memory.") and error.endswith("until it is restarted.")
+    assert engine.stuck_on == "pid" and time.time() - started < 2
+
+
+def test_training_on_an_engine_without_a_job_thread_says_to_restart(monkeypatch, tmp_path):
+    monkeypatch.setattr(jobs.config, "ENGINE_OUTPUT_DIR", tmp_path)
+    engine = use(monkeypatch, FakeEngine([], started=True, state="running"))
+    engine.stuck_on = None
+    write_fault(tmp_path, prompt_id="pid", at=time.time() + 1, out_of_memory=True, type="AcceleratorError", message="x")
+    with pytest.raises(RuntimeError, match="longest songs.*restarted"):
+        asyncio.run(jobs._run_graph("train", "run1", {}))
+
+
+def test_jobs_wait_for_an_engine_that_needs_a_restart(monkeypatch):
+    engine = use(monkeypatch, FakeEngine([]))
+    engine.starting, engine.online, engine.options_loaded, engine.stuck_on = False, True, True, "pid"
+    waits = []
+
+    async def sleep(seconds):
+        waits.append(seconds)
+        if len(waits) == 3:
+            engine.stuck_on = None
+    monkeypatch.setattr(jobs.asyncio, "sleep", sleep)
+    asyncio.run(jobs.wait_for_engine())
+    assert len(waits) == 3
+
+
+def test_the_mark_clears_once_the_restarted_engine_no_longer_lists_the_job():
+    import httpx
+    running = [[0, "pid", {}, {}, []]]
+
+    def answer(request):
+        if request.url.path == "/queue":
+            return httpx.Response(200, json={"queue_running": running, "queue_pending": []})
+        if request.url.path == "/system_stats":
+            return httpx.Response(200, json={"devices": []})
+        return httpx.Response(404)
+
+    async def run():
+        engine = Engine("http://engine")
+        engine.client = httpx.AsyncClient(base_url="http://engine", transport=httpx.MockTransport(answer))
+        engine.stuck_on = "pid"
+        await engine.refresh_status()
+        still = engine.stuck_on
+        running.clear()
+        await engine.refresh_status()
+        await engine.client.aclose()
+        return still, engine.stuck_on
+    assert asyncio.run(run()) == ("pid", None)
