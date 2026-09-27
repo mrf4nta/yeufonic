@@ -25,6 +25,9 @@ services:
     # Large" before anything read it.  Two gigabytes covers any source a person would
     # hand the app, and MAX_UPLOAD_MB on the app side is set to match.
     command: python main.py --listen 0.0.0.0 --port 8188 --max-upload-size=${ENGINE_MAX_UPLOAD_MB:-2048}
+    # Where the engine's start-up message sends people: the app, not the engine.
+    environment:
+      YEUFONIC_APP_URL: http://localhost:8090
     # Localhost only, for debugging and for the optional ComfyUI UI.  The app
     # reaches the engine by service name over the compose network.
     ports:

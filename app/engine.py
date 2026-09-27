@@ -477,6 +477,10 @@ class Engine:
             "elapsed": round(time.time() - rec.get("started", time.time()), 1),
         }
 
+    def failure(self, prompt_id: str) -> str | None:
+        """The error the engine sent for this job, if it sent one."""
+        return (self.progress.get(prompt_id) or {}).get("error")
+
     def forget(self, prompt_id: str) -> None:
         self.progress.pop(prompt_id, None)
         self.graphs.pop(prompt_id, None)
@@ -565,3 +569,10 @@ class Engine:
             _log_training(rec, data)
         elif kind in ("execution_error", "execution_interrupted"):
             rec["frac"] = 0.0
+            if kind == "execution_error":
+                # Sent the moment the engine catches the error, so it is kept even
+                # when the job's history is lost to a restart.
+                node = data.get("node_type") or ""
+                kind_name = str(data.get("exception_type") or "error").rsplit(".", 1)[-1]
+                text = " ".join(str(data.get("exception_message") or "").split())
+                rec["error"] = ((f"{node}: " if node else "") + f"{kind_name}: {text}")[:300]

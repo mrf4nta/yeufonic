@@ -513,7 +513,7 @@ async def run_job(kind: str, ref_id: str) -> None:
             if outcome in ("cancelled", "timeout"):
                 await ENGINE.cancel(prompt_id)
             messages = {"cancelled": "cancelled", "timeout": "timed out while the engine was working",
-                        "lost": _lost(kind, started) or "the engine lost this job, or stopped answering"}
+                        "lost": _lost(kind, started, prompt_id) or "the engine lost this job, or stopped answering"}
             fail(kind, ref_id, messages[outcome])
             return
         await _finish(kind, ref_id, record, job, started)
@@ -981,9 +981,38 @@ def _engine_failure(kind: str, job: dict) -> str | None:
     return out_of_memory(kind) if OUT_OF_MEMORY.search(_engine_error(job)) else None
 
 
-def _lost(kind: str, since: float) -> str | None:
-    """Why the engine came back without a job, when it is known: it logged running
-    out of GPU memory, or at least stopped answering, after the job was sent."""
+# Written by the engine as its job thread dies (engine/custom_nodes/yue2_harmony/watch.py).
+ENGINE_FAULT = "yeufonic/engine-fault.json"
+
+
+def _engine_fault(since: float, prompt_id: str) -> dict | None:
+    """The engine's note of the error that killed its job thread, if it is about
+    this job: the job it was running, written after this one was sent."""
+    if not config.ENGINE_OUTPUT_DIR:
+        return None
+    try:
+        fault = json.loads((config.ENGINE_OUTPUT_DIR / ENGINE_FAULT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(fault, dict) or float(fault.get("at") or 0) < since:
+        return None
+    if fault.get("prompt_id") and fault["prompt_id"] != prompt_id:
+        return None
+    return fault
+
+
+def _lost(kind: str, since: float, prompt_id: str) -> str | None:
+    """Why the engine came back without a job, from the surest word first: the error
+    it sent for the job, then its note as the job thread died, then, from an engine
+    built before that note, its log, and last that it stopped answering."""
+    sent = ENGINE.failure(prompt_id) if hasattr(ENGINE, "failure") else None
+    if sent:
+        return out_of_memory(kind) if OUT_OF_MEMORY.search(sent) else "engine error: " + sent
+    fault = _engine_fault(since, prompt_id)
+    if fault:
+        if fault.get("out_of_memory"):
+            return out_of_memory(kind)
+        return f"the engine stopped during this job: {fault.get('type')}: {fault.get('message')}"
     if getattr(ENGINE, "oom_at", 0) >= since:
         return out_of_memory(kind)
     if getattr(ENGINE, "offline_at", 0) >= since:
@@ -1077,7 +1106,7 @@ async def _run_graph(kind: str, ref_id: str, graph: dict) -> dict:
             if outcome in ("cancelled", "timeout"):
                 await ENGINE.cancel(prompt_id)
             raise RuntimeError({"cancelled": "cancelled", "timeout": "timed out"}.get(outcome)
-                               or _lost(kind, since) or "the engine lost the job")
+                               or _lost(kind, since, prompt_id) or "the engine lost the job")
         if job.get("status", {}).get("status_str") != "success":
             raise RuntimeError(_engine_failure(kind, job) or "engine error: " + _engine_error(job))
         return job

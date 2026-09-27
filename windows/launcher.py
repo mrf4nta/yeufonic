@@ -609,7 +609,9 @@ class Launcher:
             [str(engine_python), "-s", str(COMFY / "main.py"), "--windows-standalone-build",
              "--disable-auto-launch", "--listen", "127.0.0.1", "--port", str(self.engine_port)],
             cwd=str(COMFY), stdout=engine_log.open("w", encoding="utf-8"), stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+            stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW,
+            # Its start-up message then sends people to the app, not the engine.
+            env=dict(os.environ, YEUFONIC_APP_URL=self.url))
 
         env = dict(os.environ)
         tools = HERE / "tools"

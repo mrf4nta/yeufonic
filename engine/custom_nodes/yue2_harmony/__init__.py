@@ -274,5 +274,12 @@ class YuE2GenerateABCHarmony:
         return (clip.decode(ids),)
 
 
+# What the engine tells the app about itself: see watch.py. Never at the cost of the node.
+try:
+    from . import watch
+    watch.install()
+except Exception:  # noqa: BLE001
+    pass
+
 NODE_CLASS_MAPPINGS = {"YuE2GenerateABCHarmony": YuE2GenerateABCHarmony}
 NODE_DISPLAY_NAME_MAPPINGS = {"YuE2GenerateABCHarmony": "YuE2 Generate ABC (harmony)"}

@@ -1,0 +1,100 @@
+"""Yeufonic: what the engine tells the app about itself.
+
+Carried with the harmony node, so the Docker image and the Windows install both
+have it.  Nothing here adds a node.
+
+A job thread that dies on an error ComfyUI did not catch takes the process with it,
+and the app never hears why.  Running out of GPU memory does this: ComfyUI catches
+the first failure, frees memory to recover, and when freeing runs out too the job
+thread dies before it can send its error.  So the error is written, as the thread
+dies, to yeufonic/engine-fault.json in the output folder the app shares, and the app
+can say what happened to the job it lost.
+
+ComfyUI's "To see the GUI go to" at start-up sends people to the engine's own page.
+It is reworded to send them to Yeufonic, at YEUFONIC_APP_URL when that is set.
+"""
+import json
+import logging
+import os
+import threading
+import time
+
+FAULT = "engine-fault.json"
+
+
+def out_of_memory(exc):
+    """ComfyUI's own test (comfy.model_management.is_oom), without its side effect of
+    clearing CUDA's pending error, along the chain of errors behind this one."""
+    try:
+        import comfy.model_management as mm
+        oom = getattr(mm, "OOM_EXCEPTION", None)
+    except Exception:
+        oom = None
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if oom is not None and isinstance(exc, oom):
+            return True
+        if getattr(exc, "error_code", None) == 2 or "out of memory" in str(exc).lower():
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+def running_prompt():
+    try:
+        import server
+        return getattr(server.PromptServer.instance, "last_prompt_id", None)
+    except Exception:
+        return None
+
+
+def output_folder():
+    import folder_paths
+    return folder_paths.get_output_directory()
+
+
+def write_fault(exc):
+    """Written whole or not at all: a half-written note is worse than none."""
+    try:
+        folder = os.path.join(output_folder(), "yeufonic")
+        os.makedirs(folder, exist_ok=True)
+        record = {"prompt_id": running_prompt(), "at": time.time(), "out_of_memory": out_of_memory(exc),
+                  "type": type(exc).__name__, "message": " ".join(str(exc).split())[:300]}
+        path = os.path.join(folder, FAULT)
+        with open(path + ".tmp", "w", encoding="utf-8") as handle:
+            json.dump(record, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # The engine may run as root and the app as its user, who must read it.
+        os.chmod(path + ".tmp", 0o644)
+        os.replace(path + ".tmp", path)
+    except Exception:
+        pass
+
+
+_previous_hook = threading.excepthook
+
+
+def job_thread_died(args):
+    thread = getattr(args, "thread", None)
+    if thread is not None and "prompt_worker" in (thread.name or "") and args.exc_value is not None:
+        write_fault(args.exc_value)
+    _previous_hook(args)
+
+
+class PointAtYeufonic(logging.Filter):
+    def filter(self, record):
+        message = record.msg if isinstance(record.msg, str) else ""
+        if message.startswith("To see the GUI go to:"):
+            engine = message.split(":", 1)[1].strip()
+            app = os.environ.get("YEUFONIC_APP_URL")
+            record.msg = f"Yeufonic's engine is running at {engine}. " + (
+                f"Open Yeufonic at {app}." if app else "Open Yeufonic, not this address.")
+            record.args = ()
+        return True
+
+
+def install():
+    threading.excepthook = job_thread_died
+    logging.getLogger().addFilter(PointAtYeufonic())

@@ -39,8 +39,13 @@ cannot creep back in.
 - Running out of GPU memory now says so. A job the engine failed that way said only the engine's
   CUDA error, and one lost when the engine crashed and restarted said "the engine lost the job".
   Both now say the GPU ran out of memory, with what to try, and a job lost to a restart for
-  another reason says the engine stopped during it. The Train window warns before a run when less
-  GPU memory is free than training needs. Fixes #12.
+  another reason says the engine stopped during it. The engine notes the error that kills its job
+  thread for the app before it goes, and the app also keeps the error the engine sends for each
+  job, so this does not rely on reading the engine's log, which is kept only as a fallback for an
+  engine built before this. Rebuild the engine to get it. The Train window warns before a run when
+  less GPU memory is free than training needs. Fixes #12.
+- The engine's start-up message pointed at its own page ("To see the GUI go to…"). It now says
+  to open Yeufonic, at the app's address.
 - On Docker, the app ran as user and group 1000 whatever the host's ids were, so on a host where
   yours differ its files belonged to a group, and perhaps a user, that does not exist there.
   `compose.yml` now reads `APP_UID` and `APP_GID` from `.env`, and `scripts/fetch-models.sh`
