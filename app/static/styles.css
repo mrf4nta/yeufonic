@@ -1554,16 +1554,19 @@ button.take-status.sung:hover { background: rgba(251, 191, 36, 0.16); }
 /* ------------------------------------------------ folding the take panel away
    A chevron halfway down the gap beside the panel. Folded, the panel's column goes to
    nothing and the takes take the width; the chevron stays, pointing the other way. */
-main { position: relative; transition: grid-template-columns 0.2s ease; }
+/* No animation of the column itself: every frame of it lays out every card again, and
+   cards jump rows mid-way. The width changes at once; the panel fades in as it opens. */
+main { position: relative; }
 main.sheet-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
-main.sheet-collapsed > .sheet-panel { visibility: hidden; padding-left: 0; padding-right: 0; border-width: 0;
-  transition: visibility 0s 0.2s; }
+main.sheet-collapsed > .sheet-panel { visibility: hidden; padding-left: 0; padding-right: 0; border-width: 0; }
+main:not(.sheet-collapsed) > .sheet-panel { animation: sheet-in 0.18s ease-out; }
+@keyframes sheet-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { main:not(.sheet-collapsed) > .sheet-panel { animation: none; } }
 .sheet-toggle { position: absolute; top: 50%; left: 433px; transform: translate(-50%, -50%); z-index: 6;
   width: 24px; height: 48px; padding: 0; border-radius: 12px; border: 1px solid var(--line);
-  background: var(--card-2); color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: left 0.2s ease; }
+  background: var(--card-2); color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .sheet-toggle:hover { color: var(--text); border-color: rgba(123, 92, 255, 0.6); }
-.sheet-toggle svg { width: 16px; height: 16px; transition: transform 0.2s ease; }
+.sheet-toggle svg { width: 16px; height: 16px; }
 main.sheet-collapsed .sheet-toggle { left: 33px; }
 main.sheet-collapsed .sheet-toggle svg { transform: rotate(180deg); }
 /* Stacked columns on a narrow window: nothing to fold. */
