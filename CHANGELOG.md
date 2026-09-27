@@ -23,6 +23,15 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Added
+
+- **Run all** in the corpus window analyses, exports and trains one after the other, on the server,
+  so a big corpus needs no one to wait for each step. It asks about an earlier LoRA first, analyses
+  only what still needs it, leaves out and names any song whose analysis fails, and waits for
+  anything already using the engine before it trains.
+
 ## 0.0.3 (2026-09-27)
 
 ### Changed

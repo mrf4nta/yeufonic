@@ -136,7 +136,8 @@ will not end.
 Open **Corpora** from the menu. The app prepares a **corpus**: a folder of songs. Typically this
 would be of an artist or genre to use when training your LoRA. Each track gets its vocal
 separated, its key, tempo and sections found and its lyrics drafted. You then export it as a
-training set, and train a style LoRA from it. Training holds the GPU until it finishes, and the
+training set, and train a style LoRA from it. **Run all** does the three one after the other, for
+a big corpus you would rather not wait on. Training holds the GPU until it finishes, and the
 LoRA appears in the Style LoRA list, with a style chip for each song it learned from. Training
 also saves a checkpoint every 50 steps, folded under its LoRA in the list, and a corpus's **Edit**
 form lists them run by run, with their sizes, to delete the ones you don't need. Each gives its own

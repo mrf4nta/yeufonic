@@ -3893,13 +3893,25 @@ function renderIdentityActions(data) {
     trainHtml = '<span class="pipeline-sep">\u203a</span><button id="identity-train" class="' + trainClass + '"' + trainDisabled + ' title="' + trainTitle + '">' + trainLabel + '</button>';
   }
 
+  // 4. Run all: the three, one after the other, on the server. It stays plain, so it
+  // still stands out once the three have turned green.
+  var runAll = data.run_all || null;
+  var chaining = Boolean(runAll && ['analysing', 'exporting', 'waiting'].indexOf(runAll.stage) >= 0);
+  var runAllHtml = '';
+  if (trainingAvailable()) {
+    var runAllBusy = chaining || isAnalysing || isExporting || Boolean(State.training);
+    runAllHtml = '<button id="identity-run-all" class="ghost run-all"' + (runAllBusy ? ' disabled' : '') +
+      ' title="Analyse, export and train, one after the other, without waiting for each">' +
+      (chaining ? 'Running all\u2026' : 'Run all') + '</button>';
+  }
+
   return '<div class="identity-actions persona-actions">' +
     '<div class="identity-pipeline">' +
       '<button id="identity-analyse" class="' + analyseClass + '"' + (isAnalysing ? ' disabled' : '') + ' title="' + analyseTitle + '">' + analyseLabel + '</button>' +
-      (isAnalysing ? '<button id="identity-stop" class="ghost small" title="Stop the analysis. Finished steps are kept, and Analyse carries on from here">Stop</button>' : '') +
+      (isAnalysing && !chaining ? '<button id="identity-stop" class="ghost small" title="Stop the analysis. Finished steps are kept, and Analyse carries on from here">Stop</button>' : '') +
       '<span class="pipeline-sep">\u203a</span>' +
       '<button id="identity-export" class="' + exportClass + '"' + exportDisabled + ' title="' + exportTitle + '">' + exportLabel + '</button>' +
-      trainHtml +
+      trainHtml + runAllHtml +
     '</div>' +
     '<div class="identity-utils">' +
       '<button id="identity-edit-open" class="ghost small">Edit</button>' +
@@ -3911,17 +3923,48 @@ function renderIdentityActions(data) {
     (isAnalysing ? '<div class="identity-working">' + identityWorking(data) + '</div>' : '') +
     (isExporting ? '<div class="identity-working">' + identityExporting(data.exporting) + '</div>' : '') +
     (isTraining ? '<div class="identity-working">' + identityTraining(State.training) + '</div>' : '') +
+    identityRunAll(runAll) +
   '</div>';
+}
+
+/* Where Run all has got to, with its Stop, and the songs it had to leave out. */
+function identityRunAll(run) {
+  if (!run) { return ''; }
+  var next = { analysing: 'analysing, then export and train', exporting: 'exporting, then train',
+               waiting: 'waiting for the engine to be free, then train' }[run.stage];
+  var html = '';
+  if (next) {
+    html += '<div class="identity-working">Run all: ' + next + '. ' +
+      '<button id="identity-run-all-stop" class="ghost small" title="Stop here. Finished steps are kept">Stop</button></div>';
+  } else if (run.stage === 'failed') {
+    html += '<div class="identity-working bad">Run all stopped: ' + esc(run.error || 'unknown error') + '</div>';
+  }
+  if (run.left_out && run.left_out.length && run.stage !== 'analysing') {
+    html += '<div class="identity-working muted">Left out, as their analysis did not finish: ' +
+      esc(run.left_out.join(', ')) + '.</div>';
+  }
+  return html;
 }
 
 /* Training, from the corpus window: what it will do, and what happens to a LoRA an
    earlier run left under the same name -- kept under a dated name, or deleted. */
-function openTrain() {
+function openTrain(all) {
   var data = IDENTITY.data || {};
   var included = (data.songs || []).filter(function (song) { return song.include; }).length;
-  $('train-heading').textContent = 'Train a LoRA from ' + (data.name || 'this corpus');
-  $('train-about').textContent = 'From ' + included + ' song' + (included === 1 ? '' : 's') + '. It can take a long time, and the GPU ' +
-    'is not available to the app until it finishes. Progress shows here and on the main screen, where you can stop it.';
+  State.trainAll = Boolean(all);
+  $('train-heading').textContent = (all ? 'Run all for ' : 'Train a LoRA from ') + (data.name || 'this corpus');
+  if (all) {
+    var unchecked = included - ((data.summary && data.summary.checked) || 0);
+    $('train-about').textContent = 'Analyses the ' + included + ' included song' + (included === 1 ? '' : 's') +
+      ' where they still need it, writes the training set, then trains a LoRA from it, one after the other. It carries on ' +
+      'with this page closed. A song whose analysis fails is left out, and named.' +
+      (unchecked > 0 ? ' ' + unchecked + ' song' + (unchecked === 1 ? '\u2019s lyrics haven\u2019t' : 's\u2019 lyrics haven\u2019t') +
+        ' been checked: their drafts are used as they are.' : '');
+  } else {
+    $('train-about').textContent = 'From ' + included + ' song' + (included === 1 ? '' : 's') + '. It can take a long time, and the GPU ' +
+      'is not available to the app until it finishes. Progress shows here and on the main screen, where you can stop it.';
+  }
+  $('train-go').textContent = all ? 'Run all' : 'Train';
   var previous = data.previous_lora;
   $('train-previous').classList.toggle('hidden', !previous);
   if (previous) {
@@ -3970,6 +4013,14 @@ async function runTrain() {
   if (data.previous_lora) { body.previous = document.querySelector('input[name="train-previous"]:checked').value; }
   $('train-go').disabled = true;
   try {
+    if (State.trainAll) {
+      await api('/api/identities/' + IDENTITY.id + '/run-all', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      closeTrain();
+      pollIdentity();
+      return;
+    }
     var started = await api('/api/identities/' + IDENTITY.id + '/train', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
@@ -4401,6 +4452,20 @@ async function identityClick(event) {
   }
   if (target.closest('#identity-train') || target.closest('#persona-train')) {
     openTrain();
+    return;
+  }
+  if (target.closest('#identity-run-all')) {
+    openTrain(true);
+    return;
+  }
+  if (target.closest('#identity-run-all-stop')) {
+    try {
+      await api('/api/identities/' + IDENTITY.id + '/run-all/stop', { method: 'POST' });
+    } catch (err) {
+      var said = $('identity-status');
+      if (said) { said.textContent = err.message; said.className = 'status bad'; }
+    }
+    pollIdentity();
     return;
   }
   if (target.closest('#identity-install') || target.closest('#persona-install')) {

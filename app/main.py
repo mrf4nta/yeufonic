@@ -1694,6 +1694,7 @@ def _identity_view(identity: dict) -> dict:
     return {**identity, "songs": songs, "busy": busy,
             "working": jobs.identity_working({s["id"] for s in songs}) if busy else None,
             "exporting": EXPORTING.get(identity["id"]),
+            "run_all": _run_all_view(identity["id"]),
             # A LoRA already trained under this corpus's name, for the Train window to ask about.
             "previous_lora": _previous_lora(identity),
             # Redraft marks the sections from the words, which needs the external LLM.
@@ -1984,6 +1985,8 @@ async def stop_identity(identity_id: str) -> dict:
     """Stop the corpus's analysis, waiting and running, on both lanes.  Finished
     steps are kept, so Analyse carries on from where it stopped."""
     identity = _identity(identity_id)
+    # Run all would otherwise take the stop for the end of the analysis, and export.
+    await _end_run_all(identity_id, "stopped")
     stopped = await jobs.stop_identity_analysis(identity_id)
     log.info("Stopped the analysis of corpus '%s' (%d songs)", identity.get("name") or identity_id, stopped)
     return {"stopped": stopped}
@@ -2343,6 +2346,128 @@ async def _export(identity: dict, view: dict, chosen: list[dict]) -> dict:
 
 
 export_persona = export_identity
+
+
+# ------------------------------------------------------------------------ run all
+# Analyse, export and train, one after the other, for someone who would rather not
+# wait for each: a corpus of many songs takes hours to analyse.  It runs here, so the
+# page can be closed.  Kept in memory: a restart ends it, and the steps it finished
+# are kept, as a restart keeps them anyway.
+RUN_ALL: dict[str, dict] = {}
+
+
+class RunAllIn(BaseModel):
+    # What to do with the LoRA a previous run left under the same name.
+    previous: Literal["keep", "delete"] | None = None
+
+
+def _analysed(song: dict) -> bool:
+    return all(song[field] == "done" for field in IDENTITY_STEPS)
+
+
+@app.post("/api/identities/{identity_id}/run-all")
+async def run_all_identity(identity_id: str, body: RunAllIn | None = None) -> dict:
+    """Start the chain.  Everything it will need to ask is asked now, so it never
+    stops halfway to wait for an answer."""
+    _training_built_in()
+    identity = _identity(identity_id)
+    if (RUN_ALL.get(identity_id) or {}).get("stage") in ("analysing", "exporting", "waiting"):
+        raise HTTPException(409, "Run all is already going for this corpus.")
+    if _training_run():
+        raise HTTPException(409, "A LoRA is already training. Run all when it has finished.")
+    if identity_id in EXPORTING:
+        raise HTTPException(409, "The training set is being written. Run all when it has finished.")
+    if not rows("SELECT id FROM identity_songs WHERE identity_id = ? AND include = 1", (identity_id,)):
+        raise HTTPException(400, "Include some songs first.")
+    if not config.ENGINE_INPUT_DIR:
+        raise HTTPException(503, "The app cannot see the engine's input folder, so it cannot hand it the set.")
+    previous = body.previous if body else None
+    if loras.previous_run(_lora_base(identity), loras.folder()) and previous not in ("keep", "delete"):
+        raise HTTPException(409, f"{_lora_base(identity)} already exists: say whether to keep it or delete it")
+    RUN_ALL[identity_id] = {"stage": "analysing", "since": time.time(), "left_out": [], "error": None}
+    RUN_ALL[identity_id]["task"] = asyncio.create_task(_run_all(identity, previous))
+    log.info("Run all started for corpus '%s'", identity["name"])
+    return _run_all_view(identity_id)
+
+
+@app.post("/api/identities/{identity_id}/run-all/stop")
+async def stop_run_all(identity_id: str) -> dict:
+    """Stop the chain, and the analysis if that is where it is.  Finished steps are
+    kept; a training run it has already started has its own Stop."""
+    _identity(identity_id)
+    await _end_run_all(identity_id, "stopped")
+    return {"stopped": True}
+
+
+async def _end_run_all(identity_id: str, stage: str) -> None:
+    run = RUN_ALL.get(identity_id)
+    if not run or run.get("stage") not in ("analysing", "exporting", "waiting"):
+        return
+    if run["stage"] == "analysing":
+        await jobs.stop_identity_analysis(identity_id)
+    if run["stage"] == "exporting":
+        # Cut short, the training set would be half written: it finishes, then stops.
+        run["stopping"] = True
+        return
+    run.update(stage=stage)
+    task = run.get("task")
+    if task and not task.done() and task is not asyncio.current_task():
+        task.cancel()
+    log.info("Run all %s for corpus %s", stage, identity_id)
+
+
+def _run_all_view(identity_id: str) -> dict | None:
+    run = RUN_ALL.get(identity_id)
+    return {key: value for key, value in run.items() if key not in ("task", "stopping")} if run else None
+
+
+async def _run_all(identity: dict, previous: str | None) -> None:
+    identity_id = identity["id"]
+    run = RUN_ALL[identity_id]
+    try:
+        await analyse_identity(identity_id)
+        # The queue fills and empties song by song; a moment first, so a song queued
+        # a breath ago is seen as waiting rather than the whole thing as done.
+        await asyncio.sleep(3)
+        while _identity_view(_identity(identity_id))["busy"]:
+            await asyncio.sleep(3)
+        view = _identity_view(_identity(identity_id))
+        chosen = [song for song in view["songs"] if song["include"]]
+        ready = [song for song in chosen if _analysed(song)]
+        run["left_out"] = [song["title"] or song["file"] for song in chosen if not _analysed(song)]
+        if not ready:
+            raise RuntimeError("no song could be analysed, so there is nothing to train on")
+
+        run["stage"] = "exporting"
+        EXPORTING[identity_id] = {"done": 0, "total": len(ready), "song": None, "since": time.time()}
+        try:
+            await _export(identity, view, ready)
+        finally:
+            EXPORTING.pop(identity_id, None)
+        if run.get("stopping"):
+            run["stage"] = "stopped"
+            log.info("Run all stopped for corpus '%s' after the export", identity["name"])
+            return
+
+        # Whatever else is using the engine finishes first, as it would if Train
+        # had been pressed by hand and pressed again.
+        run["stage"] = "waiting"
+        while True:
+            try:
+                await train_identity(identity_id, TrainIn(previous=previous))
+                break
+            except HTTPException as exc:
+                if exc.status_code != 409 or "busy" not in exc.detail and "queued" not in exc.detail:
+                    raise RuntimeError(exc.detail) from exc
+                await asyncio.sleep(10)
+        run["stage"] = "training"
+        log.info("Run all for corpus '%s' handed over to training%s", identity["name"],
+                 f", {len(run['left_out'])} songs left out" if run["left_out"] else "")
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        run.update(stage="failed", error=str(exc))
+        log.warning("Run all for corpus '%s' failed: %s", identity["name"], exc)
 
 
 def _host_path(path: Path) -> str:

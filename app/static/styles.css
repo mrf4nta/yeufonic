@@ -1613,3 +1613,8 @@ main.sheet-collapsed .sheet-toggle svg { transform: rotate(180deg); }
   border-radius: 999px; font-size: 12.5px; cursor: pointer; user-select: none;
 }
 .ck-step:has(input:checked) { border-color: rgba(248, 113, 113, 0.55); background: rgba(248, 113, 113, 0.10); }
+
+/* Run all: plain, apart from the three steps, so it stands out once they are green. */
+button.ghost.run-all { margin-left: 10px; }
+.identity-working.bad { color: var(--bad); }
+.identity-working.muted { color: var(--muted); }

@@ -333,6 +333,14 @@ engine built with `WITH_TRAINER=0`, takes it out.
    choose. Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs. The
    Train window warns when less than that is free, so close anything else using the GPU first.
 
+**Run all**, beside the three, does Analyse, Export and Train one after the other, for a corpus you
+would rather not wait on: a big one takes hours to analyse. It asks first what to do with an
+earlier LoRA, then carries on with the page closed. It analyses only what still needs it, and a
+song whose analysis fails is left out of the training set and named under the buttons. Lyrics
+nobody has checked are used as drafted. **Stop** ends it where it is, keeping what is finished;
+stopped while it exports, it finishes the training set first. It waits for anything already using
+the engine before it trains. An app restart ends it, and **Run all** again carries on.
+
 A job that runs out of GPU memory says so, with what to try: close other programs using the GPU,
 lower the length cap, or, for training, leave the longest songs out. If the engine crashes and
 restarts, the job it was running is lost, and it says that too.
