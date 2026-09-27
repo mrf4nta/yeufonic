@@ -6746,7 +6746,7 @@ function sheetHTML(take) {
   var kind = take.kind || 'cover';
   var busy = take.status === 'queued' || take.status === 'running';
   var hasScore = Boolean(take.abc && take.abc.length > 50);
-  var html = '<div class="kind ' + kind + '">' + (SHEET_KIND[kind] || kind) + '</div>' +
+  var html = '<div class="kind kind-' + kind + '">' + (SHEET_KIND[kind] || kind) + '</div>' +
     '<h2>' + esc(take.title) + '</h2>' +
     '<div class="meta">' + [take.duration ? secs(take.duration) : '', take.created_at ? sheetAgo(take.created_at) : '']
       .filter(Boolean).join(' · ') + '</div>';
@@ -6828,7 +6828,17 @@ function sheetHTML(take) {
 function paintSheet() {
   var host = $('take-sheet');
   if (!host) { return; }
-  var html = sheetHTML(sheetTake());
+  var take = sheetTake();
+  // The new button of the take's own kind stays bright; the other two step back.
+  var current = take ? ({ song: 'song', cover: 'cover', instrumental: 'inst' }[take.kind] || '') : '';
+  var row = document.querySelector('.sheet-new');
+  if (row) {
+    row.classList.toggle('has-current', Boolean(current));
+    Array.prototype.forEach.call(row.querySelectorAll('[data-new]'), function (button) {
+      button.classList.toggle('current', button.dataset.new === current);
+    });
+  }
+  var html = sheetHTML(take);
   if (host.dataset.html !== html) {
     host.innerHTML = html;
     host.dataset.html = html;

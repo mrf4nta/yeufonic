@@ -1444,15 +1444,19 @@ button.take-status.sung:hover { background: rgba(251, 191, 36, 0.16); }
 .sheet-new-btn { flex: 1; border: 0; border-radius: 999px; padding: 10px 6px; font: inherit; font-size: 13.5px;
   font-weight: 650; cursor: pointer; color: #fff; }
 .sheet-new-btn:hover { filter: brightness(1.08); }
+/* The kind of the take on show stands out; the others dim until pointed at. */
+.sheet-new.has-current .sheet-new-btn:not(.current) { opacity: 0.4; filter: saturate(0.55); }
+.sheet-new.has-current .sheet-new-btn:not(.current):hover { opacity: 1; filter: none; }
 .sheet-new-btn.type-song { background: linear-gradient(90deg, var(--song-a), var(--song-b)); }
 .sheet-new-btn.type-cover { background: linear-gradient(90deg, var(--cover-a), var(--cover-b)); }
 .sheet-new-btn.type-inst { background: linear-gradient(90deg, var(--inst-b), var(--inst-a)); color: #07140c; }
 #sheet-status:empty { display: none; }
 #sheet-status { margin: -4px 0 12px; }
 .take-sheet .kind { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
-.take-sheet .kind.song { color: var(--song-a); }
-.take-sheet .kind.cover { color: var(--cover-a); }
-.take-sheet .kind.instrumental { color: var(--inst-a); }
+/* kind-* rather than song or cover: a plain .cover class belongs to the card's tile. */
+.take-sheet .kind-song { color: var(--song-a); }
+.take-sheet .kind-cover { color: var(--cover-a); }
+.take-sheet .kind-instrumental { color: var(--inst-a); }
 .take-sheet h2 { font-size: 21px; margin: 4px 0; line-height: 1.25; overflow-wrap: anywhere; }
 .take-sheet .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
 .take-sheet .note { font-size: 12.5px; color: #fbbf24; background: rgba(251, 191, 36, 0.08);
