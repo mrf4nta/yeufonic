@@ -6035,7 +6035,18 @@ function wire() {
 
   $('takes').addEventListener('dblclick', function (event) {
     var titleEl = event.target.closest('.take-title');
-    if (!titleEl) { return; }
+    if (!titleEl) {
+      // Anywhere else on a card, away from its controls, opens it in the editor, on the
+      // page its sheet's main button would: the plan to review, or the song.
+      if (event.target.closest('button, a, input, select, textarea, label, .take-title-input')) { return; }
+      var card = event.target.closest('.take');
+      var take = card && takeById(card.dataset.id);
+      if (!take || typeof openEditor !== 'function' || !$('editor-modal')) { return; }
+      if (window.getSelection) { window.getSelection().removeAllRanges(); }   // the word the double-click picked
+      selectTake(take);
+      openEditor(take.status === 'planned' ? 'score' : 'song');
+      return;
+    }
     var id = titleEl.dataset.id || (titleEl.closest('.take') && titleEl.closest('.take').dataset.id);
     if (id) {
       event.preventDefault();
