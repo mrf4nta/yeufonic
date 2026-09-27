@@ -103,6 +103,10 @@ var State = { normalising: {}, sources: [], takes: [], options: {}, filter: 'all
   picked: {},
   formEdited: false, spaces: [], spaceId: 'default', moveTakeId: null };
 var LAYOUT_KEY = 'yue2.layout';
+var SHEET_KEY = 'yue2.sheet';   // the take panel folded away, or not
+// Set here, before the page is wired, which happens partway through this file.
+var SHEET_KIND = { song: 'Song from a prompt', cover: 'Cover of a recording', instrumental: 'Instrumental' };
+var Editor = { page: 'song', step: 0 };   // the editor window's page and step
 var WIDTH_KEY = 'yue2.width';
 var SPACE_KEY = 'yue2.space';
 var FILTER_KEY = 'yue2.filter';
@@ -6703,7 +6707,6 @@ document.addEventListener('visibilitychange', function () {
 /* ============================================================ the take sheet
    The left panel shows the take the form describes, read-only: how it was made, in
    short. Making and changing takes happens in the editor window below. */
-var SHEET_KIND = { song: 'Song from a prompt', cover: 'Cover of a recording', instrumental: 'Instrumental' };
 
 function sheetTake() {
   return takeById(selectedTakeId()) || takeById(awaitingPlanId()) || null;
@@ -6849,7 +6852,6 @@ function paintSheet() {
    Every control for making or changing a take, in one window: three columns with the
    score on a tab of its own, or steps, as Settings chooses. The controls are the ones
    the left panel used to hold, so everything they do works as it did. */
-var Editor = { page: 'song', step: 0 };
 
 function editorLayout() { return setting('editor.layout', 'columns') === 'steps' ? 'steps' : 'columns'; }
 function editorOpen() { return Boolean($('editor-modal')) && !$('editor-modal').classList.contains('hidden'); }
@@ -6983,5 +6985,30 @@ function wireEditor() {
   $('score-box').addEventListener('toggle', function () {
     if (editorOpen() && !$('score-box').open) { $('score-box').open = true; }
   });
+  wireSheetToggle();
   paintSheet();
+}
+
+
+/* Fold the take panel away, or bring it back. Clicking takes still updates it, so
+   it is current when it opens. Remembered in this browser, like the layout. */
+function setSheetCollapsed(collapsed) {
+  var main = document.querySelector('main');
+  var toggle = $('sheet-toggle');
+  if (!main || !toggle) { return; }
+  main.classList.toggle('sheet-collapsed', collapsed);
+  toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  toggle.title = collapsed ? 'Show the take panel' : 'Hide the take panel';
+  try { localStorage.setItem(SHEET_KEY, collapsed ? 'collapsed' : 'open'); } catch (err) { /* private mode */ }
+}
+
+function wireSheetToggle() {
+  var toggle = $('sheet-toggle');
+  if (!toggle) { return; }   // a page from before the fold
+  var saved = null;
+  try { saved = localStorage.getItem(SHEET_KEY); } catch (err) { saved = null; }
+  setSheetCollapsed(saved === 'collapsed');
+  toggle.addEventListener('click', function () {
+    setSheetCollapsed(!document.querySelector('main').classList.contains('sheet-collapsed'));
+  });
 }
