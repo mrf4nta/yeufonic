@@ -10,7 +10,7 @@ def a_take(**extra):
     row = {"id": "orig1", "kind": "song", "title": "good1", "style": "pop", "lyrics": "[verse]\nla la",
            "abc": ABC, "mode": "full", "seed": 1747519420, "checkpoint": "x", "status": "done",
            "created_at": time.time(), "max_duration": 120, "interpretation": "tight", "variety": "calm",
-           "style_lora": "harbour_lights_lora.safetensors", "style_lora_model": 0.7, "style_lora_clip": 0.7,
+           "style_lora": "tidewater_lora.safetensors", "style_lora_model": 0.7, "style_lora_clip": 0.7,
            "favourite": 1, "audio_path": "/data/takes/x.flac", "loudness": -15.0, "sound_seed": 999}
     row.update(extra)
     cols = list(row)
@@ -66,3 +66,36 @@ def test_new_words_need_words_a_score_and_a_song(client, monkeypatch):
     execute("UPDATE takes SET abc = ?, kind = 'instrumental' WHERE id = 'orig1'", (ABC,))
     assert client.post("/api/takes/orig1/words", json={"lyrics": "la"}).status_code == 400
     assert client.post("/api/takes/nope/words", json={"lyrics": "la"}).status_code == 404
+
+
+def test_new_words_take_the_editors_style_cap_mode_and_lora(client, monkeypatch):
+    from app import main
+    monkeypatch.setattr(main, "_checkpoint", lambda: "x")
+    a_take()
+    made = client.post("/api/takes/orig1/words", json={
+        "lyrics": "[verse]\nda", "style": " rock ", "max_duration": 90, "mode": "melody",
+        "style_lora": "other_lora.safetensors", "style_lora_model": 0.4, "style_lora_clip": 0.9})
+    copy = one("SELECT * FROM takes WHERE id = ?", (made.json()["id"],))
+    assert (copy["style"], copy["max_duration"], copy["mode"]) == ("rock", 90, "melody")
+    assert (copy["style_lora"], copy["style_lora_model"], copy["style_lora_clip"]) == ("other_lora.safetensors", 0.4, 0.9)
+
+
+def test_rendering_a_score_takes_the_editors_settings(client, monkeypatch):
+    """Changing the style LoRA and rendering used to keep the take's old one."""
+    from app import main
+    monkeypatch.setattr(main, "_checkpoint", lambda: "x")
+    a_take()
+    got = client.post("/api/takes/orig1/render", json={"style": "folk", "max_duration": 60, "style_lora": ""})
+    assert got.status_code == 200, got.text
+    take = one("SELECT * FROM takes WHERE id = 'orig1'")
+    assert (take["style"], take["max_duration"], take["style_lora"]) == ("folk", 60, None)
+
+
+def test_a_render_that_leaves_settings_out_keeps_the_takes(client, monkeypatch):
+    from app import main
+    monkeypatch.setattr(main, "_checkpoint", lambda: "x")
+    a_take()
+    client.post("/api/takes/orig1/render", json={"reseed": True})
+    take = one("SELECT * FROM takes WHERE id = 'orig1'")
+    assert (take["style"], take["max_duration"], take["style_lora"], take["style_lora_model"]) == \
+        ("pop", 120, "tidewater_lora.safetensors", 0.7)

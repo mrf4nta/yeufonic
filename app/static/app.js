@@ -2653,13 +2653,46 @@ function setScoreActions() {
     node.style.cursor = enabled ? '' : 'not-allowed';
   });
   var fresh = enabled && wordsChanged();
+  var keep = keepTune();
   $('render-take').textContent = fresh ? 'Sing with new words' : 'Render this score';
-  if ($('words-changed')) { $('words-changed').classList.toggle('hidden', !fresh); }
+  // The switch is for a song: its main button would otherwise write a new tune.
+  if ($('words-changed')) { $('words-changed').classList.toggle('hidden', !(fresh && State.mode === 'song')); }
+  $('create-song').textContent = keep ? 'Sing with new words' : 'Write score plan';
+  if ($('auto-wrap')) { $('auto-wrap').style.visibility = keep ? 'hidden' : ''; }
   $('score-note').textContent = !enabled
     ? 'Nothing to render yet. Write a score plan, or press Score on a take in the library.'
     : (fresh
       ? 'The words have changed. Sing with new words keeps this score\'s tune and makes a new take; the original stays as it is.'
       : 'Render this score makes audio from the score above, keeping its melody and chords. Write a new plan asks YuE2 for a different melody, same words.');
+}
+
+/* Changed words on a song with a score, and Keep this tune ticked: the main button
+   sings the score with them rather than writing a new plan. A page from before the
+   switch had a button in its place, which does the same. */
+function keepTune() {
+  if (State.mode !== 'song' || !wordsChanged()) { return false; }
+  return !$('keep-tune') || $('keep-tune').checked;
+}
+
+/* Everything the editor shows that a render uses, so a render is made from what is
+   on screen rather than from what the take last had. */
+function editorRenderSettings() {
+  var data = withStyleLora({
+    style: $('style').value,
+    max_duration: parseFloat($('max-duration').value) || 360,
+    mode: $('mode').value,
+    seed: pickSeed(),
+    interpretation: $('interpretation').value,
+    realaudio: $('realaudio').checked, normalise: normaliseWanted()
+  });
+  if ($('style-lora') && !data.style_lora) {
+    // None, chosen from a list that holds the take's LoRA, turns it off. A list
+    // without it, not loaded yet or with the file gone, is no choice at all.
+    var had = (scoreOwner() || {}).style_lora;
+    var listed = had && Array.prototype.some.call($('style-lora').options, function (o) { return o.value === had; });
+    if (!had || listed) { data.style_lora = ''; }
+  }
+  return data;
 }
 
 /* Same tune, new words. The planner reads every word before it writes a note, so a
@@ -2684,14 +2717,10 @@ function wordsChanged() {
 async function doSingNewWords() {
   var take = scoreOwner();
   if (!take) { statusLine('Nothing to sing yet. Write a score plan first.', 'bad'); return; }
-  var payload = {
-    lyrics: $('lyrics').value, abc: $('abc').value, title: $('title').value.trim(),
-    interpretation: $('interpretation').value,
-    realaudio: $('realaudio').checked, normalise: normaliseWanted()
-  };
-  if ($('seed-fixed').checked && !isNaN(parseInt($('seed').value, 10))) {
-    payload.seed = parseInt($('seed').value, 10);
-  }
+  var payload = editorRenderSettings();
+  payload.lyrics = $('lyrics').value;
+  payload.abc = $('abc').value;
+  payload.title = $('title').value.trim();
   try {
     var made = await api('/api/takes/' + take.id + '/words', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2799,6 +2828,7 @@ function songBody(seed) {
 }
 
 async function doPlan() {
+  if (keepTune()) { await doSingNewWords(); return; }
   var problem = songProblem();
   if (problem) { statusLine(problem, 'bad'); return; }
   var seed = pickSeed();
@@ -2830,16 +2860,7 @@ async function doRenderTake() {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ abc: $('abc').value })
     });
-    var payload = {
-      interpretation: $('interpretation').value,
-      realaudio: $('realaudio').checked, normalise: normaliseWanted(),
-      style_lora: $('style-lora') ? $('style-lora').value : '',
-      style_lora_model: $('style-lora-model') && !$('style-lora-model').disabled ? parseFloat($('style-lora-model').value) : 0,
-      style_lora_clip: $('style-lora-clip') && !$('style-lora-clip').disabled ? parseFloat($('style-lora-clip').value) : 0
-    };
-    if ($('seed-fixed').checked && !isNaN(parseInt($('seed').value, 10))) {
-      payload.seed = parseInt($('seed').value, 10);
-    }
+    var payload = editorRenderSettings();
     await api('/api/takes/' + id + '/render', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -4404,6 +4425,7 @@ function selectTake(take) {
   }
   if (formIsDraft()) { stashDraft(); }
   State.formTake = take;
+  if ($('keep-tune')) { $('keep-tune').checked = true; }
   // Songs and instrumentals are both written from a prompt; only a cover has a recording.
   var isInst = take.kind === 'instrumental';
   var isSong = take.kind === 'song' || isInst;
@@ -5967,6 +5989,12 @@ function wire() {
   $('create-song').addEventListener('click', doPlan);
   $('render-take').addEventListener('click', doRenderTake);
   $('lyrics').addEventListener('input', setScoreActions);
+  if ($('keep-tune')) {
+    $('keep-tune').addEventListener('change', function () {
+      setScoreActions();
+      if (typeof editorOpen === 'function' && editorOpen()) { paintEditor(); }
+    });
+  }
   if ($('sing-new-words')) { $('sing-new-words').addEventListener('click', doSingNewWords); }
   $('sung-cancel').addEventListener('click', closeSungWarning);
   $('sung-render').addEventListener('click', renderAnyway);
@@ -6949,6 +6977,7 @@ function closeEditor() {
 function paintEditor() {
   var ed = $('editor');
   if (!ed) { return; }
+  setScoreActions();   // the main button's words follow the mode and the words
   var steps = editorLayout() === 'steps';
   ed.classList.toggle('layout-steps', steps);
   ed.classList.toggle('layout-columns', !steps);
@@ -6999,8 +7028,9 @@ function paintEditorReview() {
   rows.push(['Length cap', esc($('max-duration').value) + ' s']);
   rows.push(['Seed', $('seed-fixed').checked ? esc($('seed').value) : 'a new one']);
   rows.push(['Production polish', $('realaudio').checked ? 'on' : 'off']);
-  rows.push(['Score', $('abc').value.trim().length > 50 ? 'ready, as it stands on the Score step'
-    : (mode === 'cover' ? 'from the recording' : 'written first, then sung')]);
+  rows.push(['Score', keepTune() ? 'this take\'s, sung with the new words as a new take'
+    : ($('abc').value.trim().length > 50 && !wordsChanged() ? 'ready, as it stands on the Score step'
+    : (mode === 'cover' ? 'from the recording' : 'written first, then sung'))]);
   if (problem) { rows.push(['Before it can be made', '<span class="bad">' + esc(problem) + '</span>']); }
   $('ed-review').innerHTML = rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>'; }).join('');
 }

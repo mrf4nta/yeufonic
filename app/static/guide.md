@@ -193,8 +193,11 @@ shows them in the take panel, and opening it in the editor loads all of it back.
 editor with exactly that, seed included, so a take you liked can be reproduced, and a take you nearly
 liked can be nudged one setting at a time.
 
-Tick **fixed seed** to keep the same seed across renders; leave it off and each render rolls a new
-one.
+Tick **keep this seed** to keep the same seed across renders; leave it off and each render rolls a
+new one.
+
+A render uses what the editor shows: its style, style LoRA and strengths, length cap, mode,
+interpretation and seed, even when rendering a take's own score again.
 
 ### Same tune, new words
 
@@ -202,10 +205,13 @@ The planner reads all the lyrics before it writes a note, so the same seed gives
 for the same words. Change one line and the next plan is a new tune: another melody, often another
 key and tempo, and the voice moves with them.
 
-To keep a tune you like, open the take, change its words, and press **Keep this tune** under the
-lyrics (on the Score page the render button says **Sing with new words**). The take's score is sung
-with the new words, with the same seed, as a new take beside the original, which stays as it is.
-New words that keep the old lines' syllable counts fit the melody best.
+To keep a tune you like, open the take and change its words. **Keep this tune** appears under the
+lyrics, ticked, and the main button becomes **Sing with new words**. Change anything else you want
+first: the style, the LoRA and its strengths, the length cap, the interpretation. The take's score is
+then sung with the new words, as a new take beside the original, which stays as it is. Keep the seed
+ticked to keep the voice as close as it can be. Untick **Keep this tune** to write a new plan, and a
+new tune, for the words instead. New words that keep the old lines' syllable counts fit the melody
+best.
 
 ### Production polish
 

@@ -209,8 +209,8 @@
                 </span>
               </div>
               <textarea id="lyrics" class="lyrics" spellcheck="false" placeholder="[Verse]&#10;First line&#10;Second line&#10;&#10;[Chorus]&#10;..."></textarea>
-              <div id="words-changed" class="hint words-changed hidden">New words: a new plan would be a new tune.
-                <button id="sing-new-words" class="chip action compact" title="Sing this take's score with these words, as a new take">Keep this tune</button></div>
+              <label class="check words-changed hidden" id="words-changed" title="Sing this take's score with the new words, as a new take. Untick to write a new plan, and a new tune, for them.">
+                <input id="keep-tune" type="checkbox" checked> Keep this tune <span class="muted">with the new words</span></label>
             </div>
 
             <div class="field" id="structure-field" style="display:none">

@@ -29,9 +29,17 @@ cannot creep back in.
 
 - **Same tune, new words.** The planner reads all the lyrics before it writes a note, so changed
   words get a new tune even with the same seed. When a take's words are changed in the editor,
-  **Keep this tune** sings its score with them instead, as a new take with the same seed, and
-  leaves the original as it was. Before, rendering a take's score sang its saved words, whatever
-  the editor held.
+  **Keep this tune** appears, ticked, and the main button sings the take's score with them instead:
+  a new take with the same seed and whatever else the editor shows, leaving the original as it
+  was. Untick it to write a new plan for the words. Before, rendering a take's score sang its saved
+  words, whatever the editor held.
+
+### Fixed
+
+- Rendering a take's score again now uses the editor's style, style LoRA and strengths, length cap
+  and mode. It kept the take's own, so choosing another LoRA and rendering changed nothing. With
+  **keep this seed** unticked it now rolls a new seed, as the guide says, instead of reusing the
+  take's.
 
 ## 0.0.2 (2026-09-27)
 

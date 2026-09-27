@@ -67,8 +67,8 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   Configure Yeufonic to use an external LLM for even greater accuracy.
 - **Song from a prompt.** Write a score plan from style and lyrics, read it, repair it, render it.
   A new plan costs seconds, so a bad melody is cheap to discard.
-- **Same tune, new words.** Change the words of a take you like and **Keep this tune** sings its
-  score with them, as a new take with the same seed. A new plan would be a new tune.
+- **Same tune, new words.** Change the words of a take you like, keep **Keep this tune** ticked,
+  and its score is sung with them as a new take with the same seed. A new plan would be a new tune.
 - **Choose how adventurous the chords are.** YuE2 tends to write one four-chord loop for a whole
   song. The Harmony slider, from Familiar to Outside, pushes the planner towards chords it has not
   just used, without breaking the song's structure.

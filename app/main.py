@@ -586,6 +586,14 @@ class RenderIn(BaseModel):
     voice_lora: str | None = Field(None, max_length=200)
     voice_lora_strength: float | None = None
     seed: int | None = Field(None, ge=0, le=MAX_SEED)
+    # What the editor shows, so a render is made from that rather than from what
+    # the take last had. Each omitted field keeps the take's own.
+    style: str | None = Field(None, max_length=2000)
+    max_duration: float | None = Field(None, ge=10, le=900)
+    mode: str | None = None
+    style_lora: str | None = Field(None, max_length=200)
+    style_lora_model: float | None = Field(None, ge=0.0, le=3.0)
+    style_lora_clip: float | None = Field(None, ge=0.0, le=3.0)
 
 
 class WordsIn(RenderIn):
@@ -1412,6 +1420,30 @@ def _idle_take(take_id: str) -> dict:
     return take
 
 
+def _render_settings(take: dict, body: RenderIn | None) -> dict:
+    """The style, length cap, mode and style LoRA a render asks for, each falling
+    back to the take's own when the request leaves it out."""
+    got = {
+        "style": take["style"],
+        "max_duration": take["max_duration"],
+        "mode": take["mode"],
+        "style_lora": take.get("style_lora"),
+        "style_lora_model": take.get("style_lora_model", 1.0),
+        "style_lora_clip": take.get("style_lora_clip", 1.0),
+    }
+    if body is None:
+        return got
+    if body.style is not None:
+        got["style"] = body.style.strip() or config.DEFAULT_STYLE
+    if body.max_duration is not None:
+        got["max_duration"] = body.max_duration
+    if body.mode is not None:
+        got["mode"] = body.mode if body.mode in ("full", "melody") else "full"
+    if body.style_lora is not None:
+        got.update(_style_lora_of(body))
+    return got
+
+
 @app.post("/api/takes/{take_id}/render")
 async def render_take(take_id: str, body: RenderIn | None = None) -> dict:
     _gpu_free_for_rendering()
@@ -1431,19 +1463,16 @@ async def render_take(take_id: str, body: RenderIn | None = None) -> dict:
         identity_val = take.get("identity_id") or take.get("persona_id")
     voice_lora = take.get("voice_lora") if body is None or body.voice_lora is None else (body.voice_lora or None)
     voice_lora_strength = take.get("voice_lora_strength", 1.0) if body is None or body.voice_lora_strength is None else body.voice_lora_strength
-    sl = _style_lora_of(body) if (body is not None and getattr(body, "style_lora", None) is not None) else {
-        "style_lora": take.get("style_lora"),
-        "style_lora_model": take.get("style_lora_model", 1.0),
-        "style_lora_clip": take.get("style_lora_clip", 1.0),
-    }
+    sl = _render_settings(take, body)
     if body is not None and body.seed is not None:
         seed = body.seed
     elif body is not None and body.reseed:
         seed = int.from_bytes(os.urandom(4), "big")
     else:
         seed = take["seed"]
-    execute("UPDATE takes SET status = 'queued', error = NULL, stage = NULL, checkpoint = ?, interpretation = ?, realaudio = ?, normalise = ?, identity_id = ?, persona_id = ?, voice_lora = ?, voice_lora_strength = ?, style_lora = ?, style_lora_model = ?, style_lora_clip = ?, seed = ?, sound_seed = ?, vocal_check = NULL, loudness = NULL WHERE id = ?",
-            (config.CHECKPOINT, interpretation, realaudio, normalise, identity_val, identity_val, voice_lora, voice_lora_strength, sl["style_lora"], sl["style_lora_model"], sl["style_lora_clip"], seed,
+    execute("UPDATE takes SET status = 'queued', error = NULL, stage = NULL, checkpoint = ?, interpretation = ?, realaudio = ?, normalise = ?, identity_id = ?, persona_id = ?, voice_lora = ?, voice_lora_strength = ?, style_lora = ?, style_lora_model = ?, style_lora_clip = ?, style = ?, max_duration = ?, mode = ?, seed = ?, sound_seed = ?, vocal_check = NULL, loudness = NULL WHERE id = ?",
+            (config.CHECKPOINT, interpretation, realaudio, normalise, identity_val, identity_val, voice_lora, voice_lora_strength, sl["style_lora"], sl["style_lora_model"], sl["style_lora_clip"],
+             sl["style"], sl["max_duration"], sl["mode"], seed,
              take.get("sound_seed") if seed == take["seed"] else None, take_id))
     await QUEUE.put({"kind": "render", "id": take_id})
     log.info("Queued audio render for take '%s' (%s, seed=%d)", take.get("title") or take_id, take_id, seed)
@@ -1563,6 +1592,7 @@ async def new_words(take_id: str, body: WordsIn) -> dict:
     record.update(id=uuid.uuid4().hex[:12], title=title, lyrics=words, abc=abc, status="queued",
                   created_at=time.time(), checkpoint=config.CHECKPOINT, seed=seed,
                   sound_seed=take.get("sound_seed") if seed == take["seed"] else None)
+    record.update(_render_settings(take, body))
     if body.interpretation is not None:
         record["interpretation"] = _interpretation(body.interpretation)
     if body.realaudio is not None:
