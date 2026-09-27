@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import config, identities, instrumental, llm, loras, lyrics, score, stems
 from .db import bump_average, execute, get_setting, one, rows
-from .engine import Engine, load_template
+from .engine import OUT_OF_MEMORY, Engine, load_template
 from .library import (audio_duration, ensure_peaks, loudness, inside, normal_target, normalise, normalised_path, original_path, remove_tree,
                       take_audio_path, vocal_path, write_take_note)
 
@@ -513,7 +513,7 @@ async def run_job(kind: str, ref_id: str) -> None:
             if outcome in ("cancelled", "timeout"):
                 await ENGINE.cancel(prompt_id)
             messages = {"cancelled": "cancelled", "timeout": "timed out while the engine was working",
-                        "lost": "the engine lost this job, or stopped answering"}
+                        "lost": _lost(kind, started) or "the engine lost this job, or stopped answering"}
             fail(kind, ref_id, messages[outcome])
             return
         await _finish(kind, ref_id, record, job, started)
@@ -530,7 +530,7 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
         return
     if status_str != "success":
         detail = json.dumps(job.get("status", {}).get("messages") or [])[-500:]
-        fail(kind, ref_id, f"engine reported {status_str}: {detail}")
+        fail(kind, ref_id, _engine_failure(kind, job) or f"engine reported {status_str}: {detail}")
         return
 
     if kind == "lyrics":
@@ -964,6 +964,33 @@ def _gemma_graph(prompt: str, audio_files: list[str], max_length: int) -> dict:
     return graph
 
 
+# What to try when the GPU runs out, by job.
+OOM_HINTS = {
+    "train": "Close anything else using the GPU, or leave the longest songs out, and train again.",
+    "render": "Close anything else using the GPU, or lower the length cap, and render again.",
+    "plan": "Close anything else using the GPU, or lower the length cap, and plan again.",
+}
+
+
+def out_of_memory(kind: str) -> str:
+    return "the GPU ran out of memory. " + OOM_HINTS.get(kind, "Close anything else using the GPU and try again.")
+
+
+def _engine_failure(kind: str, job: dict) -> str | None:
+    """A failure the engine reported, in plain words when there are some for it."""
+    return out_of_memory(kind) if OUT_OF_MEMORY.search(_engine_error(job)) else None
+
+
+def _lost(kind: str, since: float) -> str | None:
+    """Why the engine came back without a job, when it is known: it logged running
+    out of GPU memory, or at least stopped answering, after the job was sent."""
+    if getattr(ENGINE, "oom_at", 0) >= since:
+        return out_of_memory(kind)
+    if getattr(ENGINE, "offline_at", 0) >= since:
+        return "the engine stopped during this job and came back without it. The log may say why."
+    return None
+
+
 def _engine_error(job: dict) -> str:
     """What went wrong, from the engine's own report: the node and its exception.
     The report also carries the node's inputs, which for audio is the waveform as
@@ -1017,7 +1044,9 @@ async def _transcribe_corpus_song(kind: str, song_id: str, staged: Path, folder:
             job = await _run_graph(kind, song_id, graph)
         except RuntimeError as exc:
             # A stop, a timeout or a lost engine is not the song's fault: no retry.
-            if not str(exc).startswith("engine error") or song_id in STOPPED_SONGS:
+            # Running out of memory is worth them too: melody only, or the first
+            # four minutes, asks less of the card.
+            if not str(exc).startswith(("engine error", "the GPU ran out of memory")) or song_id in STOPPED_SONGS:
                 raise
             failed = exc
             log.info("Transcription of corpus song %s failed (%s%s), trying another way: %s", song_id, mode,
@@ -1038,6 +1067,7 @@ def _texts_in_order(job: dict) -> list[str]:
 
 
 async def _run_graph(kind: str, ref_id: str, graph: dict) -> dict:
+    since = time.time()
     prompt_id = await ENGINE.submit(graph)
     CURRENT.clear()
     CURRENT.update({"kind": kind, "id": ref_id, "prompt_id": prompt_id, "started": time.time()})
@@ -1046,9 +1076,10 @@ async def _run_graph(kind: str, ref_id: str, graph: dict) -> dict:
         if outcome != "done":
             if outcome in ("cancelled", "timeout"):
                 await ENGINE.cancel(prompt_id)
-            raise RuntimeError({"cancelled": "cancelled", "timeout": "timed out"}.get(outcome, "the engine lost the job"))
+            raise RuntimeError({"cancelled": "cancelled", "timeout": "timed out"}.get(outcome)
+                               or _lost(kind, since) or "the engine lost the job")
         if job.get("status", {}).get("status_str") != "success":
-            raise RuntimeError("engine error: " + _engine_error(job))
+            raise RuntimeError(_engine_failure(kind, job) or "engine error: " + _engine_error(job))
         return job
     finally:
         ENGINE.forget(prompt_id)

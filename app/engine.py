@@ -19,6 +19,11 @@ import httpx
 
 from . import config, logging_setup
 
+# The engine's own words when the GPU runs out: CUDA's error, torch's exception, and
+# ComfyUI's note as it gives up. Not its "Ran out of memory when regular VAE encoding,
+# retrying with tiled VAE encoding", which it recovers from by itself.
+OUT_OF_MEMORY = re.compile(r"CUDA error: out of memory|CUDA out of memory|OutOfMemoryError|Got an OOM")
+
 log = logging.getLogger("yue2.engine")
 
 # How often the engine's checkpoints and LoRAs are read again. A model file added or
@@ -209,6 +214,10 @@ class Engine:
         self.last_error: str | None = None
         self.last_contact = 0.0
         self.created = time.time()
+        # When the engine last logged running out of GPU memory, and last stopped
+        # answering: a job it lost since then was lost to that.
+        self.oom_at = 0.0
+        self.offline_at = 0.0
         self.options: dict[str, Any] = {"checkpoints": [], "audio_encoders": [], "harmony": False, "lyrics": False,
                                         "instrumental": False, "trainer": False}
         self.options_loaded = False
@@ -268,6 +277,8 @@ class Engine:
             queue = await self.client.get("/queue", timeout=4.0)
             queue.raise_for_status()
         except Exception as exc:  # noqa: BLE001
+            if self.online:
+                self.offline_at = time.time()
             self.online = False
             self.last_error = str(exc) or exc.__class__.__name__
             self.stats = None
@@ -295,6 +306,8 @@ class Engine:
             if key in self._seen_engine_logs:
                 continue
             self._seen_engine_logs.append(key)
+            if OUT_OF_MEMORY.search(str(m)):
+                self.oom_at = time.time()
             logging_setup.log_engine_entry(m, timestamp=t)
 
     async def _subscribe_logs(self) -> None:
@@ -313,7 +326,10 @@ class Engine:
             device = (self.stats or {})["devices"][0]
         except (KeyError, IndexError, TypeError):
             return None
-        return {"name": device.get("name"), "vram_total": device.get("vram_total"), "vram_free": device.get("vram_free")}
+        # torch_vram_total is what the engine itself holds, which it lets go of before
+        # training: the rest of what is not free is someone else's.
+        return {"name": device.get("name"), "vram_total": device.get("vram_total"), "vram_free": device.get("vram_free"),
+                "engine_vram": device.get("torch_vram_total") or 0}
 
     async def refresh_options(self) -> None:
         """Read node schemas, then check every node our templates need.  The schema

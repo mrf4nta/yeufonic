@@ -157,6 +157,9 @@ about 0.70 but experiment to find the sweet spot and save them as a default for 
 you may keep Sound nearer to 0.50. The [user guide](app/static/guide.md#corpora-and-training-a-lora) walks
 through it.
 
+Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs, and the Train
+window warns when less than that is free.
+
 How many steps a run trains for, and how much it can learn, can be changed: see
 [Environment variables](#training).
 
@@ -602,7 +605,8 @@ heard back to an earlier step with **Checkpoints**.
 | torchaudio fails to load its extension | torch, torchvision and torchaudio drifted apart | they are pinned together in both Dockerfiles; keep it that way |
 | `docker compose build` hangs with no output | the buildx plugin is missing | install `docker-buildx` for your Docker |
 | Engine runs but sees no GPU | the container has no GPU access | `docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi` should print the card |
-| Render fails out of memory | another program is using the GPU | close other GPU work; see Requirements |
+| A job fails with *the GPU ran out of memory* | another program is using the GPU, the card is small, or the song is long | close other GPU work, lower the length cap, or for training leave the longest songs out; see Requirements |
+| A job fails with *the engine stopped during this job* | the engine crashed and restarted | `docker compose logs engine` says why |
 | **Write score plan** is greyed out in Instrumental | the LoRA is not in `models/loras` | `sh scripts/fetch-models.sh`, then `docker compose restart engine` |
 | **Write lyrics** is greyed out | Gemma is not in `models/text_encoders` | `sh scripts/fetch-models.sh`, then `docker compose restart engine` |
 | **Corpora** is not in the menu | `TRAINING_ENABLED` is `0`, or the engine was built with `WITH_TRAINER=0` | set both back to `1`, rebuild the engine if it was the second; see Training a LoRA above |

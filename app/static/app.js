@@ -213,6 +213,8 @@ async function pollState() {
     State.options = data.options || {};
     State.training = data.training || null;
     State.currentJob = data.current || null;
+    State.gpu = engine.online ? engine.gpu || null : null;
+    if ($('train-modal') && !$('train-modal').classList.contains('hidden')) { paintTrainMemory(); }
     // No way in to a workflow that is switched off. Here rather than at
     // wiring time, because the options this reads arrive with the state, not before it.
     // Hidden rather than disabled: a greyed-out row invites a hunt for how to enable it.
@@ -3874,7 +3876,35 @@ function openTrain() {
   }
   $('train-status').textContent = '';
   $('train-go').disabled = false;
+  paintTrainMemory();
   $('train-modal').classList.remove('hidden');
+}
+
+/* Training needs about 12.5 GB of GPU memory, measured on a 16 GB card, most of it
+   while it prepares the songs, so short of that it can fail some minutes in. Said
+   before it starts, and kept current while the window is open. A warning, not a
+   refusal: whatever holds the memory may let go of it in time. */
+var TRAIN_NEEDS_GB = 12.5;
+
+function paintTrainMemory() {
+  var note = $('train-memory');
+  if (!note) { return; }
+  var gpu = State.gpu;
+  var gb = function (bytes) { return bytes / 1073741824; };
+  var text = '';
+  if (gpu && gpu.vram_total) {
+    // What the engine holds itself, it lets go of before training.
+    var usable = gb((gpu.vram_free || 0) + (gpu.engine_vram || 0));
+    if (gb(gpu.vram_total) < TRAIN_NEEDS_GB) {
+      text = 'This GPU has ' + gb(gpu.vram_total).toFixed(1) + ' GB, and training needs about ' + TRAIN_NEEDS_GB +
+        ' GB. It may run out of memory.';
+    } else if (usable < TRAIN_NEEDS_GB) {
+      text = 'Only ' + usable.toFixed(1) + ' GB of GPU memory is free, and training needs about ' + TRAIN_NEEDS_GB +
+        ' GB. Close anything else using the GPU first, or it may run out.';
+    }
+  }
+  note.textContent = text;
+  note.classList.toggle('hidden', !text);
 }
 
 function closeTrain() { $('train-modal').classList.add('hidden'); }

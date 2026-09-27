@@ -1589,3 +1589,7 @@ main.sheet-collapsed .sheet-toggle svg { transform: rotate(180deg); }
 /* Changed words on a take with a score: the way to keep its tune. */
 .words-changed { margin: 6px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .words-changed.hidden { display: none; }
+
+/* Short of GPU memory for training: said before it starts. */
+.train-memory { color: #fbbf24; font-size: 12.5px; margin: 0 0 10px; }
+.train-memory.hidden { display: none; }

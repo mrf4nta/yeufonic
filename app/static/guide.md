@@ -330,7 +330,12 @@ engine built with `WITH_TRAINER=0`, takes it out.
    finishes. Progress shows under the buttons and on the main screen, where you can stop it,
    and the corpus's badge at the top of the page pulses while it trains. Training again keeps
    the LoRA from the last run under a dated name, in **Previous runs**, or deletes it, as you
-   choose.
+   choose. Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs. The
+   Train window warns when less than that is free, so close anything else using the GPU first.
+
+A job that runs out of GPU memory says so, with what to try: close other programs using the GPU,
+lower the length cap, or, for training, leave the longest songs out. If the engine crashes and
+restarts, the job it was running is lost, and it says that too.
 
 When training finishes, the LoRA appears in the **Style LoRA** list with its trigger word. See
 **Balancing Planner and Sound** below for starting strengths. To share it, press **Download** under
