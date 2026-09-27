@@ -277,9 +277,22 @@ docker compose build --build-arg WITH_TRAINER=0 engine
 ```
 
 The fetch script also creates `data/` and `engine-state/output/`. Let it, rather than leaving them
-to Docker: a folder Docker creates for a mount belongs to root, and the app, which runs as uid
-1000, then cannot write its library there. If your user is not uid 1000, change `user:` for the
-app in compose.yml to your `id -u`:`id -g`, or `chown` those two folders to 1000.
+to Docker: a folder Docker creates for a mount belongs to root, and the app then cannot write its
+library there. On Linux it also writes your user and group ids to `.env`, as `APP_UID` and
+`APP_GID`, and the app runs as them, so what it writes belongs to you. Without them it runs as
+1000:1000. To set them by hand, put your `id -u` and `id -g` in `.env`:
+
+```sh
+APP_UID=1000
+APP_GID=1000
+```
+
+An install from before these settings wrote its files as 1000:1000. After setting them, give those
+files to your user and group, then run `docker compose up -d`:
+
+```sh
+sudo chown -R "$(id -u):$(id -g)" data engine-state/output
+```
 
 The models are YuE2 (plans and renders), SheetSage2 (transcription), Gemma 4 E4B (lyric drafts),
 the YuE2 instrumental LoRA, and the Realaudio decoder LoRA and tokenizer head.
@@ -595,7 +608,7 @@ heard back to an earlier step with **Checkpoints**.
 | **Corpora** is not in the menu | `TRAINING_ENABLED` is `0`, or the engine was built with `WITH_TRAINER=0` | set both back to `1`, rebuild the engine if it was the second; see Training a LoRA above |
 | Header says the checkpoint is missing | `yue2_3b_bf16.safetensors` is not in `models/checkpoints` | `sh scripts/fetch-models.sh`, then `docker compose restart engine` |
 | **Render this score** and **Write a new plan** are greyed out | no take's score is in the editor | press **Score** on a take in the library, or write a plan |
-| The app restarts, and its log says it cannot open the database | `data/` belongs to root, because Docker created it | `sudo chown -R 1000:1000 data engine-state/output`, or the uid in compose.yml |
+| The app restarts, and its log says it cannot open the database | `data/` belongs to root, because Docker created it | `sudo chown -R "$(id -u):$(id -g)" data engine-state/output`, with your ids as `APP_UID` and `APP_GID` in `.env` |
 | The page says *This host name is not allowed* | you reached it by a name not in `ALLOWED_HOSTS` | add that name or address to `ALLOWED_HOSTS` in compose.yml |
 | The Harmony slider is greyed out | the engine image is older than the app and has no `yue2_harmony` node | `docker compose up -d --build engine` |
 

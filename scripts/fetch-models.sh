@@ -11,7 +11,8 @@
 #   sh scripts/fetch-models.sh
 #
 # A file that is already there is kept, and an interrupted download resumes.
-# It also creates data/ and engine-state/output/, which the app needs to own.
+# It also creates data/ and engine-state/output/, which the app needs to own, and
+# records your user and group ids in .env for compose.yml to run the app as.
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -25,6 +26,15 @@ mkdir -p "$ROOT/models/checkpoints" "$ROOT/models/audio_encoders" "$ROOT/models/
 # The folders compose.yml mounts into the app.  Created here, as you, because a
 # folder Docker creates for a mount belongs to root, and the app cannot write to it.
 mkdir -p "$ROOT/data" "$ROOT/engine-state/output"
+# The app runs as APP_UID:APP_GID, 1000:1000 unless set, and what it writes belongs
+# to those ids. Compose reads .env beside compose.yml, so record whoever is setting
+# this up, once. Linux only: Docker Desktop maps ownership itself, and root is
+# not someone the app should run as.
+if [ "$(uname -s)" = Linux ] && [ "$(id -u)" != 0 ] && ! grep -qs '^APP_UID=' "$ROOT/.env"; then
+  if [ -s "$ROOT/.env" ] && [ -n "$(tail -c 1 "$ROOT/.env")" ]; then echo >> "$ROOT/.env"; fi
+  printf 'APP_UID=%s\nAPP_GID=%s\n' "$(id -u)" "$(id -g)" >> "$ROOT/.env"
+  echo "wrote APP_UID=$(id -u) and APP_GID=$(id -g) to .env"
+fi
 
 fetch() {
   url="$1"; dest="$2"

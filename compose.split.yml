@@ -20,8 +20,9 @@ services:
     # Host networking, so the app binds 8090 directly on this machine.
     network_mode: host
     read_only: true
-    # Run as the owner of the data folder on this host.
-    user: "1000:1000"
+    # Run as the owner of the data folder on this host: APP_UID and APP_GID in .env,
+    # as scripts/fetch-models.sh writes them, or 1000:1000.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     cap_drop:
       - ALL
     security_opt:

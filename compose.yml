@@ -55,8 +55,9 @@ services:
     container_name: yeufonic-app
     restart: unless-stopped
     # Run as the host user so the audio, stems and database stay owned by you, and
-    # a backup can read them without sudo.
-    user: "1000:1000"
+    # a backup can read them without sudo. scripts/fetch-models.sh writes your ids
+    # to .env, which Compose reads; without them it is 1000:1000.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     depends_on:
       - engine
     ports:

@@ -36,6 +36,11 @@ cannot creep back in.
 
 ### Fixed
 
+- On Docker, the app ran as user and group 1000 whatever the host's ids were, so on a host where
+  yours differ its files belonged to a group, and perhaps a user, that does not exist there.
+  `compose.yml` now reads `APP_UID` and `APP_GID` from `.env`, and `scripts/fetch-models.sh`
+  writes yours there. An existing install can run the script again, or set them by hand; the
+  README says how, and how to hand over the files written before. Fixes #11.
 - Rendering a take's score again now uses the editor's style, style LoRA and strengths, length cap
   and mode. It kept the take's own, so choosing another LoRA and rendering changed nothing. With
   **keep this seed** unticked it now rolls a new seed, as the guide says, instead of reusing the
