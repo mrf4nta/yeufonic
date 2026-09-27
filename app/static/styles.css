@@ -1048,6 +1048,16 @@ label .lora-value:disabled { opacity: 0.6; }
 .folder-pick button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text);
   font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
 .folder-pick button:hover { background: var(--card-2); }
+.folder-pick .here {
+  position: sticky; top: -8px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: -8px -8px 4px; padding: 8px 8px 8px 14px; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.folder-pick .here .folder-back {
+  display: inline-block; width: auto; flex-shrink: 0; padding: 4px 12px; border: 1px solid var(--accent-a); border-radius: 999px;
+  background: rgba(123, 92, 255, 0.14); color: var(--text); white-space: nowrap;
+  font: 12.5px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+.folder-pick .here .folder-back:hover { background: rgba(123, 92, 255, 0.28); }
 .identity-summary, .persona-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 12px 0; font-size: 13.5px; }
 .identity-actions, .persona-actions {
   display: flex;

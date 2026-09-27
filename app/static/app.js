@@ -3756,12 +3756,14 @@ async function browseFolder(path) {
   try {
     var data = await api('/api/import/browse' + (path ? '?path=' + encodeURIComponent(path) : ''));
     IDENTITY.browse = data;
-    var html = data.path ? '<div class="here">' + esc(data.path) + ' · ' + data.songs + ' song' + (data.songs === 1 ? '' : 's') + ' here</div>' : '';
     // Up a level, and from the top of an import folder back to the list of them: the
     // server gives no parent there, and without this the only way back was to close
-    // the window and start again.
-    if (data.parent) { html += '<button data-folder="' + esc(data.parent) + '">← up</button>'; }
-    else if (data.path) { html += '<button data-folder="">← all folders</button>'; }
+    // the window and start again. It sits in the header, apart from the folders, and
+    // the header stays in view while the list scrolls.
+    var back = data.parent ? '<button class="folder-back" data-folder="' + esc(data.parent) + '">\u2190 up</button>'
+      : '<button class="folder-back" data-folder="">\u2190 all folders</button>';
+    var html = data.path ? '<div class="here"><span>' + esc(data.path) + ' · ' + data.songs + ' song' +
+      (data.songs === 1 ? '' : 's') + ' here</span>' + back + '</div>' : '';
     html += data.folders.map(function (folder) {
       // The list of import folders shows them whole; inside one, a folder is its own
       // name. Windows paths use backslashes, which a split on "/" never found.
