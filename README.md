@@ -290,6 +290,9 @@ APP_UID=1000
 APP_GID=1000
 ```
 
+The app is published on port 8090. To use another, set `APP_PORT` in the same `.env`, say
+`APP_PORT=8095`; the address the engine prints at start-up follows it.
+
 An install from before these settings wrote its files as 1000:1000. After setting them, give those
 files to your user and group, then run `docker compose up -d`:
 

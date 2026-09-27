@@ -27,7 +27,7 @@ services:
     command: python main.py --listen 0.0.0.0 --port 8188 --max-upload-size=${ENGINE_MAX_UPLOAD_MB:-2048}
     # Where the engine's start-up message sends people: the app, not the engine.
     environment:
-      YEUFONIC_APP_URL: http://127.0.0.1:8090
+      YEUFONIC_APP_URL: http://127.0.0.1:${APP_PORT:-8090}
     # Localhost only, for debugging and for the optional ComfyUI UI.  The app
     # reaches the engine by service name over the compose network.
     ports:
@@ -64,7 +64,8 @@ services:
     depends_on:
       - engine
     ports:
-      - "127.0.0.1:8090:8090"
+      # APP_PORT in .env moves it; the engine's start-up message follows.
+      - "127.0.0.1:${APP_PORT:-8090}:8090"
     environment:
       ENGINE_URL: http://engine:8188
       DATA_DIR: /data

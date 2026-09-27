@@ -44,8 +44,10 @@ cannot creep back in.
   job, so this does not rely on reading the engine's log, which is kept only as a fallback for an
   engine built before this. Rebuild the engine to get it. The Train window warns before a run when
   less GPU memory is free than training needs. Fixes #12.
-- The engine's start-up message, "To see the GUI go to", gave the engine's own address. It now
-  gives the app's.
+- The engine's start-up message, "To see the GUI go to", gave the engine's own address, and on
+  Docker as 0.0.0.0, which a browser cannot open. It now gives the app's. On Docker the app's port
+  can be moved with `APP_PORT` in `.env`, and the message follows it. Rebuild the engine to get
+  it.
 - On Docker, the app ran as user and group 1000 whatever the host's ids were, so on a host where
   yours differ its files belonged to a group, and perhaps a user, that does not exist there.
   `compose.yml` now reads `APP_UID` and `APP_GID` from `.env`, and `scripts/fetch-models.sh`
