@@ -1373,7 +1373,109 @@ function queueWhen(item) {
 /* The card shows the job the GPU is on, whoever sent it, and lists what follows.
    The engine shares live progress only with the app that sent a job, so a job from
    outside the app gets a time estimate instead of a stage. */
+/* The transcription's progress under the recording's own buttons, as the main
+   page's job card shows it: the editor covers that card, in Cover and Instrumental
+   alike. Made here when the page predates it, so an unrestarted app still gets it. */
+function paintTranscribeJob(current, queue) {
+  var source = currentSource();
+  var box = $('transcribe-job');
+  if (!box) {
+    var row = $('cover-only') ? $('cover-only').querySelector('.source-row') : null;
+    if (!row) { return; }
+    box = document.createElement('div');
+    box.id = 'transcribe-job';
+    box.className = 'hear-job hidden';
+    box.innerHTML = '<div class="bar"><div id="transcribe-bar"></div></div>' +
+      '<div class="hear-job-line"><span id="transcribe-stage" class="muted">Waiting</span><span id="transcribe-time" class="muted"></span></div>';
+    row.parentNode.insertBefore(box, row.nextSibling);
+  }
+  var mine = function (item) { return item && item.kind === 'transcribe' && source && item.id === source.id; };
+  var running = mine(current) ? current : null;
+  var waiting = !running && (queue || []).some(mine);
+  box.classList.toggle('hidden', !running && !waiting);
+  if (running) {
+    $('transcribe-bar').style.width = Math.max(3, Math.round((running.progress || 0) * 100)) + '%';
+    var label = running.label || 'Transcribing';
+    if (running.value && running.max) { label += ' \u00b7 ' + running.value + '/' + running.max; }
+    $('transcribe-stage').textContent = label;
+    $('transcribe-time').textContent = secs(running.elapsed || 0);
+  } else if (waiting) {
+    $('transcribe-bar').style.width = '0%';
+    $('transcribe-stage').textContent = 'Queued behind another job';
+    $('transcribe-time').textContent = '';
+  }
+}
+
+/* The same for a score plan being written for the take in the editor: the Score
+   page says "writing a new plan", and this shows how far it has got. */
+function paintPlanJob(current, queue) {
+  var target = awaitingPlanId();
+  var box = $('plan-job');
+  if (!box) {
+    var summary = $('score-box') ? $('score-box').querySelector('summary') : null;
+    if (!summary) { return; }
+    box = document.createElement('div');
+    box.id = 'plan-job';
+    box.className = 'hear-job hidden';
+    box.innerHTML = '<div class="bar"><div id="plan-bar"></div></div>' +
+      '<div class="hear-job-line"><span id="plan-stage" class="muted">Waiting</span><span id="plan-time" class="muted"></span></div>';
+    summary.parentNode.insertBefore(box, summary.nextSibling);
+  }
+  var mine = function (item) { return item && item.kind === 'plan' && target && item.id === target; };
+  var running = mine(current) ? current : null;
+  var waiting = !running && (queue || []).some(mine);
+  box.classList.toggle('hidden', !running && !waiting);
+  if (running) {
+    $('plan-bar').style.width = Math.max(3, Math.round((running.progress || 0) * 100)) + '%';
+    var label = running.label || 'Writing the score plan';
+    if (running.value && running.max) { label += ' \u00b7 ' + running.value + '/' + running.max; }
+    $('plan-stage').textContent = label;
+    $('plan-time').textContent = secs(running.elapsed || 0);
+  } else if (waiting) {
+    $('plan-bar').style.width = '0%';
+    $('plan-stage').textContent = 'Queued behind another job';
+    $('plan-time').textContent = '';
+  }
+}
+
+/* And a render of the take the editor shows, say one opened from its card while it
+   renders: the editor's bottom bar carries its progress, in the status line's place. */
+function paintRenderJob(current, queue) {
+  var target = Selection.formTakeId;
+  var box = $('render-job');
+  if (!box) {
+    var status = $('render-status');
+    if (!status || !status.parentNode) { return; }
+    box = document.createElement('div');
+    box.id = 'render-job';
+    box.className = 'hear-job hidden';
+    box.innerHTML = '<div class="bar"><div id="render-bar"></div></div>' +
+      '<div class="hear-job-line"><span id="render-stage" class="muted">Waiting</span><span id="render-time" class="muted"></span></div>';
+    status.parentNode.insertBefore(box, status);
+  }
+  var mine = function (item) { return item && item.kind === 'render' && target && item.id === target; };
+  var running = mine(current) ? current : null;
+  var waiting = !running && (queue || []).some(mine);
+  var shown = Boolean(running || waiting);
+  box.classList.toggle('hidden', !shown);
+  if ($('render-status')) { $('render-status').classList.toggle('hidden', shown); }
+  if (running) {
+    $('render-bar').style.width = Math.max(3, Math.round((running.progress || 0) * 100)) + '%';
+    var label = running.label || 'Rendering';
+    if (running.value && running.max) { label += ' \u00b7 ' + running.value + '/' + running.max; }
+    $('render-stage').textContent = label;
+    $('render-time').textContent = secs(running.elapsed || 0);
+  } else if (waiting) {
+    $('render-bar').style.width = '0%';
+    $('render-stage').textContent = 'Render queued behind another job';
+    $('render-time').textContent = '';
+  }
+}
+
 function paintJob(current, queue, options) {
+  paintTranscribeJob(current, queue);
+  paintPlanJob(current, queue);
+  paintRenderJob(current, queue);
   var card = $('job-card');
   if (!current && !queue.length) {
     if (State.busy) { State.busy = false; loadTakes(); loadSources(); }

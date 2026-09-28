@@ -25,6 +25,13 @@ cannot creep back in.
 
 ## Unreleased
 
+### Changed
+
+- **Progress in the editor.** Transcribing a recording shows its progress under the recording's
+  buttons, writing a score plan shows it on the Score page, and a take opened while it renders
+  shows its render in the editor's bottom bar, as the job card behind the editor does. Each says
+  when the job is queued behind another.
+
 ### Fixed
 
 - A render that doesn't stop at the end of its score plays on to the length cap, and was cut off
