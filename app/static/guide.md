@@ -221,7 +221,9 @@ in the mid-range; this separates instruments and vocals more cleanly. On by defa
 ### Length
 
 The length cap is a firm limit, not a target. YuE2 decides when a song ends, and usually ends by
-itself; the cap stops one that will not.
+itself; the cap stops one that will not. It starts at 360 seconds. With a recording chosen, for a
+cover or an instrumental, it follows the recording's score instead, rounded up with half a minute to
+spare, so a long song is not cut short. A cap you type yourself stays as you set it.
 
 ---
 
@@ -567,8 +569,10 @@ be rendered again.
 
 **+ Song**, **+ Cover** and **+ Instrumental** on the take panel, or **New song** beside the
 editor's heading, start again from the take on show. They clear the title, the lyrics and the score,
-and **keep your settings**: style, vocal, Harmony, plan variety, length cap, interpretation, LoRA and
-seed. The take being shown lets go of the editor, so Render cannot act on it by mistake.
+and start from the defaults: an empty style (with a chosen LoRA's trigger word), the usual length
+cap, Harmony Familiar, plan variety normal, interpretation Standard, production polish on,
+normalising off, and a new seed that is not held. A chosen LoRA and a chosen recording stay chosen.
+The take being shown lets go of the editor, so Render cannot act on it by mistake.
 
 Words you had typed but not used are not thrown away: a bar offers to restore them.
 

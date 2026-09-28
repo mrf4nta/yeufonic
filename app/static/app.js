@@ -1697,6 +1697,7 @@ function paintSource() {
     badge.className = 'badge';
     // An instrumental let go of its recording: the recording's score goes with it.
     if (State.mode === 'inst' && Selection.boxKind === 'source') { clearRecordingScore(); }
+    followRecordingCap();
     paintInstSource();
     return;
   }
@@ -1721,6 +1722,7 @@ function paintSource() {
       syncEditor();
     }
   }
+  followRecordingCap();
   paintInstSource();
 }
 
@@ -1800,6 +1802,7 @@ async function loadScore() {
   // The recording owns the box now, empty score and all, so this does not fetch again.
   setSelection({ formTakeId: null, boxKind: 'source', boxId: source.id });
   setChart('');
+  followRecordingCap();
   paintInstSource();
 }
 
@@ -1811,6 +1814,37 @@ async function loadScore() {
    the server works them out again from the same score. */
 var SCORE_SECTION_AS = { interlude: 'bridge', prechorus: 'pre-chorus', 'pre chorus': 'pre-chorus', solo: 'bridge',
   'break': 'bridge', breakdown: 'bridge', coda: 'outro', ending: 'outro' };
+
+/* The length cap follows a recording's score: the score fixes the length, and 360
+   seconds would cut a longer one short. Rounded up with half a minute to spare,
+   as a render can run a little past its score. A cap typed by hand, or a take's
+   own, is left alone; letting go of the recording goes back to the default. */
+var DEFAULT_CAP = 360;
+
+function capForScore(abc) {
+  var length = planLength(abc);
+  if (!length || !length.seconds) { return null; }
+  return Math.min(900, Math.ceil((length.seconds + 30) / 10) * 10);
+}
+
+function followRecordingCap() {
+  var box = $('max-duration');
+  if (!box || State.capTyped) { return; }
+  var fromRecording = (State.mode === 'cover' || State.mode === 'inst') && Selection.boxKind === 'source' &&
+    Boolean(currentSource()) && Selection.boxId === currentSource().id;
+  var cap = fromRecording ? capForScore($('abc').value) : null;
+  if (cap) {
+    box.value = cap;
+    State.capFromScore = true;
+  } else if (State.capFromScore && !fromRecording) {
+    box.value = DEFAULT_CAP;
+    State.capFromScore = false;
+  } else {
+    return;
+  }
+  if (State.mode === 'inst') { paintStructure(); }
+  saveForm();
+}
 
 function clearRecordingScore() {
   $('abc').value = '';
@@ -2952,6 +2986,7 @@ function setMode(mode) {
     setChart('');
     statusLine('Write a score plan to start a song from scratch.');
   }
+  followRecordingCap();
   if (inst) { paintInstSource(); }
 }
 
@@ -3482,7 +3517,17 @@ var PRESETS = {
     'lo-fi hip hop, Rhodes, vinyl crackle, mellow drums, 85 BPM',
     'surf rock, twangy lead guitar, spring reverb, driving drums, 160 BPM',
     'synthwave, analog synth lead, arpeggios, gated drums, 110 BPM',
-    'jazz trio, piano, upright bass, brushed drums, swing, 120 BPM'
+    'jazz trio, piano, upright bass, brushed drums, swing, 120 BPM',
+    'acoustic pop, strummed acoustic guitar, piano, warm bass, light drums, 96 BPM',
+    'piano ballad, grand piano, soft strings, gentle, emotional, 66 BPM',
+    'rock band, electric guitars, bass guitar, punchy drums, driving, 128 BPM',
+    'worship ballad, piano, ambient pads, electric guitar swells, building drums, 72 BPM',
+    'country, acoustic guitar, pedal steel, fiddle, brushed drums, 104 BPM',
+    'funk, slap bass, clean rhythm guitar, horn section, tight drums, 108 BPM',
+    'blues, electric guitar, Hammond organ, bass, shuffle drums, 92 BPM',
+    'reggae, offbeat guitar, deep bass, organ, one drop drums, 76 BPM',
+    'dance, four-on-the-floor kick, synth bass, bright synth lead, 124 BPM',
+    'orchestral, full orchestra, strings, brass, timpani, epic, 90 BPM'
   ]
 };
 
@@ -3893,7 +3938,12 @@ function wireStructure() {
     if (field === 'seconds') { item.seconds = Math.max(4, Math.min(180, Math.round(Number(event.target.value) || 0))); }
     paintStructure();
   });
-  $('max-duration').addEventListener('input', function () { if (State.mode === 'inst') { paintStructure(); } });
+  $('max-duration').addEventListener('input', function () {
+    // Typed by hand: a recording's score no longer sets it.
+    State.capTyped = true;
+    State.capFromScore = false;
+    if (State.mode === 'inst') { paintStructure(); }
+  });
   $('create-inst').addEventListener('click', doInstrumental);
 }
 
@@ -5248,6 +5298,9 @@ function selectTake(take) {
   $('style').dataset.touched = '1';
   // Before the structure: timed sections are laid out against the cap.
   if (take.max_duration) { $('max-duration').value = Math.round(take.max_duration); }
+  // The take's own cap, which a recording's score does not replace.
+  State.capTyped = false;
+  State.capFromScore = false;
   // An instrumental keeps its structure where a song keeps its lyrics.  The lyrics box
   // is left alone, so browsing instrumentals cannot wipe the words of a song.
   if (isInst) {
@@ -5395,7 +5448,10 @@ function startFresh() {
   delete $('style').dataset.touched;
   // A chosen LoRA stays chosen, and needs its trigger word in the style to act.
   if (State.loraTrigger && loraChosen()) { applyLoraTrigger(State.loraTrigger); }
-  $('max-duration').value = 360;
+  $('max-duration').value = DEFAULT_CAP;
+  State.capTyped = false;
+  State.capFromScore = false;
+  followRecordingCap();
   if ($('variety')) { $('variety').value = 'normal'; }
   // Familiar: YuE2's own chords, the slider's first step.
   if ($('harmony')) { $('harmony').value = 0; paintHarmony(); }

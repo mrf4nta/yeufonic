@@ -32,12 +32,20 @@ cannot creep back in.
   the score's own sections, so the whole score is played. A sung melody is given to an
   instrument wherever none plays, since a vocal part with notes makes the render sing, and an
   emptied one leaves gaps the model fills with humming. #21.
+- **Ten more instrumental styles** under the Style box: acoustic pop, piano ballad, rock band,
+  worship ballad, country, funk, blues, reggae, dance and orchestral, beside the first five.
 - **Vocals and instruments.** Two more stem models, fast and fine tuned, split a take or a recording
   into the vocal and one **instruments** stem holding everything else, a backing track. Untick
   vocals to keep only the instruments. #20.
 - **A corpus song's own style.** Picking a corpus song as the recording fills the Style box with
   the style it was learned with, as its chip has it, with the chosen LoRA's trigger word in front.
   Choosing a LoRA afterwards leaves a style typed by hand alone.
+
+### Changed
+
+- **The length cap follows a recording's score.** Choosing a recording, for a cover or an
+  instrumental, sets the cap to its score's length with half a minute to spare, where 360 seconds
+  would cut a longer song short. A cap typed by hand, or a take's own, is left alone.
 
 ### Fixed
 
