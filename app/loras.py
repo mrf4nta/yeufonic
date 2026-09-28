@@ -296,6 +296,15 @@ def set_aside(base: str, root: Path, title: str) -> str:
     return new
 
 
+def run_lora(name: str) -> str:
+    """The LoRA a training run's other files belong to: its checkpoints (base_stepN),
+    the trainer's best copy, and a previous run set aside (base_20260920_stepN).
+    Anything else is its own."""
+    stem = name.removesuffix(".safetensors")
+    found = re.fullmatch(r"(.+?)(?:_\d{8}(?:_\d{4})?)?(?:_step\d+|_best)?", stem)
+    return f"{found.group(1)}.safetensors" if found else name
+
+
 def checkpoints(base: str, root: Path | None) -> list[dict]:
     """The checkpoints a corpus's training runs kept: this run's (base_stepN) and any
     previous run's, set aside under a dated name (base_20260920_stepN).  Each with its

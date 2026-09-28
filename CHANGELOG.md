@@ -23,6 +23,13 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Fixed
+
+- A training checkpoint, or a previous run's LoRA, showed none of its LoRA's learned styles. It now
+  offers the same chips, and its **Download** carries them in the note. Fixes #17.
+
 ## 0.0.5 (2026-09-28)
 
 ### Added

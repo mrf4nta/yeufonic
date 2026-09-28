@@ -255,6 +255,30 @@ def test_a_learned_style_is_the_caption_the_lora_was_trained_on(client):
         "a song's own description replaces the corpus one, as it does in the export"
 
 
+def test_a_checkpoint_offers_its_loras_learned_styles(client, monkeypatch):
+    """A checkpoint was trained on the same captions as the LoRA it folds under, so
+    it gets the same chips, and so does a previous run set aside under a dated name."""
+    from app import loras, main
+
+    assert loras.run_lora("marlow_sands_lora_step950.safetensors") == "marlow_sands_lora.safetensors"
+    assert loras.run_lora("marlow_sands_lora_20260920_step50.safetensors") == "marlow_sands_lora.safetensors"
+    assert loras.run_lora("marlow_sands_lora_20260920_1432.safetensors") == "marlow_sands_lora.safetensors"
+    assert loras.run_lora("marlow_sands_lora.safetensors") == "marlow_sands_lora.safetensors"
+    assert loras.run_lora("slider-metal.safetensors") == "slider-metal.safetensors"
+
+    chips = [{"title": "Tin Roof Rain", "prompt": "blues rock", "hint": "blues rock", "tempo": 86, "key": "A major"}]
+    monkeypatch.setattr(main, "_lora_corpus_styles", lambda: {"marlow_sands_lora.safetensors": chips})
+    monkeypatch.setattr(main.ENGINE, "options", {"loras": ["marlow_sands_lora.safetensors",
+                                                           "marlow_sands_lora_step950.safetensors",
+                                                           "marlow_sands_lora_20260920_step50.safetensors",
+                                                           "slider-metal.safetensors"]})
+    styles = {item["name"]: item.get("styles") for item in main._catalogue_with_styles()}
+
+    assert styles["marlow_sands_lora_step950.safetensors"] == chips
+    assert styles["marlow_sands_lora_20260920_step50.safetensors"] == chips
+    assert not styles["slider-metal.safetensors"], "a LoRA from elsewhere has no corpus behind it"
+
+
 def test_a_lora_this_app_cannot_read_fails_the_run_with_the_fix(client, monkeypatch, tmp_path):
     """An engine image older than the trainer patch leaves its files readable by root
     only.  The run says so and how to fix it, rather than leaving a LoRA half finished."""

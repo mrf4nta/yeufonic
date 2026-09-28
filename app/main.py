@@ -860,8 +860,10 @@ def _catalogue_with_styles() -> list[dict]:
     items = loras.catalogue(ENGINE.options.get("loras", []))
     corpus_styles = _lora_corpus_styles()
     for item in items:
-        if item["name"] in corpus_styles:
-            item["styles"] = corpus_styles[item["name"]]
+        # A checkpoint was trained on the same captions as its LoRA, so it takes the same chips.
+        styles = corpus_styles.get(item["name"]) or corpus_styles.get(loras.run_lora(item["name"]))
+        if styles:
+            item["styles"] = styles
     return items
 
 
@@ -2274,7 +2276,8 @@ async def download_lora(name: str) -> FileResponse:
     """The LoRA and its note in one zip, for someone else's app.  A LoRA trained from a
     corpus has its learned styles written into the note, so its chips travel with it."""
     path = _lora_file(name)
-    styles = _lora_corpus_styles().get(name) or loras.note_for(path).get("styles") or []
+    corpus_styles = _lora_corpus_styles()
+    styles = corpus_styles.get(name) or corpus_styles.get(loras.run_lora(name)) or loras.note_for(path).get("styles") or []
     config.WORK_DIR.mkdir(parents=True, exist_ok=True)
     archive = config.WORK_DIR / f"lora-{uuid.uuid4().hex[:8]}.zip"
     await asyncio.to_thread(loras.bundle, path, styles, archive)
