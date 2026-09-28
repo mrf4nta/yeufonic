@@ -1,7 +1,7 @@
 # The Windows installer
 
 A small installer (under 1 MB) for people who would rather not use Docker. It runs natively
-on Windows: no Docker, no WSL and no administrator prompt. **First pass: being tested.**
+on Windows: no Docker, no WSL and no administrator prompt.
 
 ## What it does
 
