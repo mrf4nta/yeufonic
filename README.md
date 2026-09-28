@@ -30,7 +30,7 @@ external LLM for lyrics is optional.
                    v
                  engine  (ComfyUI + the YuE2 nodes)  owns the GPU
 
-If you want to buy me a beer, then please use [PayPal](https://paypal.me/dynamohums).
+If you enjoy using this app, then please give it a ⭐️, and if you want to buy me a beer, then please use [PayPal](https://paypal.me/dynamohums).
 
 ## What it looks like
 
