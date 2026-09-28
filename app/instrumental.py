@@ -253,17 +253,24 @@ def tune_on_instrument(abc: str) -> str:
     return "\n".join(out)
 
 
-def excerpt(src: Path, dest: Path, spans: int = 3, each: float = 3.0) -> Path:
-    """A short montage of the piece, for a check that need not read all of it.
+# The check hears a span every EVERY seconds, so a voice lasting that long cannot fall
+# between two.  Three spans in all, at a quarter, a half and three quarters, missed a
+# take whose humming came and went: 14% sung across the take, 0% in the spans.
+EVERY = 15.0
+MOST_SPANS = 24
 
-    Singing that has crept into an instrumental runs through it rather than
-    appearing for a bar, so three spans spread across the track find it while
-    separating a fraction of the audio."""
+
+def excerpt(src: Path, dest: Path, each: float = 3.0, every: float = EVERY, most: int = MOST_SPANS) -> Path:
+    """A montage of the piece, for a check that need not read all of it: a span from
+    each stretch of `every` seconds, a fifth of the piece at the usual spacing, with
+    at most `most` spans so a long piece does not hold the queue up for long."""
     total = duration_of(src)
-    if total <= spans * each:
+    count = max(3, min(most, int(total // every)))
+    if total <= count * each:
         shutil.copy(src, dest)
         return dest
-    starts = [total * fraction - each / 2 for fraction in (0.25, 0.5, 0.75)][:spans]
+    stretch = total / count
+    starts = [stretch * (index + 0.5) - each / 2 for index in range(count)]
     parts = " ".join(
         f"[0:a]atrim=start={max(0.0, start):.2f}:duration={each},asetpts=N/SR/TB[a{i}];"
         for i, start in enumerate(starts))

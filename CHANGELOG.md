@@ -58,6 +58,9 @@ cannot creep back in.
 - Choosing a second recording left the first one's words in the Lyrics box, so a cover could be sung
   with another song's words. Words the app put in from a recording now follow the recording chosen,
   and go when it has none; words typed or edited in the box are replaced only after asking. Fixes #19.
+- The vocal check on an instrumental listened to only three short spans, at a quarter, a half
+  and three quarters, and missed a voice that came and went between them. It now hears a span from
+  every fifteen seconds, so a voice lasting that long cannot fall between two. Fixes #22.
 
 ## 0.0.5 (2026-09-28)
 

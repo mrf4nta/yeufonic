@@ -1644,8 +1644,8 @@ def singing_share(audio: Path) -> float | None:
     """How much of a finished instrumental is singing, in a few seconds.
 
     The instrumental LoRA usually keeps the voice out and sometimes does not, so
-    the audio is checked rather than assumed. Three short spans are separated
-    with Demucs held in memory: a fresh process spends ten seconds loading the
+    the audio is checked rather than assumed. A short span from every fifteen
+    seconds is separated with Demucs held in memory: a fresh process spends ten seconds loading the
     model before it does anything, which was long enough for someone to hear the
     opening, believe it was clean, and move on. This answers while they are still
     listening.

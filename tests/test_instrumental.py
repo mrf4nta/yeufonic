@@ -140,13 +140,30 @@ def test_a_short_piece_is_checked_whole(tmp_path):
 
 
 def test_a_long_piece_is_sampled_not_read_whole(tmp_path):
-    """Nine seconds from across the piece: enough to hear singing that runs
-    through it, little enough to separate in a couple of seconds."""
+    """A span from every fifteen seconds: a fifth of the piece, and never more than
+    the most spans, so a long piece does not hold the queue up."""
     long = tmp_path / "long.wav"
     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:r=16000",
                     "-t", "120", str(long)], check=True)
     out = instrumental.excerpt(long, tmp_path / "out.wav")
-    assert 7 < instrumental.duration_of(out) < 11
+    assert 23 < instrumental.duration_of(out) < 25, "eight spans of three seconds"
+    longer = tmp_path / "longer.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:r=16000",
+                    "-t", "600", str(longer)], check=True)
+    assert instrumental.duration_of(instrumental.excerpt(longer, tmp_path / "out2.wav")) < instrumental.MOST_SPANS * 3 + 1
+
+
+def test_a_voice_that_comes_and_goes_is_heard(tmp_path):
+    """A stretch of voice longer than the spacing always lands in a span: here twenty
+    seconds of tone in four minutes of silence, where three spans at a quarter, a
+    half and three quarters heard nothing."""
+    piece = tmp_path / "piece.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-f", "lavfi",
+                    "-i", "sine=frequency=330:r=16000", "-filter_complex",
+                    "[0:a]atrim=duration=240[s];[1:a]atrim=duration=20,adelay=200000[t];[s][t]amix=inputs=2:normalize=0",
+                    "-t", "240", str(piece)], check=True)
+    out = instrumental.excerpt(piece, tmp_path / "out.wav")
+    assert instrumental.sung_share(out) > 0.05
 
 
 def test_the_share_reads_silence_and_singing_apart():
