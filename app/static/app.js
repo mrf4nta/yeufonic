@@ -2600,6 +2600,8 @@ function paintStemChoices(preferred) {
   if (!chosen) { chosen = models[0] || { stems: [] }; }
   var all = [];
   models.forEach(function (m) { m.stems.forEach(function (s) { if (all.indexOf(s) < 0) { all.push(s); } }); });
+  // Beside the vocal it is the other half of.
+  if (all.indexOf('instruments') > 1) { all.splice(all.indexOf('instruments'), 1); all.splice(1, 0, 'instruments'); }
   $('stems-list').innerHTML = all.map(function (name) {
     var on = chosen.stems.indexOf(name) >= 0;
     return '<label class="stem-choice' + (on ? '' : ' off') + '">' +

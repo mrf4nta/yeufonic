@@ -528,6 +528,11 @@ and guitar and piano on some models — and run.
 Separation runs on the **CPU**, so it never competes with a render for the GPU. *Fine tuned* runs
 four models in turn for a better split and takes about four times as long.
 
+For a backing track, choose **Vocals and instruments**. It splits the song in two: the vocal, and
+**instruments**, everything else as one stem. Untick **vocals** to keep only the instruments. It is
+the same separation as the four stems, added back together, so it takes as long and sounds as clean.
+The *fine tuned* one leaves the least of the voice behind.
+
 Stems land in `data/stems/<title>-<id>/`, play from the chips on the card, and download singly or as
 a zip. They stay until you delete them.
 

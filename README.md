@@ -14,7 +14,7 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 - **Instrumentals:** build the structure section by section.
 - **Style LoRAs:** use published ones, or train your own from a folder of songs.
 - **Lyrics:** draft them from a sentence, or extract them from a recording.
-- **Stems:** split any take into vocals, drums, bass and more.
+- **Stems:** split any take into vocals, drums, bass and more, or into vocals and a backing track.
 - **A library:** spaces, stars, and every take's settings kept so it can be made again.
 - **A take panel and an editor:** the left panel shows how the selected take was made, and a large
   window, in three columns or as steps, is where takes are made and changed.
@@ -101,7 +101,8 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   section's chords. Chord symbols sit in double quotes. Fix one everywhere with find and
   replace, or edit any single chord by hand in the score.
 - **Stems.** Extract vocals, drums, bass, other, and optionally guitar and piano, on CPU, while
-  the GPU stays free. Download them singly or as a zip.
+  the GPU stays free. Or split into just the vocals and the instruments, for a backing track.
+  Download them singly or as a zip.
 - **Spaces.** Keep takes apart by project: a space per song, per album, or for sketches. Create,
   rename and delete spaces, and move a take from one to another.
 - **A library.** Every take keeps its score, style, lyrics, seed and settings, so it can be

@@ -27,6 +27,9 @@ cannot creep back in.
 
 ### Added
 
+- **Vocals and instruments.** Two more stem models, fast and fine tuned, split a take or a recording
+  into the vocal and one **instruments** stem holding everything else, a backing track. Untick
+  vocals to keep only the instruments. #20.
 - **A corpus song's own style.** Picking a corpus song as the recording fills the Style box with
   the style it was learned with, as its chip has it, with the chosen LoRA's trigger word in front.
   Choosing a LoRA afterwards leaves a style typed by hand alone.

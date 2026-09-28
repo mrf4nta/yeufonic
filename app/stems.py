@@ -20,11 +20,22 @@ from typing import Callable
 # Model -> the stems it produces, and how many models it runs one after another.
 # htdemucs_ft is a bag of four fine-tuned models, and each draws its own progress
 # bar.  htdemucs_6s adds guitar and piano, which are noticeably weaker.
+#
+# The two-stem ones are demucs's two-stem split of the model named: the same
+# separation, written as the vocal and the sum of everything else, so the
+# instruments stem is as clean as the four stems added together.
 MODELS: dict[str, dict] = {
     "htdemucs": {"label": "Fast, four stems", "stems": ["vocals", "drums", "bass", "other"], "passes": 1},
     "htdemucs_ft": {"label": "Fine tuned, four stems, slower", "stems": ["vocals", "drums", "bass", "other"], "passes": 4},
     "htdemucs_6s": {"label": "Six stems (adds guitar and piano)", "stems": ["vocals", "drums", "bass", "other", "guitar", "piano"], "passes": 1},
+    "htdemucs_2s": {"label": "Vocals and instruments, two stems", "stems": ["vocals", "instruments"], "passes": 1,
+                    "demucs": "htdemucs", "two_stems": "vocals"},
+    "htdemucs_ft_2s": {"label": "Vocals and instruments, fine tuned, slower", "stems": ["vocals", "instruments"], "passes": 4,
+                       "demucs": "htdemucs_ft", "two_stems": "vocals"},
 }
+
+# What demucs calls a stem, where it is not what the app calls it.
+RENAMED = {"no_vocals": "instruments"}
 
 FORMATS = ["wav", "flac", "mp3"]
 
@@ -121,8 +132,9 @@ async def separate(
     stems are moved into place with a rename."""
     if model not in MODELS:
         raise ValueError(f"unknown model {model!r}")
-    available = MODELS[model]["stems"]
-    passes = MODELS[model]["passes"]
+    spec = MODELS[model]
+    available = spec["stems"]
+    passes = spec["passes"]
     keep = [s for s in wanted if s in available] or available
     fmt = fmt if fmt in FORMATS else "wav"
 
@@ -138,7 +150,9 @@ async def separate(
     proc = None
     try:
         report(0.02, "Loading the model")
-        cmd = ["demucs", "-n", model, "-o", str(work), "--filename", "{stem}.{ext}", *FORMAT_FLAGS[fmt]]
+        cmd = ["demucs", "-n", spec.get("demucs", model), "-o", str(work), "--filename", "{stem}.{ext}", *FORMAT_FLAGS[fmt]]
+        if spec.get("two_stems"):
+            cmd += ["--two-stems", spec["two_stems"]]
         if DEFAULT_JOBS > 0:
             cmd += ["-j", str(DEFAULT_JOBS)]
         cmd.append(str(src))
@@ -165,7 +179,8 @@ async def separate(
             raise RuntimeError("demucs failed: " + " / ".join(tail[-4:]))
 
         # demucs writes <work>/<model>/<track name>/<stem>.<ext>
-        produced = {path.stem: path for path in work.rglob(f"*.{fmt}") if path.stem in available}
+        named = ((RENAMED.get(path.stem, path.stem), path) for path in work.rglob(f"*.{fmt}"))
+        produced = {name: path for name, path in named if name in available}
         if not produced:
             raise RuntimeError("demucs produced no stems: " + " / ".join(tail[-4:]))
 
