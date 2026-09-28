@@ -5100,6 +5100,10 @@ function startFresh() {
   paintInterpretation();
   if ($('realaudio') && !$('realaudio').disabled) { $('realaudio').checked = true; }
   if ($('normalise')) { $('normalise').checked = false; }
+  // A fresh seed, and not held: opening a take ticks "keep this seed" with its seed,
+  // and a new take would otherwise reuse it.
+  $('seed-fixed').checked = false;
+  $('seed').value = Math.floor(Math.random() * 4294967295);
   paintVocals();
   if (State.mode === 'inst' && typeof paintStructure === 'function') { paintStructure(); }
   State.formEdited = false;
