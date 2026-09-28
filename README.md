@@ -406,6 +406,7 @@ any browser and survive a rebuild.
 | Setting | What it does |
 |---|---|
 | Output audio format | FLAC (the default), WAV, or MP3 at 320 kbps. The format stems and a take's **Save** start with; each can choose another at the time |
+| Theme | Dark (the default), Light, Match the computer (dark or light, as the system is), Studio (warm and dark) or High contrast |
 | Editor layout | Three columns with the score on a tab of its own (the default), or steps, one part at a time |
 | Normalise to | How loud a normalised take is made: −16, −14 (the default) or −11 LUFS |
 | Stem separation model | Which model a run starts with |

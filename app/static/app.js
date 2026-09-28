@@ -1169,7 +1169,7 @@ function renderNotationView() {
     // inside its pane instead of painting over the editor.
     ABCJS.renderAbc('notation-big', full, {
       scale: 1.15, staffwidth: 980,
-      foregroundColor: '#f4f4f7', staffColor: '#9b9ba8'
+      foregroundColor: themeColour('--text') || '#f4f4f7', staffColor: themeColour('--muted') || '#9b9ba8'
     });
   } catch (err) {
     host.innerHTML = '<p class="hint">This score will not render as notation.</p>';
@@ -2287,7 +2287,45 @@ function adoptSettings(spec) {
   var values = {};
   State.settingSpec.forEach(function (item) { values[item.key] = item.value; });
   State.settings = values;
+  applyTheme();
   if (typeof editorOpen === 'function' && editorOpen()) { paintEditor(); }
+}
+
+/* ------------------------------------------------------------------- themes
+   The theme is a setting, shown as data-theme on the page's root, which the style
+   sheet's theme blocks key on. Dark is the style sheet's own. "Match the computer"
+   follows the system's light or dark, and changes with it. Remembered in the
+   browser too, so a reload paints in the right theme before the settings arrive. */
+var THEMES = ['dark', 'light', 'studio', 'contrast'];
+var SYSTEM_LIGHT = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+
+function applyTheme() {
+  var chosen = setting('appearance.theme', 'dark');
+  var theme = chosen === 'system' ? (SYSTEM_LIGHT && SYSTEM_LIGHT.matches ? 'light' : 'dark') : chosen;
+  if (THEMES.indexOf(theme) < 0) { theme = 'dark'; }
+  try { localStorage.setItem('yue2.theme', chosen); } catch (err) { /* private mode */ }
+  var root = document.documentElement;
+  var before = root.dataset.theme || 'dark';
+  if (theme === 'dark') { delete root.dataset.theme; } else { root.dataset.theme = theme; }
+  if (before !== theme) { repaintTheme(); }
+}
+
+if (SYSTEM_LIGHT && SYSTEM_LIGHT.addEventListener) {
+  SYSTEM_LIGHT.addEventListener('change', function () {
+    if (setting('appearance.theme', 'dark') === 'system') { applyTheme(); }
+  });
+}
+
+/* A colour the theme sets, for what the script draws itself. */
+function themeColour(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* What the script draws in colour, drawn again in the new theme's. */
+function repaintTheme() {
+  if (typeof drawWave === 'function') { try { drawWave(); } catch (err) { /* nothing on show */ } }
+  var big = $('notation-big');
+  if (big && big.offsetParent && typeof renderNotationView === 'function') { try { renderNotationView(); } catch (err) { /* ditto */ } }
 }
 
 function openBrandMenu() {
@@ -5668,10 +5706,12 @@ function drawWave() {
   // The played part wears the take's own colour: blue for a song from a prompt,
   // pink for a cover. Stems and anything else keep the neutral violet.
   var tone = waveTone();
+  // The unplayed part and the playhead are drawn in the theme's own ink and text.
+  var ink = themeColour('--ink') || '255 255 255';
   function paint(played) {
-    ctx.fillStyle = played ? tone.outline : 'rgba(255, 255, 255, 0.10)';
+    ctx.fillStyle = played ? tone.outline : 'rgb(' + ink + ' / 0.10)';
     ctx.fill(outline);
-    ctx.fillStyle = played ? tone.body : 'rgba(255, 255, 255, 0.24)';
+    ctx.fillStyle = played ? tone.body : 'rgb(' + ink + ' / 0.24)';
     ctx.fill(body);
   }
 
@@ -5684,8 +5724,9 @@ function drawWave() {
   paint(true);
   ctx.restore();
 
-  // White, so the playhead stays visible on a pink waveform as well as a blue one.
-  ctx.fillStyle = '#f4f4f7';
+  // The theme's text colour, so the playhead shows on a pink waveform as well as a
+  // blue one, in any theme.
+  ctx.fillStyle = themeColour('--text') || '#f4f4f7';
   ctx.fillRect(Math.max(0, Math.min(w - 2, head - 1)), 0, Math.max(2, 2 * dpr), h);
 }
 

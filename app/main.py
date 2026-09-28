@@ -90,6 +90,20 @@ SETTINGS_SPEC: list[dict] = [
         "help": "How loud a normalised take is made. Louder squeezes its peaks harder.",
     },
     {
+        "key": "appearance.theme",
+        "label": "Theme",
+        "type": "select",
+        "default": "dark",
+        "options": [
+            {"value": "dark", "label": "Dark"},
+            {"value": "light", "label": "Light"},
+            {"value": "system", "label": "Match the computer (dark or light)"},
+            {"value": "studio", "label": "Studio (warm, dark)"},
+            {"value": "contrast", "label": "High contrast"},
+        ],
+        "help": "How the app looks.",
+    },
+    {
         "key": "editor.layout",
         "label": "Editor layout",
         "type": "select",

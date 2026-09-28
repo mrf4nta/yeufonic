@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Yeufonic</title>
+  <script>
+    // The theme before anything paints, from what this browser last used, so a light
+    // theme does not flash dark on every load. The settings confirm it once they arrive.
+    (function () {
+      try {
+        var chosen = localStorage.getItem('yue2.theme') || 'dark';
+        var theme = chosen === 'system'
+          ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+          : chosen;
+        if (theme !== 'dark') { document.documentElement.dataset.theme = theme; }
+      } catch (err) { /* private mode: dark */ }
+    })();
+  </script>
 <link rel="stylesheet" href="/static/styles.css?v={{VERSION}}">
 <link rel="icon" type="image/svg+xml" href="/static/icon.svg?v={{VERSION}}">
 <!-- PNGs too: a window of its own (Edge's app mode, on Windows) takes its taskbar icon from these. -->

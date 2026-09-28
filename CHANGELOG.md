@@ -25,6 +25,13 @@ cannot creep back in.
 
 ## Unreleased
 
+### Added
+
+- **Themes.** Settings → Theme: Dark, as before; Light; Match the computer, following the
+  system's light or dark; Studio, a warm dark with amber; and High contrast. It changes at once,
+  and the browser remembers it so a page opens in it without a flash of the dark one. The log
+  window stays dark in every theme.
+
 ### Fixed
 
 - **+ Song** or **+ Instrumental** after a cover asked whether to discard score changes nobody had

@@ -588,6 +588,11 @@ browser and survive a rebuild: the output audio format for stems and a take's Sa
 separation model, where stems are written, whether training checkpoints are kept, and how
 instrumentals are checked for singing.
 
+**Theme** sets how the app looks: **Dark**, **Light**, **Match the computer**, which follows your
+system's light or dark and changes with it, **Studio**, a warm dark with amber, or **High
+contrast**, black and white with strong outlines. It changes at once, and each browser remembers it
+so the page opens in it. The log window stays dark in every theme, like a terminal.
+
 ---
 
 ## System Logs
