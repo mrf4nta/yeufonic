@@ -1454,11 +1454,13 @@ async function loadSources() {
   if (previous) { select.value = previous; }
   // Spent on use, like the LoRA picker's: left in place it would put the
   // remembered recording back every time another was chosen.
-  if (!select.value && State.wantedSource) { select.value = State.wantedSource; }
-  State.wantedSource = null;
+  // Only a cover must have a recording: an instrumental starts without one.
+  var needsOne = State.mode !== 'inst';
+  if (!select.value && needsOne && State.wantedSource) { select.value = State.wantedSource; }
+  if (needsOne) { State.wantedSource = null; }
   // A first visit has nothing to remember, and the newest recording is the one
   // most likely wanted.
-  if (!select.value && State.sources.length) { select.value = State.sources[0].id; }
+  if (!select.value && needsOne && State.sources.length) { select.value = State.sources[0].id; }
   paintSourcePickerMenu();
   paintSource();
 }
@@ -1468,7 +1470,8 @@ function paintSourcePickerMenu() {
   if (!menu) { return; }
   var currentId = $('source-select') ? $('source-select').value : '';
   var itemsHtml = '<div class="source-picker-item' + (!currentId ? ' selected' : '') + '" data-id="" role="option">' +
-    '<div class="source-item-main"><span class="source-item-title muted">Choose a recording\u2026</span></div>' +
+    '<div class="source-item-main"><span class="source-item-title muted">' +
+      (State.mode === 'inst' ? 'No recording: write a score plan' : 'Choose a recording\u2026') + '</span></div>' +
     '</div>';
   itemsHtml += State.sources.map(function (source) {
     var scoreBadge = source.has_score ? '<span class="source-item-score">\u2713 score</span>' : '';
@@ -1692,6 +1695,9 @@ function paintSource() {
     status.className = 'status';
     badge.textContent = 'no score';
     badge.className = 'badge';
+    // An instrumental let go of its recording: the recording's score goes with it.
+    if (State.mode === 'inst' && Selection.boxKind === 'source') { clearRecordingScore(); }
+    paintInstSource();
     return;
   }
   badge.className = 'badge' + (source.has_score ? ' ok' : '');
@@ -1704,7 +1710,7 @@ function paintSource() {
   // this tested whether editorSourceId was set at all, so choosing a second
   // recording left the first one's score in the box, and a cover of the second was
   // rendered from the first one's melody.
-  if (State.mode === 'cover' && !scoreTakeId() && !boxShowsSource(source.id)) {
+  if ((State.mode === 'cover' || State.mode === 'inst') && !scoreTakeId() && !boxShowsSource(source.id)) {
     if (source.transcribe_state === 'done') {
       loadScore();
     } else if ($('abc').value.trim()) {
@@ -1715,6 +1721,7 @@ function paintSource() {
       syncEditor();
     }
   }
+  paintInstSource();
 }
 
 /* A score transcribed from a recording can describe a different length of music,
@@ -1793,6 +1800,93 @@ async function loadScore() {
   // The recording owns the box now, empty score and all, so this does not fetch again.
   setSelection({ formTakeId: null, boxKind: 'source', boxId: source.id });
   setChart('');
+  paintInstSource();
+}
+
+/* ------------------------------------------------ an instrumental from a recording
+   The recording's transcription is the score, as a cover's is, so there is no plan
+   to write. The score's own sections are the structure, one tag each, in the names
+   the instrumental LoRA knows: a render pairs the two, and a tag short it stops a
+   section early. Worked out here from the score in the box, which is what is sent;
+   the server works them out again from the same score. */
+var SCORE_SECTION_AS = { interlude: 'bridge', prechorus: 'pre-chorus', 'pre chorus': 'pre-chorus', solo: 'bridge',
+  'break': 'bridge', breakdown: 'bridge', coda: 'outro', ending: 'outro' };
+
+function clearRecordingScore() {
+  $('abc').value = '';
+  scoreBaseline('');
+  setSelection({ formTakeId: Selection.formTakeId });
+  setChart('');
+  syncEditor();
+}
+
+function instFromRecording() { return State.mode === 'inst' && Boolean(currentSource()); }
+
+function scoreSections(abc) {
+  var names = [];
+  String(abc || '').replace(/^%[ \t]*([A-Za-z][\w -]*?)[ \t]*$/gm, function (whole, name) { names.push(name.trim().toLowerCase()); return whole; });
+  return names.map(function (name, index) {
+    if (SECTIONS.indexOf(name) >= 0) { return name; }
+    if (name === 'silence') { return index === 0 ? 'intro' : (index === names.length - 1 ? 'outro' : 'bridge'); }
+    return SCORE_SECTION_AS[name] || 'verse';
+  });
+}
+
+/* Notes in the Vocal voice: an instrumental whose score has any sings. */
+function vocalNotes(abc) {
+  var voice = null, notes = 0;
+  String(abc || '').split('\n').forEach(function (raw) {
+    var line = raw.trim();
+    if (line.indexOf('V:') === 0) { voice = line.slice(2).trim().split(/\s+/)[0] || null; return; }
+    if (!line || line.charAt(0) === '%' || /^[A-Za-z]:/.test(line) || voice !== 'Vocal') { return; }
+    notes += (line.replace(/"[^"]*"/g, '').match(/[A-Ga-g]/g) || []).length;
+  });
+  return notes;
+}
+
+function instRecordingProblem() {
+  var abc = $('abc').value;
+  if (!abc.trim()) { return 'Transcribe this recording first: its score is what the instrumental plays.'; }
+  if (vocalNotes(abc)) { return 'This recording\'s score has a sung melody, so an instrumental of it would sing. Use a recording without vocals.'; }
+  return '';
+}
+
+/* What an instrumental shows with a recording chosen and without: the planner's
+   controls go, since nothing is planned, and the main button renders. */
+function paintInstSource() {
+  if (State.mode !== 'inst') { return; }
+  var fromRecording = instFromRecording();
+  ['harmony-field', 'variety-field', 'plan-actions'].forEach(function (id) {
+    if ($(id)) { $(id).style.display = fromRecording ? 'none' : ''; }
+  });
+  if ($('auto-wrap')) { $('auto-wrap').style.display = fromRecording ? 'none' : ''; }
+  if ($('create-inst')) { $('create-inst').textContent = fromRecording ? 'Create instrumental' : 'Write score plan'; }
+  // The hint the mode switch left says to write a plan, which a recording does without.
+  var hint = 'Write a score plan to start a song from scratch.';
+  var played = 'Create instrumental plays the recording\'s score, with no vocal and no plan to write.';
+  var shown = $('render-status') ? $('render-status').textContent : '';
+  if (fromRecording && shown === hint) { statusLine(played); }
+  if (!fromRecording && shown === played) { statusLine(hint); }
+  if (fromRecording && $('abc').value.trim() && vocalNotes($('abc').value)) {
+    $('source-status').textContent = instRecordingProblem();
+    $('source-status').className = 'status bad';
+  }
+  paintStructure();
+}
+
+/* Each mode keeps its own recording: a cover's is not an instrumental's, and an
+   instrumental starts with none. */
+function rememberSourceFor(before, after) {
+  var select = $('source-select');
+  if (!select || before === after) { return; }
+  State.sourceByMode = State.sourceByMode || {};
+  if (before === 'inst' || select.value) { State.sourceByMode[before] = select.value; }
+  if (after === 'inst') {
+    select.value = State.sourceByMode.inst || '';
+  } else if (after === 'cover') {
+    if (State.sourceByMode.cover) { select.value = State.sourceByMode.cover; }
+    if (!select.value && State.sources.length) { select.value = State.sources[0].id; }
+  }
 }
 
 /* ------------------------------------------------------------------ vocal ---
@@ -2763,6 +2857,7 @@ function paintHarmony() {
 }
 
 function setMode(mode) {
+  rememberSourceFor(State.mode, mode);
   State.mode = mode;
   Array.prototype.forEach.call(document.querySelectorAll('.modes .mode'), function (button) {
     button.classList.toggle('active', button.dataset.mode === mode);
@@ -2770,7 +2865,12 @@ function setMode(mode) {
   var cover = mode === 'cover';
   var inst = mode === 'inst';
   var show = function (id, on) { $(id).style.display = on ? '' : 'none'; };
-  show('cover-only', cover);
+  // An instrumental can be played from a recording's score, as a cover is.
+  show('cover-only', cover || inst);
+  if ($('source-lyrics')) { show('source-lyrics', cover); }
+  var sourceLabel = $('cover-only') ? $('cover-only').querySelector('label') : null;
+  if (sourceLabel) { sourceLabel.textContent = inst ? 'From a recording (optional)' : 'Source recording'; }
+  paintSourcePickerMenu();
   show('lyrics-write', mode === 'song');
   // It acts on a recording, so it lives with the recording's own buttons, which
   // the whole cover-only block already shows and hides.
@@ -2815,6 +2915,10 @@ function setMode(mode) {
     $('score-badge').textContent = 'no score';
     $('score-badge').className = 'badge';
     paintSource();
+  } else if (inst && currentSource()) {
+    // Its recording's score, as a cover's: a song's plan must not stay in the box.
+    claimEditorFor(null);
+    paintSource();
   } else if (!ownedByTake) {
     // The editor held a transcription of an uploaded recording. A song must not reuse it.
     // Cleared by the app, not by anyone's edit, so nothing is left unsaved: without the
@@ -2827,6 +2931,7 @@ function setMode(mode) {
     setChart('');
     statusLine('Write a score plan to start a song from scratch.');
   }
+  if (inst) { paintInstSource(); }
 }
 
 /* The working score and the take it belongs to survive a reload, so the render
@@ -3645,6 +3750,7 @@ function instBody(seed) {
 }
 
 async function doInstrumental() {
+  if (instFromRecording()) { await doInstrumentalFromRecording(); return; }
   var problem = instProblem();
   if (problem) { statusLine(problem, 'bad'); return; }
   var seed = pickSeed();
@@ -3663,7 +3769,35 @@ async function doInstrumental() {
   }
 }
 
+async function doInstrumentalFromRecording() {
+  var problem = instRecordingProblem();
+  if (problem) { statusLine(problem, 'bad'); return; }
+  var body = instBody(pickSeed());
+  body.source_id = currentSource().id;
+  body.abc = $('abc').value;
+  body.auto_render = false;
+  statusLine('Queued\u2026');
+  try {
+    await api('/api/instrumentals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    statusLine('Rendering\u2026');
+    loadTakes();
+    closeEditor();
+  } catch (err) {
+    statusLine('Could not start: ' + err.message, 'bad');
+  }
+}
+
 function paintStructure() {
+  if ($('structure-kind')) { $('structure-kind').style.display = instFromRecording() ? 'none' : ''; }
+  if (instFromRecording()) {
+    var sections = scoreSections($('abc').value);
+    $('structure-total').textContent = '';
+    $('structure-body').innerHTML = '<p class="struct-note">' + (sections.length
+      ? 'The recording\'s score sets the sections: ' + esc(sections.join(', ')) + '. Edit the score to change them.'
+      : 'The sections come from the recording\'s score once it is transcribed.') + '</p>';
+    $('structure-preview').textContent = sections.length ? sections.map(function (name) { return '[' + name + ']'; }).join(' ') : '[instrumental]';
+    return;
+  }
   Array.prototype.forEach.call(document.querySelectorAll('#structure-kind button'), function (button) {
     button.classList.toggle('active', button.dataset.kind === STRUCTURE.kind);
   });
@@ -5081,6 +5215,7 @@ function selectTake(take) {
   var planning = isSong && !hasScore && (take.status === 'queued' || take.status === 'running');
   setMode(isInst ? 'inst' : (isSong ? 'song' : 'cover'));
   if (!isSong && take.source_id) { $('source-select').value = take.source_id; }
+  if (isInst && $('source-select')) { $('source-select').value = take.source_id || ''; }
   $('title').value = take.title;
   $('style').value = take.style || '';
   $('style').dataset.touched = '1';
@@ -5132,6 +5267,7 @@ function selectTake(take) {
   if (take.abc) { $('score-box').open = true; }
   setChart(chordChart(take.abc || ''));
   showPlanLength(take.abc || '');
+  if (isInst) { paintSource(); }
   syncEditor();
   refreshTitleHint();
   paintSource();
@@ -6651,10 +6787,14 @@ function wire() {
   });
 
   $('source-select').addEventListener('change', function () {
+    var boxTake = scoreTakeId() ? takeById(scoreTakeId()) : null;
+    var recordingScore = Selection.boxKind === 'source' || Boolean(boxTake && boxTake.source_id);
     // Choosing a recording the box's take did not come from lets go of that take:
     // its words and its score are not this recording's, and covering one with the
     // other's score is how a render came out as a different song.
     if (scoreTakeId() && !boxShowsSource($('source-select').value)) { setSelection({}); }
+    // An instrumental set to no recording: a recording's score in the box goes too.
+    if (State.mode === 'inst' && !$('source-select').value && recordingScore) { clearRecordingScore(); }
     paintSource();
   });
   $('transcribe').addEventListener('click', doTranscribe);
@@ -7268,6 +7408,7 @@ function wire() {
     $(id).addEventListener('input', function () { State.formEdited = true; });
   });
   $('abc').addEventListener('input', function () {
+    if (State.mode === 'inst') { paintInstSource(); }
     saveWorkingScore();
     pushScoreHistory($('abc').value);
     paintScoreDirty();

@@ -312,6 +312,21 @@ Add sections with the **+** chips, reorder them with the arrows, and give each a
 **Sent to YuE2** shows exactly what the model receives. The structure is guidance: YuE2 may rename a
 section, add an interlude, or run past the times you gave, so the length cap is the firm limit.
 
+### An instrumental from a recording
+
+**From a recording** at the top of the editor takes one of your recordings, as a cover does. Use one
+without vocals: a backing track, or the **instruments** stem of a song, saved and uploaded as a
+recording. Its transcription is the score, so there is no plan to write, and the render plays its
+melody and chords with the instrumental LoRA.
+
+The sections come from the score too: one per section of the score, in the names the LoRA knows. An
+*interlude* becomes a bridge. A render pairs each section of the structure with one of the score,
+which is why the builder gives way to them; edit the score to change them. Press **Create
+instrumental** to render.
+
+A recording whose score has a sung melody would come out sung, so the editor says so and does not
+render it. Choose **No recording** in the list to go back to writing a plan.
+
 ### When an instrumental sings
 
 Occasionally the model puts a voice into an instrumental. This is a model failure, not a setting

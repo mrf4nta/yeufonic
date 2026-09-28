@@ -112,6 +112,30 @@ def sings(abc: str | None) -> int:
     return notes
 
 
+# A transcribed score names its sections in "% name" lines.  The transcriber uses the
+# LoRA's six and two more: an interlude, which plays the part a bridge does, and a
+# silence, which opens or closes the piece, or else stands between two sections.
+_SCORE_SECTION = re.compile(r"^%[ \t]*([A-Za-z][\w -]*?)[ \t]*$", re.M)
+_AS_SECTION = {"interlude": "bridge", "prechorus": "pre-chorus", "pre chorus": "pre-chorus",
+               "solo": "bridge", "break": "bridge", "breakdown": "bridge", "coda": "outro", "ending": "outro"}
+
+
+def structure_of(abc: str | None) -> str:
+    """The structure an instrumental of this score is rendered with: one tag per section
+    of the score, in the names the LoRA knows.  A render pairs the tags with the score's
+    sections, so a tag short and it stops a section early."""
+    names = [name.strip().lower() for name in _SCORE_SECTION.findall(abc or "")]
+    tags = []
+    for index, name in enumerate(names):
+        if name in SECTIONS:
+            tags.append(name)
+        elif name == "silence":
+            tags.append("intro" if index == 0 else "outro" if index == len(names) - 1 else "bridge")
+        else:
+            tags.append(_AS_SECTION.get(name, "verse"))
+    return "\n".join(f"[{tag}]" for tag in tags) or BARE
+
+
 def excerpt(src: Path, dest: Path, spans: int = 3, each: float = 3.0) -> Path:
     """A short montage of the piece, for a check that need not read all of it.
 

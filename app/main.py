@@ -525,6 +525,10 @@ class InstrumentalIn(BaseModel):
     title: str | None = Field(None, max_length=200)
     style: str = Field(config.DEFAULT_STYLE, max_length=2000)
     structure: str = Field(instrumental.BARE, max_length=4000)
+    # From a recording: its transcription is the score, as a cover's is, and its
+    # sections the structure.  The score as the editor holds it, when sent.
+    source_id: str | None = Field(None, max_length=64)
+    abc: str | None = Field(None, max_length=200_000)
     seed: int | None = Field(None, ge=0, le=MAX_SEED)
     max_duration: float = Field(360.0, ge=10, le=900)
     auto_render: bool = False
@@ -1457,18 +1461,56 @@ async def create_instrumental(body: InstrumentalIn) -> dict:
     # taken as steady rather than refused, because that is what it renders as.
     if body.feel not in instrumental.FEELS and body.feel != "varied":
         raise HTTPException(400, f"unknown feel: {body.feel}")
+    if body.source_id:
+        return await _instrumental_from_recording(body)
     title = (body.title or "").strip() or "Untitled instrumental"
     return await _plan_new_take("instrumental", title, structure, body)
 
 
+async def _instrumental_from_recording(body: InstrumentalIn) -> dict:
+    """An instrumental played from a recording's score, rendered at once: the score is
+    already there, so there is no plan to write.  Its structure is the score's own
+    sections, so the render covers the whole score."""
+    _gpu_free_for_rendering()
+    source = one("SELECT * FROM sources WHERE id = ?", (body.source_id,))
+    if not source:
+        raise HTTPException(404, "no such recording")
+    abc = body.abc if (body.abc or "").strip() else (source["abc"] or "")
+    if not abc.strip():
+        raise HTTPException(400, "transcribe this recording first. Its score is what the instrumental plays.")
+    _check_score(abc, "instrumental")
+    sung = instrumental.sings(abc)
+    if sung:
+        raise HTTPException(400, f"this recording's score has a sung melody ({sung} notes in its Vocal voice), "
+                                 "so an instrumental of it would sing. Use a recording without vocals.")
+    title = (body.title or "").strip() or source["title"] or "Untitled instrumental"
+    record = _new_take_record("instrumental", title, instrumental.structure_of(abc), body)
+    record.update(source_id=source["id"], abc=abc, auto_render=0)
+    _insert_new_take(record)
+    await QUEUE.put({"kind": "render", "id": record["id"]})
+    log.info("Queued instrumental of recording '%s' for '%s' (%s)", source["title"], title, record["id"])
+    return {**record, "status": "queued"}
+
+
 async def _plan_new_take(kind: str, title: str, words: str, body: SongIn | InstrumentalIn) -> dict:
+    record = _new_take_record(kind, title, words, body)
+    _insert_new_take(record)
+    await QUEUE.put({"kind": "plan", "id": record["id"]})
+    log.info("Queued %s plan for '%s' (%s, variety=%s, auto_render=%s)",
+             kind, title, record["id"], record["variety"], bool(record["auto_render"]))
+    return {**record, "status": "queued"}
+
+
+def _new_take_record(kind: str, title: str, words: str, body: SongIn | InstrumentalIn) -> dict:
+    """A song or an instrumental as it starts out: no score yet, and no recording."""
     _check_harmony(body.harmony)
     _space(body.space_id)
-    take_id = uuid.uuid4().hex[:12]
     seed = body.seed if body.seed is not None else int.from_bytes(os.urandom(4), "big")
-    record = {
-        "id": take_id,
+    return {
+        "id": uuid.uuid4().hex[:12],
         "kind": kind,
+        "source_id": None,
+        "abc": "",
         "title": title,
         "style": body.style.strip() or config.DEFAULT_STYLE,
         "lyrics": words,
@@ -1492,21 +1534,20 @@ async def _plan_new_take(kind: str, title: str, words: str, body: SongIn | Instr
         "voice_lora_clip": getattr(body, "voice_lora_clip", 0.0),
         **_style_lora_of(body),
     }
+
+
+def _insert_new_take(record: dict) -> None:
     execute(
         """INSERT INTO takes(id, kind, source_id, title, style, lyrics, abc, mode, seed, checkpoint,
                              max_duration, status, created_at, auto_render, variety, harmony, space_id, interpretation, feel, realaudio,
                              normalise, identity_id, persona_id, voice_lora, voice_lora_strength, voice_lora_clip,
                              style_lora, style_lora_model, style_lora_clip)
-           VALUES(:id, :kind, NULL, :title, :style, :lyrics, '', :mode, :seed, :checkpoint,
+           VALUES(:id, :kind, :source_id, :title, :style, :lyrics, :abc, :mode, :seed, :checkpoint,
                   :max_duration, 'queued', :created_at, :auto_render, :variety, :harmony, :space_id, :interpretation, :feel, :realaudio,
                   :normalise, :identity_id, :persona_id, :voice_lora, :voice_lora_strength, :voice_lora_clip,
                   :style_lora, :style_lora_model, :style_lora_clip)""",
         record,
     )
-    await QUEUE.put({"kind": "plan", "id": take_id})
-    log.info("Queued %s plan for '%s' (%s, variety=%s, auto_render=%s)",
-             kind, title, take_id, record["variety"], bool(record["auto_render"]))
-    return {**record, "status": "queued"}
 
 
 # ------------------------------------------------------------------------ spaces
@@ -1620,6 +1661,11 @@ async def render_take(take_id: str, body: RenderIn | None = None) -> dict:
     if not (take["abc"] or "").strip():
         raise HTTPException(400, "this take has no score yet. Write a plan first.")
     _check_score(take["abc"], take["kind"])
+    if take["kind"] == "instrumental" and take.get("source_id"):
+        # Its structure is its score's sections, which an edit to the score may have changed.
+        if instrumental.sings(take["abc"]):
+            raise HTTPException(400, "this score has a sung melody in its Vocal voice, so the instrumental would sing.")
+        execute("UPDATE takes SET lyrics = ? WHERE id = ?", (instrumental.structure_of(take["abc"]), take_id))
     _checkpoint()
     interpretation = take["interpretation"] if body is None or body.interpretation is None else _interpretation(body.interpretation)
     realaudio = take["realaudio"] if body is None or body.realaudio is None else (1 if body.realaudio else 0)
@@ -1672,6 +1718,8 @@ async def replan_take(take_id: str, body: ReplanIn | None = None) -> dict:
     """Write a fresh score plan for the same lyrics and style, optionally with a
     different plan variety or harmony."""
     take = _idle_take(take_id)
+    if take.get("source_id"):
+        raise HTTPException(400, "this take's score is its recording's transcription, so there is no plan to write again.")
     body = body or ReplanIn()
     _check_harmony(body.harmony)
     variety = body.variety if body.variety in PLAN_VARIETY else take["variety"]

@@ -196,3 +196,79 @@ def test_off_means_no_answer_and_no_work(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs.instrumental, "excerpt", lambda *a, **k: pytest.fail("should not have looked"))
     assert jobs.singing_share(tmp_path / "nothing.flac") is None
     set_setting("instrumental.vocal_check", "fast")
+
+
+# A transcription of a recording with no vocal: the Vocal voice rests under the chords,
+# the melody in Ins, and the transcriber's own section names.
+RECORDED = ("X:1\nM:4/4\nL:1/16\nQ:1/4=90\nV: Vocal\nV: Ins\nK:C\n"
+            '% intro\nV: Vocal\n"C"z16|"G"z16|\nV: Ins\nc4e4g4e4|B4d4g4d4|\n'
+            '% verse\nV: Vocal\n"Am"z16|"F"z16|\nV: Ins\nA4c4e4c4|F4A4c4A4|\n'
+            '% interlude\nV: Vocal\n"C"z16|\nV: Ins\nc16|\n'
+            '% silence\nV: Vocal\nz16|\nV: Ins\nz16|\n')
+SUNG = RECORDED.replace('"Am"z16|"F"z16|', '"Am"A4c4e4c4|"F"z16|')
+
+
+def a_recording(abc):
+    from app.db import execute
+    execute("""INSERT INTO sources(id, title, filename, stored_path, sha256, created_at, abc, transcribe_state)
+               VALUES('rec1', 'Harbour backing', 'harbour.flac', '/x/harbour.flac', 'sha', 1.0, ?, 'done')""", (abc,))
+
+
+def engine_ready(monkeypatch):
+    monkeypatch.setitem(jobs.ENGINE.options, "instrumental", True)
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", [config.CHECKPOINT])
+
+
+def test_a_score_gives_its_sections_in_the_names_the_lora_knows():
+    """One tag per section of the score, since a render pairs the two: an interlude is
+    a bridge, and a silence opens, closes or stands between."""
+    assert instrumental.structure_of(RECORDED) == "[intro]\n[verse]\n[bridge]\n[outro]"
+    assert instrumental.structure_of("% silence\n% pre-chorus\n% silence\n% chorus\n% coda") == \
+        "[intro]\n[pre-chorus]\n[bridge]\n[chorus]\n[outro]"
+    assert instrumental.structure_of("X:1\nK:C\nV: Vocal\nc|") == "[instrumental]"
+
+
+def test_an_instrumental_from_a_recording_renders_its_score_at_once(client, monkeypatch):
+    """No plan: the recording's transcription is the score, its sections the structure,
+    and the render is queued straight away with the instrumental LoRA's kind."""
+    engine_ready(monkeypatch)
+    a_recording(RECORDED)
+    made = client.post("/api/instrumentals", json={"source_id": "rec1", "style": "surf rock",
+                                                   "structure": "[chorus]"}).json()
+    row = one("SELECT * FROM takes WHERE id = ?", (made["id"],))
+    assert (row["kind"], row["source_id"], row["title"]) == ("instrumental", "rec1", "Harbour backing")
+    assert row["abc"] == RECORDED and row["lyrics"] == "[intro]\n[verse]\n[bridge]\n[outro]", \
+        "the score's sections, whatever structure the page had"
+    assert QUEUE.get_nowait() == {"kind": "render", "id": made["id"]}
+    assert jobs.build_render_graph(row)["20"]["inputs"]["lora_name"] == config.INSTRUMENTAL_LORA
+    edited = RECORDED.replace("% interlude", "% chorus")
+    again = client.post("/api/instrumentals", json={"source_id": "rec1", "abc": edited}).json()
+    assert one("SELECT lyrics FROM takes WHERE id = ?", (again["id"],))["lyrics"] == "[intro]\n[verse]\n[chorus]\n[outro]", \
+        "the score the editor sends wins over the recording's"
+    drain()
+
+
+def test_a_recording_that_sings_or_has_no_score_is_refused(client, monkeypatch):
+    engine_ready(monkeypatch)
+    a_recording("")
+    refused = client.post("/api/instrumentals", json={"source_id": "rec1"})
+    assert refused.status_code == 400 and "transcribe this recording first" in refused.json()["detail"]
+    sung = client.post("/api/instrumentals", json={"source_id": "rec1", "abc": SUNG})
+    assert sung.status_code == 400 and "sung melody (4 notes" in sung.json()["detail"]
+    assert client.post("/api/instrumentals", json={"source_id": "nope"}).status_code == 404
+    assert QUEUE.empty()
+
+
+def test_a_take_from_a_recording_is_not_replanned_and_rerenders_from_its_score(client, monkeypatch):
+    """Replanning would write a score of its own over the recording's.  A render after an
+    edit to the score takes its sections again."""
+    engine_ready(monkeypatch)
+    a_recording(RECORDED)
+    take = make_take(kind="instrumental", source_id="rec1", lyrics="[intro]\n[verse]\n[bridge]\n[outro]",
+                     abc=RECORDED.replace("% interlude", "% chorus"))
+    refused = client.post(f"/api/takes/{take['id']}/replan", json={})
+    assert refused.status_code == 400 and "no plan to write again" in refused.json()["detail"]
+    assert client.post(f"/api/takes/{take['id']}/render", json={}).status_code == 200
+    assert one("SELECT lyrics FROM takes WHERE id = ?", (take["id"],))["lyrics"] == "[intro]\n[verse]\n[chorus]\n[outro]"
+    drain()

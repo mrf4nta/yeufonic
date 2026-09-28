@@ -11,7 +11,7 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 
 - **Song from a prompt:** write a score plan from a style and lyrics, edit it, render it.
 - **Cover a recording:** transcribe your song, change its melody and chords, render a new version.
-- **Instrumentals:** build the structure section by section.
+- **Instrumentals:** build the structure section by section, or play a recording's score.
 - **Style LoRAs:** use published ones, or train your own from a folder of songs.
 - **Lyrics:** draft them from a sentence, or extract them from a recording.
 - **Stems:** split any take into vocals, drums, bass and more, or into vocals and a backing track.
@@ -79,7 +79,8 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   just used, without breaking the song's structure.
 - **Instrumentals.** A third mode: style and structure in, a song with no vocal out. Build the
   structure section by section, time each section, or let YuE2 decide. Used in combination with 
-  LoRA ar_lora_inst_v3abc_comfyui.safetensors by Mothersuperior.
+  LoRA ar_lora_inst_v3abc_comfyui.safetensors by Mothersuperior. Or choose a recording without
+  vocals, and its score is played as it stands, sections and all.
 - **Draft lyrics from a sentence.** Say what the song is about and pick a structure. Gemma 4
   writes a first draft in YuE2's section layout, or you can call an external LLM if you
   set one up in Settings.
