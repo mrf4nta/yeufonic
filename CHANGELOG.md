@@ -38,8 +38,8 @@ cannot creep back in.
   made. Fixes #16.
 - **+ Song**, **+ Cover** and **+ Instrumental** kept the last take's style and settings. They now
   start from the defaults: an empty style (with a chosen LoRA's trigger word), a 360-second cap,
-  Harmony Familiar, Plan variety normal, Interpretation Standard, Production polish on and
-  Normalise off. A chosen LoRA stays chosen.
+  Harmony Familiar, Plan variety normal, Interpretation Standard, Production polish on,
+  Normalise off, and a new seed that is not held. A chosen LoRA stays chosen.
 
 ## 0.0.4 (2026-09-28)
 
