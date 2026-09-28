@@ -251,6 +251,20 @@ if the corpus is deleted. A few songs are marked *score: melody only* or *score:
 full transcription failed during the analysis, which does for training. Press **Transcribe** for the
 whole score with its chords.
 
+**With a LoRA.** This is where corpus songs are most use: a song and a LoRA made from the same
+work, or from different ones.
+1. In **Cover** mode, open the recording list and pick the song under **From your corpora**. Its
+   score sets the melody and chords, and its words are in the box.
+2. Choose a **Style LoRA**. The corpus's own LoRA has its singer cover their own song, closest to
+   the original. Another corpus's LoRA covers it in that other style and voice.
+3. Set the strengths as for any cover: the recording already sets the melody, so keep **Sound**
+   near **0.50**, and raise it for more of the LoRA's voice and sound.
+4. For the style, the LoRA's chips help. The chip for this same song keeps its own genre and mood;
+   another chip, or the filter's tags, moves it somewhere else. The tempo and key come from the
+   score, whatever the style says.
+5. Press **Create cover**. **Variations** then renders it in the other interpretations, and
+   **Sing again** gives another voice over the same score, as with any take.
+
 ### Extracting the lyrics
 
 **Extract lyrics**, beside *Transcribe*, writes down what the recording sings: it separates the
@@ -344,11 +358,23 @@ engine built with `WITH_TRAINER=0`, takes it out.
    finishes. Progress shows under the buttons and on the main screen, where you can stop it,
    and the corpus's badge at the top of the page pulses while it trains. Training again keeps
    the LoRA from the last run under a dated name, in **Previous runs**, or deletes it, as you
-   choose. A run that ends early, by **Stop** or a crash, says so under the buttons, with how far
-   it got. When it saved checkpoints, **Finish with what it saved** makes the trainer's best copy,
-   or its last checkpoint, the LoRA, as a finished run does, with no GPU time.
+   choose.
    Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs. The
    Train window warns when less than that is free, so close anything else using the GPU first.
+
+### A run that ends early
+
+A run can end before its last step: **Stop**, a crash, or the GPU running out of memory. The line
+under the buttons then says when and why, and after which step. Along the way the trainer saves a
+checkpoint every 50 steps, and keeps a copy of the best one so far by its planner loss, so most of
+the work is usually still there. **Finish with what it saved** does what a finished run does, from
+those files: the best copy, or failing that the last checkpoint, becomes the LoRA under the
+corpus's name, with its trigger word, and the checkpoints fold under it in the Style LoRA list. It
+takes seconds and no GPU time. The last steps of a run change the LoRA least, so one finished this
+way is usually close to a full run; **Checkpoints** renders a song once on each step if you want to
+compare by ear. To train the whole run again instead, press **Train a LoRA**.
+
+### Run all
 
 **Run all**, beside the three, does Analyse, Export and Train one after the other, for a corpus you
 would rather not wait on: a big one takes hours to analyse. It asks first what to do with an
@@ -358,16 +384,19 @@ nobody has checked are used as drafted. **Stop** ends it where it is, keeping wh
 stopped while it exports, it finishes the training set first. It waits for anything already using
 the engine before it trains. An app restart ends it, and **Run all** again carries on.
 
+### Running out of GPU memory
+
 A job that runs out of GPU memory says so, with what to try: close other programs using the GPU,
 lower the length cap, or, for training, leave the longest songs out. If the engine crashes and
 restarts, the job it was running is lost, and it says that too.
+
+### The trained LoRA
 
 When training finishes, the LoRA appears in the **Style LoRA** list with its trigger word. Choosing
 it shows a chip for each song it learned from, and clicking one puts that song's style in the box.
 Past a dozen songs, a filter box and a row of the tags that recur across the corpus (its genres,
 moods and instruments) narrow them; click two tags to find songs with both. The list shows its
-first dozen until **Show all**. See
-**Balancing Planner and Sound** below for starting strengths. To share it, press **Download** under
+first dozen until **Show all**. See **Balancing Planner and Sound** below for starting strengths. To share it, press **Download** under
 the picker; see **Sharing a LoRA** below.
 
 To use a LoRA trained elsewhere from the exported set, press **Install a LoRA** and choose the

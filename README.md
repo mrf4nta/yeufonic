@@ -160,6 +160,10 @@ about 0.70 but experiment to find the sweet spot and save them as a default for 
 you may keep Sound nearer to 0.50. The [user guide](app/static/guide.md#corpora-and-training-a-lora) walks
 through it.
 
+Every analysed song in your corpora is ready to cover: pick it from the recording list, choose a
+LoRA, and render, with no transcribing or lyric extraction to wait for. See
+[Covering a song from a corpus](app/static/guide.md#covering-a-song-from-a-corpus).
+
 Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs, and the Train
 window warns when less than that is free.
 
