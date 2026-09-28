@@ -1628,3 +1628,14 @@ main.sheet-collapsed .sheet-toggle svg { transform: rotate(180deg); }
 button.ghost.run-all { margin-left: 10px; }
 .identity-working.bad { color: var(--bad); }
 .identity-working.muted { color: var(--muted); }
+
+/* Corpus songs in the recording picker, folded by corpus. */
+.source-corpora-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; padding: 10px 10px 4px;
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+}
+.source-corpora-head input { max-width: 180px; padding: 5px 10px; font-size: 12.5px; border-radius: 999px; }
+.source-picker-menu .corpus-song { padding-left: 26px; }
+.source-item-meta { color: var(--muted); font-size: 12px; }
+.source-item-caveat { color: #fbbf24; font-size: 11.5px; }
+.source-corpora-none { padding: 6px 10px 8px 26px; font-size: 12.5px; }

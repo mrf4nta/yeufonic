@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -47,7 +48,7 @@ from .engine import stage_label
 from .jobs import (CURRENT, CURRENT_STEMS, ENGINE, HARMONY_STEPS, INTERPRETATION_NAMES, INTERPRETATIONS, LYRICS,
                    PLAN_VARIETY, QUEUE, STEM_QUEUE)
 from .library import (audio_duration, ensure_peaks, fill_loudness, inside, kept_beside, relayout, remove_tree,
-                      slugify, source_path, take_folder)
+                      slugify, source_path, take_folder, vocal_path)
 
 logging_setup.setup_logging(config.DATA_DIR / "logs")
 log = logging.getLogger("yue2")
@@ -1018,6 +1019,148 @@ async def upload_source(file: UploadFile = File(...), title: str = Form("", max_
     dur_str = f", {record['duration']:.1f}s" if record.get("duration") else ""
     log.info("Uploaded source recording '%s' (%s%s)", record["title"], record["id"], dur_str)
     return {**record, "transcribe_state": "none", "abc": None, "duplicate": False}
+
+
+# ------------------------------------------------------ a corpus song as a recording
+# A corpus's analysis already did what a cover needs from a recording: SheetSage's
+# score, and the words heard by Whisper, with the vocal separated.  So an analysed
+# corpus song can become a recording in one step, with nothing run again.
+def _corpus_song_files(song: dict) -> tuple[Path, Path] | None:
+    """The song's stored copy and its score, if both are there."""
+    stored = Path(song["stored_path"]) if song.get("stored_path") else None
+    if not stored or not stored.is_file():
+        return None
+    abc = stored.parent / "score.abc"
+    return (stored, abc) if abc.is_file() else None
+
+
+def _score_caveat(abc: str, duration: float | None) -> str | None:
+    """A corpus score that was a fallback: made without chords, or from the first
+    minutes only, when the whole song would not transcribe.  Fine for training, less
+    so for a cover, so the picker says so."""
+    if not re.search(r'"[A-G][#b]?[^"\n]{0,10}"', abc):
+        return "melody only"
+    found = score.estimate(abc)
+    if found and duration and found["seconds"] < 0.8 * duration:
+        return f"first {round(found['seconds'] / 60)} min"
+    return None
+
+
+@app.get("/api/corpus-songs")
+def corpus_songs() -> list[dict]:
+    """Every analysed corpus song that could become a recording, corpus by corpus."""
+    # A recording made from a corpus song says which, and is a hard link to its file:
+    # found either way without hashing hundreds of songs on every look at the list.
+    made = {}
+    known = {}
+    for row in rows("SELECT id, stored_path, corpus_song_id FROM sources"):
+        if row["corpus_song_id"]:
+            made[row["corpus_song_id"]] = row["id"]
+        with contextlib.suppress(OSError):
+            found = os.stat(row["stored_path"])
+            known[(found.st_dev, found.st_ino)] = row["id"]
+    groups: dict[str, dict] = {}
+    for song in rows("""SELECT s.*, i.name AS corpus FROM identity_songs s JOIN identities i ON i.id = s.identity_id
+                        WHERE s.score_state = 'done' ORDER BY lower(i.name), s.position"""):
+        files = _corpus_song_files(song)
+        if not files:
+            continue
+        abc = files[1].read_text(encoding="utf-8", errors="replace")
+        on_disk = files[0].stat()
+        group = groups.setdefault(song["identity_id"], {"id": song["identity_id"], "name": song["corpus"], "songs": []})
+        group["songs"].append({
+            "id": song["id"], "title": song["title"] or Path(song["file"]).stem, "duration": song["duration"],
+            "key": song["key"], "tempo": song["tempo"], "caveat": _score_caveat(abc, song["duration"]),
+            "source_id": made.get(song["id"]) or known.get((on_disk.st_dev, on_disk.st_ino)),
+        })
+    return list(groups.values())
+
+
+@app.post("/api/sources/from-corpus/{song_id}")
+async def source_from_corpus(song_id: str) -> dict:
+    """Make an analysed corpus song a recording: its file linked in, not copied, so it
+    takes no more space and outlives the corpus; its score as the transcription; its
+    heard words laid under the score's sections, as Extract lyrics does, or its words
+    as they stand when someone has checked them; and its separated vocal, so Extract
+    lyrics has no separating to do."""
+    song = one("SELECT * FROM identity_songs WHERE id = ?", (song_id,))
+    if not song:
+        raise HTTPException(404, "no such corpus song")
+    files = _corpus_song_files(song)
+    if not files or song["score_state"] != "done":
+        raise HTTPException(400, "this song has not been analysed yet")
+    stored, abc_file = files
+    existing = one("SELECT * FROM sources WHERE corpus_song_id = ?", (song_id,))
+    if existing:
+        return {**existing, "duplicate": True}
+    digest = await asyncio.to_thread(_sha256_of, stored)
+    existing = one("SELECT * FROM sources WHERE sha256 = ?", (digest,))
+    if existing:
+        return {**existing, "duplicate": True}
+    title = song["title"] or Path(song["file"]).stem
+    dest = source_path(digest, title, "source", stored.suffix.lower() or ".flac")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(stored, dest)
+    except OSError:
+        await asyncio.to_thread(shutil.copyfile, stored, dest)
+    abc = abc_file.read_text(encoding="utf-8", errors="replace")
+    duration = song["duration"] or await asyncio.to_thread(audio_duration, dest)
+    lyrics_text, method = await asyncio.to_thread(_corpus_song_lyrics, song, stored.parent, abc, duration)
+    vocals = stored.parent / "vocals.wav"
+    if vocals.is_file():
+        await asyncio.to_thread(_flac_copy, vocals, vocal_path(dest))
+    record = {
+        "id": uuid.uuid4().hex[:12], "title": title, "filename": Path(song["file"]).name,
+        "stored_path": str(dest), "engine_file": None, "sha256": digest, "created_at": time.time(),
+        "duration": duration, "abc": abc, "abc_updated_at": time.time(), "transcribe_state": "done",
+        "lyrics": lyrics_text or None, "lyrics_state": "done" if lyrics_text else "none", "lyrics_method": method,
+        "corpus_song_id": song_id,
+    }
+    execute(
+        """INSERT INTO sources(id, title, filename, stored_path, engine_file, sha256, created_at, duration,
+                               abc, abc_updated_at, transcribe_state, lyrics, lyrics_state, lyrics_method, corpus_song_id)
+           VALUES(:id, :title, :filename, :stored_path, :engine_file, :sha256, :created_at, :duration,
+                  :abc, :abc_updated_at, :transcribe_state, :lyrics, :lyrics_state, :lyrics_method, :corpus_song_id)""",
+        record,
+    )
+    log.info("Made corpus song '%s' a recording (%s), with its score%s", title, record["id"],
+             " and words" if lyrics_text else "")
+    return {**record, "duplicate": False}
+
+
+def _sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _corpus_song_lyrics(song: dict, folder: Path, abc: str, duration: float | None) -> tuple[str, str | None]:
+    """Words someone has checked are kept as they are.  Otherwise the lines Whisper
+    heard are laid under the score's sections, as Extract lyrics lays them, so the
+    sections match the score the cover follows."""
+    if song["lyrics_checked"] and (song["lyrics"] or "").strip():
+        return song["lyrics"], "the corpus, as checked there"
+    heard = folder / "whisper.json"
+    try:
+        lines = json.loads(heard.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        lines = None
+    if lines:
+        return identities.tag_lyrics(lines, identities.score_sections(abc), duration or 0.0), "Whisper, in the corpus analysis"
+    return (song["lyrics"] or ""), ("the corpus" if song["lyrics"] else None)
+
+
+def _flac_copy(src: Path, dest: Path) -> None:
+    """The corpus keeps its vocal as WAV; a recording keeps it as FLAC beside itself."""
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-c:a", "flac", str(dest)],
+                       check=True, capture_output=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("could not keep the corpus vocal beside the recording: %s", exc)
+        dest.unlink(missing_ok=True)
 
 
 @app.post("/api/sources/{source_id}/transcribe")

@@ -237,6 +237,20 @@ itself; the cap stops one that will not.
 A cover follows the original's melody and chords while the style decides everything else, which is
 what makes it a cover rather than a copy.
 
+### Covering a song from a corpus
+
+A corpus's analysis has already done what a cover needs: the score, the words heard in the song, and
+its separated vocal. So below your recordings, the list offers **From your corpora**, folded by
+corpus, with each song's key and tempo, and a filter for a big one. Pick a song and it becomes one
+of your recordings at once, with its score and its words, and nothing runs again. The words are laid
+under the score's sections, as **Extract lyrics** lays them, unless you checked them in the corpus,
+when they come as you left them. They go into the Lyrics box if it is empty.
+
+The file is linked rather than copied where the disk allows, so it takes no more space, and it stays
+if the corpus is deleted. A few songs are marked *score: melody only* or *score: first 4 min*: their
+full transcription failed during the analysis, which does for training. Press **Transcribe** for the
+whole score with its chords.
+
 ### Extracting the lyrics
 
 **Extract lyrics**, beside *Transcribe*, writes down what the recording sings: it separates the

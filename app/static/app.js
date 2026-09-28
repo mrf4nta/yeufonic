@@ -1486,7 +1486,108 @@ function paintSourcePickerMenu() {
       '</button>' +
     '</div>';
   }).join('');
+  itemsHtml += corpusSongsHtml(currentId);
+  // Typing in the filter redraws the menu; the box it redraws keeps the caret.
+  var typing = document.activeElement && document.activeElement.id === 'source-corpus-filter';
   menu.innerHTML = itemsHtml;
+  if (typing && $('source-corpus-filter')) {
+    var box = $('source-corpus-filter');
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  }
+}
+
+/* ------------------------------------------ corpus songs, to cover as they are
+   A corpus's analysis already made what a cover needs from a recording: the score,
+   the heard words and the separated vocal. Its songs are offered below the
+   recordings, folded by corpus, and picking one makes it a recording in one step. */
+var SOURCE_CORPORA_KEY = 'yue2.source-corpora';
+
+function sourceCorporaOpen() {
+  try { return JSON.parse(localStorage.getItem(SOURCE_CORPORA_KEY) || '[]') || []; } catch (err) { return []; }
+}
+
+function saveSourceCorporaOpen(list) {
+  try { localStorage.setItem(SOURCE_CORPORA_KEY, JSON.stringify(list)); } catch (err) { /* private mode */ }
+}
+
+async function loadCorpusSongs() {
+  try {
+    State.corpusSongs = await api('/api/corpus-songs');
+  } catch (err) {
+    State.corpusSongs = [];   // a server from before this: nothing to offer
+  }
+  paintSourcePickerMenu();
+}
+
+function corpusSongsHtml(currentId) {
+  var groups = State.corpusSongs || [];
+  var total = groups.reduce(function (sum, group) { return sum + group.songs.length; }, 0);
+  if (!total) { return ''; }
+  var filter = (State.corpusFilter || '').trim().toLowerCase();
+  var open = sourceCorporaOpen();
+  var html = '<div class="source-corpora-head"><span>From your corpora</span>' +
+    (total > 12 ? '<input id="source-corpus-filter" type="search" placeholder="Filter songs" value="' +
+      esc(State.corpusFilter || '') + '">' : '') + '</div>';
+  var shown = 0;
+  groups.forEach(function (group) {
+    var songs = group.songs.filter(function (song) { return !filter || song.title.toLowerCase().indexOf(filter) >= 0; });
+    if (!songs.length) { return; }
+    shown += songs.length;
+    var isOpen = Boolean(filter) || open.indexOf(group.id) >= 0;
+    html += '<div class="lora-group" role="button" aria-expanded="' + isOpen + '" data-cgroup="' + esc(group.id) + '">' +
+      '<span class="fold">' + (isOpen ? '\u25BE' : '\u25B8') + '</span><span>' + esc(group.name) + '</span>' +
+      '<span class="count">' + songs.length + '</span></div>';
+    if (!isOpen) { return; }
+    songs.forEach(function (song) {
+      var meta = [song.key, song.tempo ? song.tempo + ' BPM' : ''].filter(Boolean).join(', ');
+      var tip = song.source_id ? 'Already one of your recordings' :
+        'Use this song as a recording: its score and words come from the corpus, with nothing run again';
+      html += '<div class="source-picker-item corpus-song' + (song.source_id && song.source_id === currentId ? ' selected' : '') +
+        '" role="option" data-corpus-song="' + esc(song.id) + '" title="' + esc(tip) + '">' +
+        '<div class="source-item-main"><span class="source-item-title">' + esc(song.title) + '</span>' +
+        (song.source_id ? '<span class="source-item-score">\u2713 added</span>' : '') +
+        (meta ? '<span class="source-item-meta">' + esc(meta) + '</span>' : '') +
+        (song.caveat ? '<span class="source-item-caveat" title="Transcribe it again for the whole score with its chords">score: ' +
+          esc(song.caveat) + '</span>' : '') +
+        '</div></div>';
+    });
+  });
+  if (!shown) { html += '<div class="source-corpora-none muted">No corpus song matches.</div>'; }
+  return html;
+}
+
+async function useCorpusSong(songId) {
+  var song = null;
+  (State.corpusSongs || []).forEach(function (group) {
+    group.songs.forEach(function (item) { if (item.id === songId) { song = item; } });
+  });
+  var id = song && song.source_id;
+  closeSourcePicker();
+  try {
+    if (!id) {
+      statusLine('Adding \u201c' + (song ? song.title : 'the song') + '\u201d from its corpus\u2026');
+      var made = await api('/api/sources/from-corpus/' + encodeURIComponent(songId), { method: 'POST' });
+      id = made.id;
+      await loadSources();
+      loadCorpusSongs();
+      statusLine('Added \u201c' + made.title + '\u201d with its score' + (made.lyrics ? ' and words' : '') +
+        ' from the corpus.', 'good');
+    }
+    $('source-select').value = id;
+    $('source-select').dispatchEvent(new Event('change'));
+    // Its words came with it, so they go straight into an empty box; words already
+    // typed there are left alone, and Extract lyrics still puts these in on request.
+    if ($('lyrics') && !$('lyrics').value.trim()) {
+      var heard = await api('/api/sources/' + encodeURIComponent(id) + '/lyrics');
+      if (heard && heard.lyrics && !$('lyrics').value.trim()) {
+        $('lyrics').value = heard.lyrics;
+        $('lyrics').dispatchEvent(new Event('input'));
+      }
+    }
+  } catch (err) {
+    statusLine('Could not add it: ' + err.message, 'bad');
+  }
 }
 
 function openSourcePicker() {
@@ -1495,6 +1596,7 @@ function openSourcePicker() {
   if (!menu || !btn) { return; }
   menu.classList.remove('hidden');
   btn.setAttribute('aria-expanded', 'true');
+  loadCorpusSongs();
 }
 
 function closeSourcePicker() {
@@ -6414,7 +6516,31 @@ function wire() {
     });
   }
   if ($('source-picker-menu')) {
+    $('source-picker-menu').addEventListener('input', function (event) {
+      if (event.target.id !== 'source-corpus-filter') { return; }
+      State.corpusFilter = event.target.value;
+      paintSourcePickerMenu();
+    });
     $('source-picker-menu').addEventListener('click', function (event) {
+      // Folding and filtering redraw the menu, which detaches what was clicked; left
+      // to bubble, the outside-click check would no longer find it and close the menu.
+      if (event.target.closest('#source-corpus-filter')) { event.stopPropagation(); return; }
+      var fold = event.target.closest('[data-cgroup]');
+      if (fold) {
+        event.stopPropagation();
+        var open = sourceCorporaOpen();
+        var at = open.indexOf(fold.dataset.cgroup);
+        if (at >= 0) { open.splice(at, 1); } else { open.push(fold.dataset.cgroup); }
+        saveSourceCorporaOpen(open);
+        paintSourcePickerMenu();
+        return;
+      }
+      var fromCorpus = event.target.closest('[data-corpus-song]');
+      if (fromCorpus) {
+        event.stopPropagation();
+        useCorpusSong(fromCorpus.dataset.corpusSong);
+        return;
+      }
       var delBtn = event.target.closest('[data-del]');
       if (delBtn) {
         event.stopPropagation();

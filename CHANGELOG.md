@@ -27,10 +27,14 @@ cannot creep back in.
 
 ### Added
 
+- **Cover a song from a corpus.** The recording list offers every analysed corpus song, folded by
+  corpus, with a filter. Picking one makes it a recording at once, with the score and words its
+  analysis found, laid under the score's sections, and its separated vocal kept for Extract
+  lyrics. The file is linked, not copied, where the disk allows. #14.
 - **Run all** in the corpus window analyses, exports and trains one after the other, on the server,
   so a big corpus needs no one to wait for each step. It asks about an earlier LoRA first, analyses
   only what still needs it, leaves out and names any song whose analysis fails, and waits for
-  anything already using the engine before it trains.
+  anything already using the engine before it trains. #15.
 
 ### Fixed
 

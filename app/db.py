@@ -435,6 +435,13 @@ def _normalised_to() -> None:
         execute("ALTER TABLE takes ADD COLUMN normalised_to REAL")
 
 
+def _source_corpus_song() -> None:
+    """The corpus song a recording was made from, so the cover picker can say so
+    whether its file was linked or had to be copied."""
+    if "corpus_song_id" not in _columns("sources"):
+        execute("ALTER TABLE sources ADD COLUMN corpus_song_id TEXT")
+
+
 MIGRATIONS = [
     lambda: (conn().executescript(BASE_SCHEMA), _legacy_takes()),   # -> 1
     _indexes,                                                        # -> 2
@@ -461,6 +468,7 @@ MIGRATIONS = [
     _weak_dismissed,                                                 # -> 23
     _engine,                                                         # -> 24
     _normalised_to,                                                  # -> 25
+    _source_corpus_song,                                             # -> 26
 ]
 
 
