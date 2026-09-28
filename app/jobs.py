@@ -18,7 +18,7 @@ from pathlib import Path
 from . import config, identities, instrumental, llm, loras, lyrics, score, stems
 from .db import bump_average, execute, get_setting, one, rows
 from .engine import OUT_OF_MEMORY, Engine, load_template
-from .library import (audio_duration, ensure_peaks, loudness, inside, normal_target, normalise, normalised_path, original_path, remove_tree,
+from .library import (audio_duration, ensure_peaks, fade_out_end, loudness, inside, normal_target, normalise, normalised_path, original_path, remove_tree,
                       take_audio_path, vocal_path, write_take_note)
 
 personas = identities
@@ -625,6 +625,16 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
     for stale in (normalised_path(dest), original_path(dest)):
         with contextlib.suppress(OSError):
             stale.unlink(missing_ok=True)
+    # Stopped by the length cap, not by its own ending: fade it out rather than leave
+    # it cut off mid-bar, before its level is read or a louder copy is made (#24).
+    cap = float(record.get("max_duration") or 0)
+    if cap:
+        rendered_for = await asyncio.to_thread(audio_duration, dest)
+        if rendered_for and rendered_for >= cap - 0.5:
+            try:
+                await asyncio.to_thread(fade_out_end, dest)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Could not fade out '%s' at its length cap: %s", record.get("title") or ref_id, exc)
     # The level as rendered, before any normalising: a render far quieter than usual
     # has often gone wrong, and a louder copy of it has not been put right.
     level = await asyncio.to_thread(loudness, dest)

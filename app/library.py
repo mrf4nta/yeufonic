@@ -283,6 +283,30 @@ def replace_file(src: Path, dest: Path, tries: int = 10) -> None:
 NORMALISED = ".normalised"
 
 
+CAP_FADE = 4.0   # seconds faded at the end of a render the length cap stopped
+
+
+def fade_out_end(rendered: Path, seconds: float = CAP_FADE) -> None:
+    """Fade out the end of a render the length cap cut off, in place.  The model does
+    not always stop at the end of its score, and a take stopped by the cap otherwise
+    ends mid-bar at full level."""
+    probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                            "stream=sample_fmt:format=duration", "-of", "json", str(rendered)],
+                           capture_output=True, text=True, timeout=60, check=True)
+    info = json.loads(probe.stdout)
+    duration = float(info["format"]["duration"])
+    sample_fmt = (info.get("streams") or [{}])[0].get("sample_fmt", "s16")
+    staged = rendered.with_name(f"{rendered.stem}.fading{rendered.suffix}")
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(rendered), "-af",
+                        f"afade=t=out:st={max(0.0, duration - seconds):.3f}:d={seconds}",
+                        "-sample_fmt", "s16" if sample_fmt.startswith("s16") else "s32", "-c:a", "flac", str(staged)],
+                       capture_output=True, text=True, timeout=300, check=True)
+        replace_file(staged, rendered)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
 def normalised_path(rendered: Path) -> Path:
     return rendered.with_name(f"{rendered.stem}{NORMALISED}{rendered.suffix}")
 

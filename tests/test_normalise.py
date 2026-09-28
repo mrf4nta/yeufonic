@@ -275,3 +275,27 @@ def test_only_the_offered_levels_can_be_set(client):
     assert client.put("/api/settings", json={"key": "normalise.level", "value": "-3"}).status_code == 400
     item = {s["key"]: s for s in client.get("/api/settings").json()["settings"]}["normalise.level"]
     assert item["value"] == "-14" and [o["value"] for o in item["options"]] == ["-16", "-14", "-11"]
+
+
+def test_a_take_stopped_by_its_cap_is_faded_out(tmp_path):
+    """The model does not always stop at the end of its score; one the cap stopped is
+    faded over its last seconds rather than cut off at full level (#24)."""
+    import json
+    from app.library import CAP_FADE, fade_out_end
+    take = tmp_path / "take.flac"
+    subprocess.run(["ffmpeg", "-v", "quiet", "-f", "lavfi", "-i", "sine=frequency=440:duration=12",
+                    "-af", "volume=0.5", "-ac", "2", "-ar", "48000", "-sample_fmt", "s16", str(take)], check=True)
+    fade_out_end(take)
+
+    def level(start, length):
+        out = subprocess.run(["ffmpeg", "-v", "info", "-nostats", "-ss", str(start), "-t", str(length), "-i", str(take),
+                              "-af", "volumedetect", "-f", "null", "-"], capture_output=True, text=True).stderr
+        return float(out.split("mean_volume:")[1].split("dB")[0])
+
+    assert level(2, 1) > -40, "before the fade, the tone as it was"
+    assert level(11.6, 0.35) < level(2, 1) - 20, "the last moments close to silence"
+    probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=sample_fmt,sample_rate:format=duration",
+                                       "-of", "json", str(take)], capture_output=True, text=True).stdout)
+    assert abs(float(probe["format"]["duration"]) - 12) < 0.05 and CAP_FADE < 12
+    assert probe["streams"][0]["sample_fmt"] == "s16" and probe["streams"][0]["sample_rate"] == "48000"
+    assert not list(tmp_path.glob("*.fading.*")), "no work file left behind"

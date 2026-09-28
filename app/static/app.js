@@ -1816,15 +1816,16 @@ var SCORE_SECTION_AS = { interlude: 'bridge', prechorus: 'pre-chorus', 'pre chor
   'break': 'bridge', breakdown: 'bridge', coda: 'outro', ending: 'outro' };
 
 /* The length cap follows a recording's score: the score fixes the length, and 360
-   seconds would cut a longer one short. Rounded up with half a minute to spare,
-   as a render can run a little past its score. A cap typed by hand, or a take's
-   own, is left alone; letting go of the recording goes back to the default. */
+   seconds would cut a longer one short. Rounded up with about ten seconds to spare:
+   a render that doesn't stop at the end of its score plays on to the cap, so the
+   less room past the score, the shorter that overrun (#24). A cap typed by hand, or
+   a take's own, is left alone; letting go of the recording goes back to the default. */
 var DEFAULT_CAP = 360;
 
 function capForScore(abc) {
   var length = planLength(abc);
   if (!length || !length.seconds) { return null; }
-  return Math.min(900, Math.ceil((length.seconds + 30) / 10) * 10);
+  return Math.min(900, Math.ceil((length.seconds + 10) / 10) * 10);
 }
 
 function followRecordingCap() {

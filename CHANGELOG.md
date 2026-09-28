@@ -23,6 +23,15 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Fixed
+
+- A render that doesn't stop at the end of its score plays on to the length cap, and was cut off
+  there mid-flow. A take stopped by its cap is now faded out over its last few seconds, and with a
+  recording the cap allows about ten seconds past the score rather than thirty, so an overrun is
+  short. Fixes #24.
+
 ## 0.0.6 (2026-09-28)
 
 ### Added
