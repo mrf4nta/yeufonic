@@ -5125,6 +5125,21 @@ function startFresh() {
     $('score-badge').textContent = 'no plan yet';
     $('score-badge').className = 'badge';
   }
+  // A new take starts from the defaults, not from whatever the last one used.
+  $('style').value = '';
+  delete $('style').dataset.touched;
+  // A chosen LoRA stays chosen, and needs its trigger word in the style to act.
+  if (State.loraTrigger && loraChosen()) { applyLoraTrigger(State.loraTrigger); }
+  $('max-duration').value = 360;
+  if ($('variety')) { $('variety').value = 'normal'; }
+  // Familiar: YuE2's own chords, the slider's first step.
+  if ($('harmony')) { $('harmony').value = 0; paintHarmony(); }
+  $('interpretation').value = 'standard';
+  paintInterpretation();
+  if ($('realaudio') && !$('realaudio').disabled) { $('realaudio').checked = true; }
+  if ($('normalise')) { $('normalise').checked = false; }
+  paintVocals();
+  if (State.mode === 'inst' && typeof paintStructure === 'function') { paintStructure(); }
   State.formEdited = false;
   refreshTitleHint();
   syncEditor();
