@@ -64,6 +64,10 @@ cannot creep back in.
 - Deleting a corpus could fail to mention its LoRA, found by a name search that missed a
   two-word name such as "First Second" in first_second_lora. It now uses the LoRA the corpus
   recorded, with its checkpoints and previous runs. Fixes #3.
+- Renaming a normalised take moved its louder copy to a folder named after the new title and left
+  the file as rendered in the old one, so Normalise could not be undone; the old folder stayed
+  too. A rename now brings the file as rendered along and clears the old folder, and at start the
+  app puts back any file as rendered an earlier rename left behind. Fixes #2.
 
 ## 0.0.5 (2026-09-28)
 

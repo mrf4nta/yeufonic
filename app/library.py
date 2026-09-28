@@ -86,10 +86,78 @@ def write_take_note(take: dict, audio: Path) -> None:
         log.warning("could not write the take note: %s", exc)
 
 
+# What a take's folder holds besides its audio, all made again when missing.
+_REMADE = ("take.json", "*.peaks.json")
+TAKE_FOLDER = re.compile(r"^(?:.+-)?([0-9a-f]{12})$")
+
+
+def _clear_remade(folder: Path) -> None:
+    """Drop the files a take's old folder can do without, and the folder if that
+    empties it.  Audio is never removed here."""
+    for pattern in _REMADE:
+        for path in folder.glob(pattern):
+            path.unlink(missing_ok=True)
+    try:
+        folder.rmdir()
+    except OSError:
+        pass
+
+
+def _bring_along(have: Path, want: Path) -> None:
+    """A renamed take's other audio moves with it: the file as rendered, when the take
+    plays its normalised copy, and the as-rendered copy the first version of
+    normalising kept.  Left behind, Normalise could not be undone."""
+    for old, new in ((rendered_path(have), rendered_path(want)), (original_path(have), original_path(want))):
+        if old != have and old.exists() and not new.exists():
+            shutil.move(str(old), str(new))
+    _clear_remade(have.parent)
+
+
+def rescue_stranded() -> int:
+    """Put back a normalised take's file as rendered where a rename left it behind, in
+    the take's old folder, before the rename brought it along.  Then tidy the old
+    folders of takes, and of takes deleted, of what is made again when missing.
+    Audio with no take to go to is left where it is."""
+    takes = {take["id"]: take for take in rows("SELECT id, audio_path, normalised FROM takes")}
+    moved = converted = 0
+    if not config.TAKES_DIR.is_dir():
+        return 0
+    for folder in sorted(config.TAKES_DIR.iterdir()):
+        found = TAKE_FOLDER.match(folder.name) if folder.is_dir() else None
+        if not found:
+            continue
+        take = takes.get(found.group(1))
+        audio = Path(take["audio_path"]) if take and take["audio_path"] else None
+        if audio and audio.parent == folder:
+            continue
+        if audio and audio.exists():
+            left = [path for path in folder.glob("*.flac")]
+            wanted = None
+            if is_normalised_file(audio):
+                wanted = rendered_path(audio)
+                left = [path for path in left if not is_normalised_file(path) and not path.stem.endswith(".original")]
+            elif take["normalised"]:
+                wanted = original_path(audio)      # normalised in place: converted below
+                left = [path for path in left if path.stem.endswith(".original")]
+            if wanted and not wanted.exists() and len(left) == 1:
+                try:
+                    shutil.move(str(left[0]), str(wanted))
+                    moved += 1
+                    converted += wanted == original_path(audio)
+                    log.info("put back the file as rendered of take %s from %s", take["id"], folder.name)
+                except OSError as exc:
+                    log.warning("could not put back the file as rendered of take %s: %s", take["id"], exc)
+        _clear_remade(folder)
+    if converted:
+        convert_old_normalised()
+    return moved
+
+
 def relayout() -> None:
     """Rename stored files after the thing they hold.  Runs on every start and does
-    nothing once the names are right.  Titles never change after a take is created,
-    so a name computed here stays valid.  A take.json is only written when missing."""
+    nothing once the names are right.  A renamed take moves to a folder named after
+    its new title, and its file as rendered goes with it.  A take.json is only
+    written when missing."""
     moved = 0
 
     for take in rows("SELECT * FROM takes"):
@@ -105,10 +173,8 @@ def relayout() -> None:
                 if not want.exists():
                     shutil.move(str(have), str(want))
                     moved += 1
-                try:
-                    have.parent.rmdir()   # the old id-only folder, now empty
-                except OSError:
-                    pass
+                    if have.parent != want.parent:
+                        _bring_along(have, want)
                 execute("UPDATE takes SET audio_path = ? WHERE id = ?", (str(want), take["id"]))
             except OSError as exc:
                 log.warning("could not rename take %s: %s", take["id"], exc)
@@ -116,6 +182,8 @@ def relayout() -> None:
         if want.exists() and not (want.parent / "take.json").exists():
             take["audio_path"] = str(want)
             write_take_note(take, want)
+
+    moved += rescue_stranded()
 
     for source in rows("SELECT * FROM sources"):
         have = Path(source["stored_path"])
