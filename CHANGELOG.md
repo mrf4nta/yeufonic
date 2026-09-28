@@ -61,6 +61,9 @@ cannot creep back in.
 - The vocal check on an instrumental listened to only three short spans, at a quarter, a half
   and three quarters, and missed a voice that came and went between them. It now hears a span from
   every fifteen seconds, so a voice lasting that long cannot fall between two. Fixes #22.
+- Deleting a corpus could fail to mention its LoRA, found by a name search that missed a
+  two-word name such as "First Second" in first_second_lora. It now uses the LoRA the corpus
+  recorded, with its checkpoints and previous runs. Fixes #3.
 
 ## 0.0.5 (2026-09-28)
 

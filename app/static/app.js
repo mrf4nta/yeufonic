@@ -2225,6 +2225,15 @@ function identityName(id) {
 
 var personaName = identityName;
 
+/* The LoRA a training run's other files belong to, as loras.run_lora on the server:
+   its checkpoints (name_step950), the trainer's best copy, and a previous run set
+   aside under a date (name_20260920_step50). */
+function loraRunOf(file) {
+  var stem = String(file || '').replace(/\.safetensors$/i, '');
+  var found = /^(.+?)(?:_\d{8}(?:_\d{4})?)?(?:_step\d+|_best)?$/.exec(stem);
+  return (found ? found[1] : stem) + '.safetensors';
+}
+
 function getIdentityLoRAs(identity) {
   if (!identity) { return []; }
   // The engine's list became a catalogue of entries when the style picker was
@@ -2232,12 +2241,19 @@ function getIdentityLoRAs(identity) {
   var allLoras = ((State.options && State.options.loras) || []).map(function (item) {
     return typeof item === 'string' ? item : item.name;
   });
-  var trigger = (identity.trigger_word || '').toLowerCase();
-  var name = (identity.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  var matches = allLoras.filter(function (l) {
-    var lower = l.toLowerCase();
-    return (trigger && lower.indexOf(trigger) !== -1) || (name && lower.indexOf(name) !== -1);
-  });
+  var matches;
+  if (identity.lora) {
+    // The corpus records its LoRA's file name: that file, its checkpoints and any
+    // previous run set aside. A name search missed "First Second" in first_second_lora.
+    matches = allLoras.filter(function (l) { return l === identity.lora || loraRunOf(l) === identity.lora; });
+  } else {
+    var trigger = (identity.trigger_word || '').toLowerCase();
+    var name = (identity.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    matches = allLoras.filter(function (l) {
+      var lower = l.toLowerCase();
+      return (trigger && lower.indexOf(trigger) !== -1) || (name && lower.indexOf(name) !== -1);
+    });
+  }
   matches.sort(function (a, b) {
     var aBest = a.indexOf('_best') !== -1;
     var bBest = b.indexOf('_best') !== -1;
