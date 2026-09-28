@@ -277,6 +277,11 @@ docker compose up -d --build
 
 Then open <http://localhost:8090>.
 
+The engine's own ComfyUI page is at <http://localhost:8189> (on Windows, <http://localhost:8188>),
+on this machine only and with no login. It's the same engine and GPU the app uses: a job run there
+shows in the app's queue as coming from outside and holds up the app's own, and its History shows
+every graph the app sent. The guide says more.
+
 ### Build options
 
 These need a rebuild rather than a setting.

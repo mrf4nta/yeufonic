@@ -638,6 +638,18 @@ The app writes a consolidated, real-time log of every major action — score pla
   tail -f data/logs/yeufonic.log
   ```
 
+## The engine's own page
+
+The engine is ComfyUI, and its own interface is reachable: <http://localhost:8189> with Docker, or
+<http://localhost:8188> with the Windows install (the `engine_port` in `settings.ini`). It answers
+on this machine only, with no login.
+
+- **It is the same engine and GPU as the app.** A job run there shows in the app's queue as coming
+  from outside, and the app's own jobs wait for it.
+- **Its History shows every graph the app sent**: the plan, the render and the transcriptions, with
+  every setting as the engine received it. It's a useful place to see exactly what a take was made
+  from.
+
 ---
 
 ## When something is wrong
