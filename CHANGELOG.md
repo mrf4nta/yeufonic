@@ -38,6 +38,10 @@ cannot creep back in.
 
 ### Fixed
 
+- **Training no longer has a time limit.** A run was stopped at 2.5 hours, by a clock that did not
+  look at progress, at step 1325 of 1400 while it was reporting a step every few seconds. The
+  app told the engine to stop it. Training shows its progress and has Stop, and an engine that
+  goes away, loses the job or dies is caught without a clock.
 - The New corpus window's folder picker had no way back from one of its starting folders to the
   list of them, and on Windows listed each subfolder by its whole path. It now has *all folders*
   there, and shows subfolders by name. Fixes #13.

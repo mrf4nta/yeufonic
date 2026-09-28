@@ -286,3 +286,22 @@ def test_an_engine_that_is_simply_offline_does_not_hold_a_job(monkeypatch):
     monkeypatch.setattr(jobs.asyncio, "sleep", nap)
     asyncio.run(jobs.wait_for_engine())
     assert naps == []   # the job goes on, and fails as it always has
+
+
+def test_training_has_no_time_limit(monkeypatch):
+    """A clock blind to progress once stopped a run at step 1325 of 1400. Hours go
+    by here between polls; training waits them out, where a render with a limit
+    would not."""
+    clock = {"now": 1_000_000.0}
+
+    async def an_hour(_seconds):
+        clock["now"] += 3600
+    monkeypatch.setattr(jobs.asyncio, "sleep", an_hour)
+    monkeypatch.setattr(jobs.time, "time", lambda: clock["now"])
+    use(monkeypatch, FakeEngine([None, None, None, done({}, {})], started=True, state="running"))
+    assert jobs.config.TIMEOUTS["train"] is None
+    outcome, _job = asyncio.run(jobs._wait_for("train", "run1", "pid"))
+    assert outcome == "done"
+    use(monkeypatch, FakeEngine([None, None, None, done({}, {})], started=True, state="running"))
+    outcome, _job = asyncio.run(jobs._wait_for("render", "t1", "pid"))
+    assert outcome == "timeout"

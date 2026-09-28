@@ -389,7 +389,7 @@ async def _wait_for(kind: str, ref_id: str, prompt_id: str) -> tuple[str, dict |
         now = time.time()
         if now - ENGINE.last_contact > config.ENGINE_LOST_AFTER:
             return "lost", None
-        if deadline is None and ENGINE.has_started(prompt_id):
+        if deadline is None and limit and ENGINE.has_started(prompt_id):
             deadline = now + limit
         if deadline is not None and now > deadline:
             return "timeout", None
@@ -399,7 +399,7 @@ async def _wait_for(kind: str, ref_id: str, prompt_id: str) -> tuple[str, dict |
         if now - last_queue_check > 6:
             last_queue_check = now
             state = await ENGINE.prompt_state(prompt_id)
-            if state == "running" and deadline is None:
+            if state == "running" and deadline is None and limit:
                 deadline = now + limit
             elif state == "running" and _engine_fault(prompt_id):
                 # Its thread died and the engine stayed up, still listing the job as

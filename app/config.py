@@ -71,10 +71,11 @@ DEFAULT_STYLE = "English, warm indie rock, expressive lead vocal, drums, bass, g
 TIMEOUTS = {"transcribe": 12 * 60, "plan": 10 * 60, "render": 25 * 60, "lyrics": 15 * 60,
             "identity_score": 12 * 60, "identity_style": 10 * 60,
             "persona_score": 12 * 60, "persona_style": 10 * 60,
-            # Training is measured, not guessed: 5000 steps took 44 minutes on this
-            # machine.  The allowance is generous because losing an hour of work to a
-            # timeout would be worse than waiting.
-            "train": 150 * 60}
+            # None: no limit.  A clock blind to progress stopped a run at step 1325 of
+            # 1400 that was reporting a step every few seconds.  Training shows its
+            # progress and has Stop; an engine that goes away, or loses the job, or
+            # whose job thread dies, is caught without one.
+            "train": None}
 
 # ---------------------------------------------------------------- LoRA training
 #
