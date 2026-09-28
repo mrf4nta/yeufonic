@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from fractions import Fraction
 import subprocess
 from pathlib import Path
 
@@ -134,6 +135,122 @@ def structure_of(abc: str | None) -> str:
         else:
             tags.append(_AS_SECTION.get(name, "verse"))
     return "\n".join(f"[{tag}]" for tag in tags) or BARE
+
+
+# ------------------------------------------------ the tune played by an instrument
+# A recording with a voice transcribes with the sung melody in the Vocal voice, and
+# a render of that sings.  Emptying the voice is not enough: where the Ins voice rests
+# too, the LoRA fills the gap with humming (measured: 14% of a take).  So the tune
+# moves to Ins wherever Ins rests, and the Vocal voice keeps its chords over rests,
+# one rest per chord as the LoRA writes its own plans (measured: no voice at all).
+_NOTE = re.compile(r"(?:\^{1,2}|_{1,2}|=)?[A-Ga-g][,']*(\d*/?\d*)")
+_RESTS = re.compile(r"(?:z\d*(?:/\d*)?)+")
+_REST = re.compile(r"z(\d*)(/(\d*))?")
+_QUOTED = re.compile(r'("[^"]*")')
+
+
+def _has_notes(bar: str) -> bool:
+    return bool(re.search(r"[A-Ga-g]", _QUOTED.sub("", bar)))
+
+
+def _one_rest(run: re.Match) -> str:
+    total = Fraction(0)
+    for rest in _REST.finditer(run.group(0)):
+        count = int(rest.group(1) or 1)
+        total += Fraction(count, int(rest.group(3) or 2)) if rest.group(2) else Fraction(count)
+    return "z" + (str(total.numerator) if total.denominator == 1 else f"{total.numerator}/{total.denominator}")
+
+
+def _as_rests(bar: str) -> str:
+    """The bar's notes as rests of the same length, its chords kept, a run of rests
+    as one."""
+    parts = _QUOTED.split(bar)
+    return "".join(part if part.startswith('"') else
+                   _RESTS.sub(_one_rest, _NOTE.sub(lambda m: "z" + m.group(1), part).replace("-", ""))
+                   for part in parts)
+
+
+def _tokens(lines: list[str]) -> list[tuple[str, str]]:
+    """A voice's lines as bars and the field lines between them (M: and the like).
+    Z4 is four bars of rest, so it counts as four."""
+    out: list[tuple[str, str]] = []
+    for line in lines:
+        text = line.strip()
+        if not text or re.match(r"^[A-Za-z]:", text):
+            out.append(("field", line))
+            continue
+        for bar in text.split("|"):
+            if not bar.strip():
+                continue
+            many = re.fullmatch(r"\s*Z(\d*)\s*", bar)
+            out += [("bar", "Z")] * int(many.group(1) or 1) if many else [("bar", bar)]
+    return out
+
+
+def _lines(tokens: list[tuple[str, str]]) -> list[str]:
+    out, bars = [], []
+    for kind, text in tokens:
+        if kind == "field":
+            if bars:
+                out.append("|".join(bars) + "|")
+                bars = []
+            out.append(text)
+            continue
+        bars.append(text)
+        if len(bars) == 4:
+            out.append("|".join(bars) + "|")
+            bars = []
+    if bars:
+        out.append("|".join(bars) + "|")
+    return out
+
+
+def tune_on_instrument(abc: str) -> str:
+    """The score with its sung melody played by an instrument.  The transcriber writes
+    a stretch of music as a Vocal block and then an Ins block of the same bars; in each
+    bar where Ins rests and Vocal has notes, the notes move to Ins, chords left behind.
+    Where Ins already plays, the sung notes give way.  Every Vocal bar ends as rests
+    under its chords, so the score keeps its length, its chords and its sections."""
+    lines = (abc or "").split("\n")
+    body = next((i + 1 for i, line in enumerate(lines) if line.startswith("K:")), None)
+    if body is None:
+        return abc
+    out = lines[:body]
+    blocks: list = []           # a field or section line, or [voice, its V: line, its lines]
+    for line in lines[body:]:
+        if line.startswith("V:"):
+            name = line[2:].strip().split()
+            blocks.append([name[0] if name else "", line, []])
+        elif line.startswith("%") or not blocks or not isinstance(blocks[-1], list):
+            blocks.append(line)
+        else:
+            blocks[-1][2].append(line)
+    index = 0
+    while index < len(blocks):
+        block = blocks[index]
+        if not isinstance(block, list):
+            out.append(block)
+            index += 1
+            continue
+        tokens = _tokens(block[2])
+        after = blocks[index + 1] if index + 1 < len(blocks) else None
+        if block[0] == "Vocal" and isinstance(after, list) and after[0] == "Ins":
+            played = _tokens(after[2])
+            sung = [i for i, token in enumerate(tokens) if token[0] == "bar"]
+            ins = [i for i, token in enumerate(played) if token[0] == "bar"]
+            if len(sung) == len(ins):
+                for s, i in zip(sung, ins):
+                    if _has_notes(tokens[s][1]) and not _has_notes(played[i][1]):
+                        played[i] = ("bar", _QUOTED.sub("", tokens[s][1]))
+            tokens = [(kind, _as_rests(text) if kind == "bar" else text) for kind, text in tokens]
+            out += [block[1], *_lines(tokens), after[1], *_lines(played)]
+            index += 2
+            continue
+        if block[0] == "Vocal":
+            tokens = [(kind, _as_rests(text) if kind == "bar" else text) for kind, text in tokens]
+        out += [block[1], *_lines(tokens)]
+        index += 1
+    return "\n".join(out)
 
 
 def excerpt(src: Path, dest: Path, spans: int = 3, each: float = 3.0) -> Path:

@@ -314,18 +314,23 @@ section, add an interlude, or run past the times you gave, so the length cap is 
 
 ### An instrumental from a recording
 
-**From a recording** at the top of the editor takes one of your recordings, as a cover does. Use one
-without vocals: a backing track, or the **instruments** stem of a song, saved and uploaded as a
-recording. Its transcription is the score, so there is no plan to write, and the render plays its
-melody and chords with the instrumental LoRA.
+**From a recording** at the top of the editor takes one of your recordings, as a cover does. Its
+transcription is the score, so there is no plan to write, and the render plays its melody and
+chords with the instrumental LoRA.
 
 The sections come from the score too: one per section of the score, in the names the LoRA knows. An
 *interlude* becomes a bridge. A render pairs each section of the structure with one of the score,
 which is why the builder gives way to them; edit the score to change them. Press **Create
 instrumental** to render.
 
-A recording whose score has a sung melody would come out sung, so the editor says so and does not
-render it. Choose **No recording** in the list to go back to writing a plan.
+**A song with vocals works too.** Its score has the sung melody in the vocal part, which would come
+out sung, so the tune is given to an instrument: wherever no instrument is playing, the sung notes
+move to one, and the vocal part keeps only its chords. The editor says so under the recording. It
+is usually the better choice for a song: without its voice, the transcriber tends to miss the
+difference between verse and chorus, and hears the whole song as one loop of chords. The LoRA
+arranges it as an instrumental, so expect parts of its own, such as extra guitar.
+
+Choose **No recording** in the list to go back to writing a plan.
 
 ### When an instrumental sings
 

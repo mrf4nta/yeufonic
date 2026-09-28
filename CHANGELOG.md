@@ -29,8 +29,9 @@ cannot creep back in.
 
 - **An instrumental from a recording.** Instrumental mode can take a recording, as a cover does,
   and render its transcription with the instrumental LoRA, with no plan to write. The structure is
-  the score's own sections, so the whole score is played. A recording whose score has a sung
-  melody is refused, since the render would sing. #21.
+  the score's own sections, so the whole score is played. A sung melody is given to an
+  instrument wherever none plays, since a vocal part with notes makes the render sing, and an
+  emptied one leaves gaps the model fills with humming. #21.
 - **Vocals and instruments.** Two more stem models, fast and fine tuned, split a take or a recording
   into the vocal and one **instruments** stem holding everything else, a backing track. Untick
   vocals to keep only the instruments. #20.

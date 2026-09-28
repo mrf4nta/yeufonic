@@ -3,7 +3,7 @@ import subprocess
 import pytest
 
 from app import config, instrumental, jobs, score
-from app.db import one
+from app.db import execute, one
 from app.jobs import QUEUE
 
 from conftest import make_take
@@ -249,15 +249,43 @@ def test_an_instrumental_from_a_recording_renders_its_score_at_once(client, monk
     drain()
 
 
-def test_a_recording_that_sings_or_has_no_score_is_refused(client, monkeypatch):
+def test_a_recording_without_a_score_is_refused(client, monkeypatch):
     engine_ready(monkeypatch)
     a_recording("")
     refused = client.post("/api/instrumentals", json={"source_id": "rec1"})
     assert refused.status_code == 400 and "transcribe this recording first" in refused.json()["detail"]
-    sung = client.post("/api/instrumentals", json={"source_id": "rec1", "abc": SUNG})
-    assert sung.status_code == 400 and "sung melody (4 notes" in sung.json()["detail"]
     assert client.post("/api/instrumentals", json={"source_id": "nope"}).status_code == 404
     assert QUEUE.empty()
+
+
+def test_a_sung_melody_is_played_by_an_instrument(client, monkeypatch):
+    """A recording with a voice: its tune moves to Ins, so the take is kept and does not
+    sing.  The score saved is the one rendered."""
+    engine_ready(monkeypatch)
+    a_recording(SUNG)
+    made = client.post("/api/instrumentals", json={"source_id": "rec1"})
+    assert made.status_code == 200, made.text
+    row = one("SELECT abc FROM takes WHERE id = ?", (made.json()["id"],))
+    assert instrumental.sings(row["abc"]) == 0 and row["abc"] == instrumental.tune_on_instrument(SUNG)
+    drain()
+
+
+def test_the_tune_moves_to_ins_only_where_ins_rests():
+    abc = ('X:1\nM:4/4\nL:1/16\nQ:1/4=90\nV: Vocal clef=treble name="Vocal Melody" snm="Vocal"\n'
+           'V: Ins clef=treble name="Ins Melody" snm="Inst."\nK:C\n'
+           '% intro\nV: Vocal\nZ2|\nV: Ins\nc4e4g4e4|B4d4g4d4|\n'
+           '% verse\nV: Vocal\n"Am"A4c4e4-e4|"F"F8z8|\nV: Ins\nZ|g16|\n'
+           'V: Vocal\nM:2/4\n"C"c8|\nV: Ins\nM:2/4\nz8|\n')
+    played = instrumental.tune_on_instrument(abc)
+    verse = played.split("% verse\n")[1]
+    assert verse.startswith('V: Vocal\n"Am"z16|"F"z16|\nV: Ins\nA4c4e4-e4|g16|'), \
+        "the first bar's tune moves; where Ins already plays, the sung notes give way"
+    assert 'V: Vocal\nM:2/4\n"C"z8|\nV: Ins\nM:2/4\nc8|' in verse, "a change of meter stays in both voices"
+    assert "c4e4g4e4|B4d4g4d4|" in played, "an Ins voice that plays is left alone"
+    assert instrumental.sings(played) == 0
+    assert score.estimate(played) == score.estimate(abc), "the same bars, the same length"
+    assert played.count('"') == abc.count('"'), "every chord kept"
+    assert instrumental.structure_of(played) == instrumental.structure_of(abc)
 
 
 def test_a_take_from_a_recording_is_not_replanned_and_rerenders_from_its_score(client, monkeypatch):
@@ -271,4 +299,9 @@ def test_a_take_from_a_recording_is_not_replanned_and_rerenders_from_its_score(c
     assert refused.status_code == 400 and "no plan to write again" in refused.json()["detail"]
     assert client.post(f"/api/takes/{take['id']}/render", json={}).status_code == 200
     assert one("SELECT lyrics FROM takes WHERE id = ?", (take["id"],))["lyrics"] == "[intro]\n[verse]\n[chorus]\n[outro]"
+    drain()
+    # A melody typed into its Vocal voice is given to the instrument before the render.
+    execute("UPDATE takes SET status = 'done', abc = ? WHERE id = ?", (SUNG, take["id"]))
+    assert client.post(f"/api/takes/{take['id']}/render", json={}).status_code == 200
+    assert instrumental.sings(one("SELECT abc FROM takes WHERE id = ?", (take["id"],))["abc"]) == 0
     drain()

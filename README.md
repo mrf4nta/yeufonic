@@ -79,8 +79,8 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   just used, without breaking the song's structure.
 - **Instrumentals.** A third mode: style and structure in, a song with no vocal out. Build the
   structure section by section, time each section, or let YuE2 decide. Used in combination with 
-  LoRA ar_lora_inst_v3abc_comfyui.safetensors by Mothersuperior. Or choose a recording without
-  vocals, and its score is played as it stands, sections and all.
+  LoRA ar_lora_inst_v3abc_comfyui.safetensors by Mothersuperior. Or choose a recording, and its
+  score is played, sections and all, with any sung melody played by an instrument.
 - **Draft lyrics from a sentence.** Say what the song is about and pick a structure. Gemma 4
   writes a first draft in YuE2's section layout, or you can call an external LLM if you
   set one up in Settings.

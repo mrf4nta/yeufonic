@@ -1832,7 +1832,29 @@ function scoreSections(abc) {
   });
 }
 
-/* Notes in the Vocal voice: an instrumental whose score has any sings. */
+/* Each section of the score, where it runs and what it was called there: the
+   header, then that section alone, measured as planLength measures a whole score. */
+function scoreSectionSpans(abc) {
+  var text = String(abc || '');
+  var pattern = /^%[ \t]*([A-Za-z][\w -]*?)[ \t]*$/gm;
+  var marks = [];
+  var found;
+  while ((found = pattern.exec(text))) { marks.push({ at: found.index, after: pattern.lastIndex, was: found[1].trim().toLowerCase() }); }
+  if (!marks.length) { return []; }
+  var header = text.slice(0, marks[0].at);
+  var names = scoreSections(text);
+  var clockAt = 0;
+  return marks.map(function (mark, index) {
+    var body = text.slice(mark.after, index + 1 < marks.length ? marks[index + 1].at : text.length);
+    var length = planLength(header + '\n' + body);
+    var span = { name: names[index], was: mark.was, start: clockAt, end: clockAt + (length ? length.seconds : 0) };
+    clockAt = span.end;
+    return span;
+  });
+}
+
+/* Notes in the Vocal voice: an instrumental whose score has any would sing, so the
+   server gives them to the Ins voice first. */
 function vocalNotes(abc) {
   var voice = null, notes = 0;
   String(abc || '').split('\n').forEach(function (raw) {
@@ -1845,9 +1867,7 @@ function vocalNotes(abc) {
 }
 
 function instRecordingProblem() {
-  var abc = $('abc').value;
-  if (!abc.trim()) { return 'Transcribe this recording first: its score is what the instrumental plays.'; }
-  if (vocalNotes(abc)) { return 'This recording\'s score has a sung melody, so an instrumental of it would sing. Use a recording without vocals.'; }
+  if (!$('abc').value.trim()) { return 'Transcribe this recording first: its score is what the instrumental plays.'; }
   return '';
 }
 
@@ -1867,9 +1887,10 @@ function paintInstSource() {
   var shown = $('render-status') ? $('render-status').textContent : '';
   if (fromRecording && shown === hint) { statusLine(played); }
   if (!fromRecording && shown === played) { statusLine(hint); }
+  // A sung melody is given to an instrument by the server, as the tune the render plays.
   if (fromRecording && $('abc').value.trim() && vocalNotes($('abc').value)) {
-    $('source-status').textContent = instRecordingProblem();
-    $('source-status').className = 'status bad';
+    $('source-status').textContent = 'The score has a sung melody: the instrumental plays it on an instrument.';
+    $('source-status').className = 'status';
   }
   paintStructure();
 }
@@ -3790,12 +3811,18 @@ async function doInstrumentalFromRecording() {
 function paintStructure() {
   if ($('structure-kind')) { $('structure-kind').style.display = instFromRecording() ? 'none' : ''; }
   if (instFromRecording()) {
-    var sections = scoreSections($('abc').value);
-    $('structure-total').textContent = '';
-    $('structure-body').innerHTML = '<p class="struct-note">' + (sections.length
-      ? 'The recording\'s score sets the sections: ' + esc(sections.join(', ')) + '. Edit the score to change them.'
-      : 'The sections come from the recording\'s score once it is transcribed.') + '</p>';
-    $('structure-preview').textContent = sections.length ? sections.map(function (name) { return '[' + name + ']'; }).join(' ') : '[instrumental]';
+    var spans = scoreSectionSpans($('abc').value);
+    var total = spans.length ? spans[spans.length - 1].end : 0;
+    $('structure-total').textContent = total ? clock(total) + ' in all' : '';
+    $('structure-total').classList.remove('over');
+    $('structure-body').innerHTML = spans.length
+      ? '<ol class="struct-list">' + spans.map(function (span) {
+          return '<li class="struct-row struct-fixed"><span class="struct-name">' + esc(span.name) +
+            (span.was !== span.name ? ' <span class="struct-was">' + esc(span.was) + ' in the score</span>' : '') + '</span>' +
+            '<span class="struct-time">' + clock(span.start) + '\u2013' + clock(span.end) + '</span></li>';
+        }).join('') + '</ol><p class="struct-note">The sections of the recording\'s score. Edit its % lines to change them.</p>'
+      : '<p class="struct-note">The sections come from the recording\'s score once it is transcribed.</p>';
+    $('structure-preview').textContent = spans.length ? spans.map(function (span) { return '[' + span.name + ']'; }).join(' ') : '[instrumental]';
     return;
   }
   Array.prototype.forEach.call(document.querySelectorAll('#structure-kind button'), function (button) {
@@ -5389,7 +5416,9 @@ function startFresh() {
   paintTakes();
   statusLine(cover
     ? 'New cover. The recording stays selected: add a title and lyrics, then Create cover.'
-    : State.mode === 'inst' ? 'New instrumental. Choose a style and a structure, then Write score plan.'
+    : State.mode === 'inst' ? (instFromRecording()
+      ? 'New instrumental. The recording stays selected: choose a style, then Create instrumental.'
+      : 'New instrumental. Choose a style and a structure, then Write score plan.')
     : 'New song. Write a title, style and lyrics, then Write score plan.', 'good');
   $('title').focus();
 }

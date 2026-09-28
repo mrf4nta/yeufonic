@@ -1146,6 +1146,10 @@ label .lora-value:disabled { opacity: 0.6; }
 .struct-row .struct-time { flex: 0 0 auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 66px; text-align: right; }
 .struct-row .struct-btn { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; padding: 3px 4px; border-radius: 6px; }
 .struct-row .struct-btn:hover { color: var(--text); background: var(--card-2); }
+/* A recording's sections: read from its score, so named and timed but not edited here. */
+.struct-row.struct-fixed { padding: 6px 10px 6px 9px; }
+.struct-row .struct-name { flex: 1 1 auto; font-size: 13px; }
+.struct-row .struct-was { margin-left: 6px; font-size: 11.5px; color: var(--muted); }
 .struct-add { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .struct-add .chip { font-size: 12px; padding: 4px 10px; }
 .structure-sent { margin-top: 9px; font-size: 12px; line-height: 1.5; }

@@ -1467,6 +1467,18 @@ async def create_instrumental(body: InstrumentalIn) -> dict:
     return await _plan_new_take("instrumental", title, structure, body)
 
 
+def _unsung(abc: str) -> str:
+    """A score with a sung melody, as an instrumental plays it: the tune on an instrument."""
+    if not instrumental.sings(abc):
+        return abc
+    played = instrumental.tune_on_instrument(abc)
+    sung = instrumental.sings(played)
+    if sung:
+        raise HTTPException(400, f"this score's sung melody could not be given to an instrument ({sung} notes are "
+                                 "left in its Vocal voice), so the instrumental would sing.")
+    return played
+
+
 async def _instrumental_from_recording(body: InstrumentalIn) -> dict:
     """An instrumental played from a recording's score, rendered at once: the score is
     already there, so there is no plan to write.  Its structure is the score's own
@@ -1478,11 +1490,8 @@ async def _instrumental_from_recording(body: InstrumentalIn) -> dict:
     abc = body.abc if (body.abc or "").strip() else (source["abc"] or "")
     if not abc.strip():
         raise HTTPException(400, "transcribe this recording first. Its score is what the instrumental plays.")
+    abc = _unsung(abc)
     _check_score(abc, "instrumental")
-    sung = instrumental.sings(abc)
-    if sung:
-        raise HTTPException(400, f"this recording's score has a sung melody ({sung} notes in its Vocal voice), "
-                                 "so an instrumental of it would sing. Use a recording without vocals.")
     title = (body.title or "").strip() or source["title"] or "Untitled instrumental"
     record = _new_take_record("instrumental", title, instrumental.structure_of(abc), body)
     record.update(source_id=source["id"], abc=abc, auto_render=0)
@@ -1662,10 +1671,9 @@ async def render_take(take_id: str, body: RenderIn | None = None) -> dict:
         raise HTTPException(400, "this take has no score yet. Write a plan first.")
     _check_score(take["abc"], take["kind"])
     if take["kind"] == "instrumental" and take.get("source_id"):
-        # Its structure is its score's sections, which an edit to the score may have changed.
-        if instrumental.sings(take["abc"]):
-            raise HTTPException(400, "this score has a sung melody in its Vocal voice, so the instrumental would sing.")
-        execute("UPDATE takes SET lyrics = ? WHERE id = ?", (instrumental.structure_of(take["abc"]), take_id))
+        # An edit to the score may have given it a sung melody, or changed its sections.
+        abc = _unsung(take["abc"])
+        execute("UPDATE takes SET abc = ?, lyrics = ? WHERE id = ?", (abc, instrumental.structure_of(abc), take_id))
     _checkpoint()
     interpretation = take["interpretation"] if body is None or body.interpretation is None else _interpretation(body.interpretation)
     realaudio = take["realaudio"] if body is None or body.realaudio is None else (1 if body.realaudio else 0)
