@@ -1577,15 +1577,7 @@ async function useCorpusSong(songId) {
     $('source-select').value = id;
     $('source-select').dispatchEvent(new Event('change'));
     fillCorpusSongStyle(songId, true);
-    // Its words came with it, so they go straight into an empty box; words already
-    // typed there are left alone, and Extract lyrics still puts these in on request.
-    if ($('lyrics') && !$('lyrics').value.trim()) {
-      var heard = await api('/api/sources/' + encodeURIComponent(id) + '/lyrics');
-      if (heard && heard.lyrics && !$('lyrics').value.trim()) {
-        $('lyrics').value = heard.lyrics;
-        $('lyrics').dispatchEvent(new Event('input'));
-      }
-    }
+    await takeRecordingWords(id);
   } catch (err) {
     statusLine('Could not add it: ' + err.message, 'bad');
   }
@@ -1622,6 +1614,50 @@ function currentSource() {
   var id = $('source-select') ? $('source-select').value : '';
   for (var i = 0; i < State.sources.length; i++) { if (State.sources[i].id === id) { return State.sources[i]; } }
   return null;
+}
+
+/* The words follow the recording.  Words the app put in from one recording, unedited,
+   give way to the next one's, or go if it has none: left in, a cover of one song
+   was sung with another's words.  Words typed or edited in the box stay unless the
+   user agrees to replace them, as Extract lyrics asks. */
+var RECORDING_WORDS_KEY = 'yue2.recordingWords';
+
+function sameWords(a, b) {
+  return String(a || '').replace(/\r\n?/g, '\n').trim() === String(b || '').replace(/\r\n?/g, '\n').trim();
+}
+
+function recordingWords(text) {
+  try {
+    if (arguments.length) { localStorage.setItem(RECORDING_WORDS_KEY, text || ''); return text; }
+    return localStorage.getItem(RECORDING_WORDS_KEY) || '';
+  } catch (err) {
+    if (arguments.length) { State.recordingWords = text || ''; }
+    return State.recordingWords || '';
+  }
+}
+
+async function takeRecordingWords(sourceId) {
+  var box = $('lyrics');
+  if (!box || State.mode !== 'cover' || !sourceId) { return; }
+  var source = sourceById(sourceId);
+  var words = '';
+  if (source && source.has_lyrics) {
+    try {
+      var heard = await api('/api/sources/' + encodeURIComponent(sourceId) + '/lyrics');
+      words = (heard && heard.lyrics) || '';
+    } catch (err) { return; }
+  }
+  if ($('source-select').value !== sourceId || sameWords(box.value, words)) { return; }
+  var theirs = !box.value.trim() || sameWords(box.value, recordingWords());
+  if (!theirs) {
+    if (!words) { return; }
+    var name = source && source.title ? '\u201c' + source.title + '\u201d' : 'this recording';
+    if (!confirm('Replace the words in the box with the words of ' + name + '?')) { return; }
+  }
+  box.value = words;
+  recordingWords(words);
+  box.dispatchEvent(new Event('input'));
+  saveForm();
 }
 
 function sourceById(id) {
@@ -2456,10 +2492,12 @@ function showHearError(message) {
 
 function useHeardLyrics(text) {
   var box = $('lyrics');
-  if (box.value.trim() && box.value.trim() !== text.trim()) {
+  // Another recording's words, as the app put them in, go without asking.
+  if (box.value.trim() && !sameWords(box.value, text) && !sameWords(box.value, recordingWords())) {
     if (!confirm('Replace the lyrics in the box with the words heard in the recording?')) { return; }
   }
   box.value = text;
+  recordingWords(text);
   State.formEdited = true;
   saveForm();
   refreshTitleHint();
@@ -6832,6 +6870,7 @@ function wire() {
         closeSourcePicker();
         $('source-select').dispatchEvent(new Event('change'));
         fillCorpusSongStyle(null, true);
+        takeRecordingWords(id);
       }
     });
   }

@@ -39,6 +39,9 @@ cannot creep back in.
   its tempo was probably wrong when it was right. A score's length now counts each bar in quarter
   notes, a multi-bar rest as all its bars, and a change of meter part way. The same miscount could
   mark a corpus song *score: first N min* when the whole song was there. Fixes #18.
+- Choosing a second recording left the first one's words in the Lyrics box, so a cover could be sung
+  with another song's words. Words the app put in from a recording now follow the recording chosen,
+  and go when it has none; words typed or edited in the box are replaced only after asking. Fixes #19.
 
 ## 0.0.5 (2026-09-28)
 

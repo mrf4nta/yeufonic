@@ -244,7 +244,8 @@ its separated vocal. So below your recordings, the list offers **From your corpo
 corpus, with each song's key and tempo, and a filter for a big one. Pick a song and it becomes one
 of your recordings at once, with its score and its words, and nothing runs again. The words are laid
 under the score's sections, as **Extract lyrics** lays them, unless you checked them in the corpus,
-when they come as you left them. They go into the Lyrics box if it is empty. The Style box takes the
+when they come as you left them. They go into the Lyrics box, replacing words that came from
+another recording; words you typed or edited there are replaced only if you say so. The Style box takes the
 style the song was learned with in the corpus, the same as its chip under a LoRA trained from it.
 
 The file is linked rather than copied where the disk allows, so it takes no more space, and it stays
@@ -277,7 +278,8 @@ straight to the listening, which is most of the wait saved.
 
 The words are kept with the recording. Press **Extract lyrics** again and they go straight back in
 the box, and you're asked whether to extract them again, which is worth doing after changing the
-method in Settings.
+method in Settings. Choosing another recording takes its words in the same way, and a recording
+with none clears the last one's. Words you typed or edited stay unless you agree to replace them.
 
 Expect a good draft rather than a transcript. Measured against the real words of two songs, Whisper
 got **1.5% of words wrong** on one and **25%** on the other, where lead and backing vocals sing over
