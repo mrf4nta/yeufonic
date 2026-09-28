@@ -37,11 +37,23 @@ def data_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def client(data_dir):
+def client(data_dir, monkeypatch):
+    """The app, with its GPU job worker held back.  A test reads the queue to see what
+    a request asked for, and a live worker races it: it took the job first whenever
+    it was free to, so such a test passed or failed by the order tests ran in."""
+    import asyncio
     from fastapi.testclient import TestClient
+    from app import jobs
     from app.main import app
+    monkeypatch.setattr(jobs, "worker", lambda: asyncio.sleep(3600))
+
+    def empty():   # with no worker, what one test queued would be the next one's
+        while not jobs.QUEUE.empty():
+            jobs.QUEUE.get_nowait()
+    empty()
     with TestClient(app, base_url="http://localhost") as test_client:
         yield test_client
+    empty()
 
 
 def make_take(**fields):
