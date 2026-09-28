@@ -18,3 +18,20 @@ makes so each step can be heard.
 https://github.com/user-attachments/assets/9c3ac36d-4c60-4e9d-86d4-67b12dc36c83
 
 [Download the MP3](test%20LoRA%20step50.mp3)
+
+## test - indie rock
+
+A short edit of a longer song, made from a prompt with a style LoRA trained from a corpus.
+
+https://github.com/user-attachments/assets/68c2fd0e-f6d2-4338-b47d-6c20ae27dc81
+
+[Download the MP3](test%20-%20indie%20rock.mp3)
+
+## test - indie rock LoRA step 950
+
+The whole song, with the same words as *test - indie rock*, rendered with the checkpoint its LoRA's
+training run saved at step 950.
+
+https://github.com/user-attachments/assets/349f2f55-8381-4dbc-aa4d-6cace7e44657
+
+[Download the MP3](test%20-%20indie%20rock%20LoRA%20step%20950.mp3)
