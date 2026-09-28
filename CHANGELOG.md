@@ -23,6 +23,13 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Fixed
+
+- **+ Song** or **+ Instrumental** after a cover asked whether to discard score changes nobody had
+  made. Fixes #16.
+
 ## 0.0.4 (2026-09-28)
 
 ### Added

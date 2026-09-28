@@ -2738,7 +2738,10 @@ function setMode(mode) {
     paintSource();
   } else if (!ownedByTake) {
     // The editor held a transcription of an uploaded recording. A song must not reuse it.
+    // Cleared by the app, not by anyone's edit, so nothing is left unsaved: without the
+    // baseline going too, + Song asked whether to discard changes nobody had made.
     $('abc').value = '';
+    scoreBaseline('');
     setSelection({});
     $('score-badge').textContent = 'no plan yet';
     $('score-badge').className = 'badge';
