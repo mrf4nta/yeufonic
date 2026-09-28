@@ -6130,24 +6130,40 @@ async function doRender() {
 
 /* The score itself decides the length: bars, meter and tempo. Measured against six
    finished renders, this lands within about 5 per cent, unless the cap cuts the song short. */
+/* As score.estimate on the server: a bar lasts its meter in quarter notes (6/8 is
+   three, not six), Z4 is four bars of rest, and a voice can change meter part way. */
 function planLength(abc) {
   if (!abc) { return null; }
-  var meter = /^M:(\d+)\/(\d+)/m.exec(abc);
-  var beats = meter ? parseInt(meter[1], 10) : 4;
   var tempo = /^Q:1\/4=(\d+)/m.exec(abc);
   var bpm = tempo ? parseInt(tempo[1], 10) : 120;
-  var totals = {};
+  var meterOf = function (found) { return [parseInt(found[1], 10), parseInt(found[2], 10) || 4]; };
+  var headerMeter = [4, 4];
+  var meters = {}, quarters = {}, bars = {};
   var voice = null;
   abc.split('\n').forEach(function (raw) {
     var line = raw.trim();
-    if (line.indexOf('V:') === 0) { voice = line.slice(2).trim().split(/\s+/)[0]; return; }
-    if (!line || line.charAt(0) === '%' || /^[XTMLQK]:/.test(line) || !voice) { return; }
-    totals[voice] = (totals[voice] || 0) + (line.split('|').length - 1);
+    if (line.indexOf('V:') === 0) { voice = line.slice(2).trim().split(/\s+/)[0] || null; return; }
+    var meter = /^M:\s*(\d+)\/(\d+)/.exec(line);
+    if (meter) {
+      if (voice) { meters[voice] = meterOf(meter); } else { headerMeter = meterOf(meter); }
+      return;
+    }
+    if (!line || line.charAt(0) === '%' || /^[A-Za-z]:/.test(line) || !voice) { return; }
+    line.split('|').forEach(function (bar) {
+      if (/^[\s:\[\]]*$/.test(bar)) { return; }
+      var inline = /\[M:\s*(\d+)\/(\d+)/.exec(bar);
+      if (inline) { meters[voice] = meterOf(inline); }
+      var m = meters[voice] || headerMeter;
+      var rest = /^\s*Z(\d*)\s*$/.exec(bar);
+      var count = rest ? (parseInt(rest[1], 10) || 1) : 1;
+      bars[voice] = (bars[voice] || 0) + count;
+      quarters[voice] = (quarters[voice] || 0) + count * m[0] * 4 / m[1];
+    });
   });
-  var best = 0;
-  Object.keys(totals).forEach(function (name) { if (totals[name] > best) { best = totals[name]; } });
-  if (!best) { return null; }
-  return { bars: best, bpm: bpm, seconds: best * beats * 60 / bpm };
+  var longest = null;
+  Object.keys(quarters).forEach(function (name) { if (longest === null || quarters[name] > quarters[longest]) { longest = name; } });
+  if (longest === null || !bpm) { return null; }
+  return { bars: bars[longest], bpm: bpm, seconds: quarters[longest] * 60 / bpm };
 }
 
 /* The chart is a toggle. The button says what the next click will do. */

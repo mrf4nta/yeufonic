@@ -88,3 +88,27 @@ def test_instrumental_collapse_advice(monkeypatch):
     assert "no instrument part" in row["error"]
     assert "lower style LoRA Planner strength" in row["error"]
     assert "set Harmony to Familiar" in row["error"]
+
+
+def test_a_score_lasts_its_bars_in_quarter_notes():
+    """The tempo counts quarter notes, so a 6/8 bar lasts three of them, not six. Read as
+    six, a transcription in 6/8 described twice the music its recording held, and the
+    page said its tempo was probably wrong when it was right."""
+    head = 'X:1\nL:1/16\nQ:1/4=90\nV: Vocal clef=treble name="Vocal Melody" snm="Vocal"\nK:C\n'
+    in_four = score.estimate(head.replace("L:", "M:4/4\nL:") + "V: Vocal\n" + "c4d4e4f4|" * 30 + "\n")
+    in_six_eight = score.estimate(head.replace("L:", "M:6/8\nL:") + "V: Vocal\n" + "c4d4e4|" * 40 + "\n")
+    assert in_four == {"bars": 30, "bpm": 90, "seconds": 80.0}
+    assert in_six_eight == {"bars": 40, "bpm": 90, "seconds": 80.0}
+
+
+def test_multi_bar_rests_and_meter_changes_count():
+    """Z4 is four bars of rest, and a voice can change meter for a bar or two, as the
+    transcriber writes them."""
+    abc = ('X:1\nM:6/8\nL:1/32\nQ:1/4=60\nV: Vocal clef=treble name="Vocal Melody" snm="Vocal"\n'
+           'V: Ins clef=treble name="Ins Melody" snm="Inst."\nK:F\n% intro\n'
+           'V: Vocal\nZ4|\nV: Ins\nZ2|z24|Z|\n'
+           'V: Vocal\nM:5/8\nZ|\nV: Ins\nM:5/8\nZ|\n'
+           'V: Vocal\nM:6/8\n"F"z24|[M:1/8]z4|\nV: Ins\nM:6/8\nz16|[M:1/8]z4|\n')
+    # Vocal: four 6/8 bars (12 quarters), one 5/8 (2.5), one 6/8 (3), one 1/8 (0.5); Ins is
+    # two, one, one of 6/8, then the same, so both last 18 quarters.
+    assert score.estimate(abc) == {"bars": 7, "bpm": 60, "seconds": 18.0}

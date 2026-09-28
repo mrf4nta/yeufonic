@@ -16,33 +16,60 @@ COLLAPSE = re.compile(r"([^\w\s])\1{7,}")
 MIN_BARS = 4
 
 
+METER = re.compile(r"(?:^|\[)M:\s*(\d+)/(\d+)")
+MULTI_REST = re.compile(r"\s*Z(\d*)\s*")
+BARLINE_ONLY = re.compile(r"[\s:\[\]]*")
+
+
 def estimate(abc: str) -> dict | None:
     """How long the score says the music is: bars, tempo, and the seconds they imply.
 
     Used to check a transcription against the recording it came from. A score whose
     tempo is wrong describes more or less music than the recording holds, and a
     cover follows the score, so it plays at that tempo.
+
+    The tempo counts quarter notes, so a bar lasts its meter in quarters: a 6/8 bar is
+    three, not six.  Z4 is four bars of rest, and a voice can change meter part way.
     """
     if not abc:
         return None
-    meter = re.search(r"^M:(\d+)/(\d+)", abc, re.M)
-    beats = int(meter.group(1)) if meter else 4
     tempo = re.search(r"^Q:1/4=(\d+)", abc, re.M)
     bpm = int(tempo.group(1)) if tempo else 120
-    totals: dict[str, int] = {}
+    header_meter = (4, 4)
+    meters: dict[str, tuple[int, int]] = {}
+    quarters: dict[str, float] = {}
+    bars: dict[str, int] = {}
     voice = None
     for raw in abc.split("\n"):
         line = raw.strip()
         if line.startswith("V:"):
             voice = line[2:].strip().split()[0] if line[2:].strip() else None
             continue
+        meter = METER.match(line)
+        if meter and not line.startswith("["):
+            found = (int(meter.group(1)), int(meter.group(2)) or 4)
+            if voice:
+                meters[voice] = found
+            else:
+                header_meter = found
+            continue
         if not line or line[0] == "%" or HEADER.match(line) or not voice:
             continue
-        totals[voice] = totals.get(voice, 0) + line.count("|")
-    bars = max(totals.values()) if totals else 0
-    if not bars or not bpm:
+        for bar in line.split("|"):
+            if BARLINE_ONLY.fullmatch(bar):
+                continue
+            inline = METER.search(bar)
+            if inline:
+                meters[voice] = (int(inline.group(1)), int(inline.group(2)) or 4)
+            beats, unit = meters.get(voice, header_meter)
+            rest = MULTI_REST.fullmatch(bar)
+            count = int(rest.group(1) or 1) if rest else 1
+            bars[voice] = bars.get(voice, 0) + count
+            quarters[voice] = quarters.get(voice, 0.0) + count * beats * 4 / unit
+    if not quarters or not bpm:
         return None
-    return {"bars": bars, "bpm": bpm, "seconds": round(bars * beats * 60 / bpm, 1)}
+    longest = max(quarters, key=quarters.get)
+    return {"bars": bars[longest], "bpm": bpm, "seconds": round(quarters[longest] * 60 / bpm, 1)}
 
 
 def vocal_bars(abc: str, voice_name: str = "Vocal") -> list[str]:

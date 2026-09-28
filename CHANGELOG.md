@@ -35,6 +35,10 @@ cannot creep back in.
 
 - A training checkpoint, or a previous run's LoRA, showed none of its LoRA's learned styles. It now
   offers the same chips, and its **Download** carries them in the note. Fixes #17.
+- A score in 6/8 was said to describe about twice the music its recording held, with a warning that
+  its tempo was probably wrong when it was right. A score's length now counts each bar in quarter
+  notes, a multi-bar rest as all its bars, and a change of meter part way. The same miscount could
+  mark a corpus song *score: first N min* when the whole song was there. Fixes #18.
 
 ## 0.0.5 (2026-09-28)
 
