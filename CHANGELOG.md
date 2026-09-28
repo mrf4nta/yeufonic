@@ -43,6 +43,9 @@ cannot creep back in.
 
 ### Changed
 
+- **The log window follows the theme,** the one in the app and the one popped out, where it
+  stayed dark whatever the rest of the app wore, and in a light theme its buttons turned white on
+  white.
 - **The engine's own ComfyUI page is documented,** in the README and the guide: where it is, and
   that its jobs share the app's engine and GPU. Fixes #8.
 - **The length cap follows a recording's score.** Choosing a recording, for a cover or an

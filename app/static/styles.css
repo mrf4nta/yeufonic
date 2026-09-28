@@ -127,22 +127,6 @@
   --play-bg-hover: #fff;
 }
 
-/* The log window is a terminal in every theme: its own dark colours, whatever the
-   rest of the app wears. */
-.logs-panel {
-  --ink: 255 255 255;
-  --text: #f4f4f7;
-  --muted: #9b9ba8;
-  --text-strong: #fff;
-  --line: rgb(255 255 255 / 0.07);
-  --good: #34d399;
-  --bad: #f87171;
-  --warn: #fbbf24;
-  --info: #60a5fa;
-  --danger-text: #ff8fa3;
-  color: var(--text);
-}
-
 * { box-sizing: border-box; }
 
 /* Quiet, modern scrollbars everywhere: a rounded thumb, no track, no step arrows.
@@ -1319,7 +1303,8 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
   display: flex;
   flex-direction: column;
   padding: 14px 18px;
-  background: #0d1514;
+  color: var(--text);
+  background: var(--panel);
   border: 1px solid rgb(var(--good-rgb) / 0.22);
   border-radius: 12px;
   box-shadow: 0 18px 56px rgb(var(--shade) / 0.9), 0 0 0 1px rgb(var(--good-rgb) / 0.12);
@@ -1358,7 +1343,7 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
 .logs-filters {
   display: inline-flex;
   gap: 4px;
-  background: rgb(var(--shade) / 0.25);
+  background: var(--card-2);
   padding: 3px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -1387,7 +1372,7 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
   gap: 10px;
 }
 #logs-search {
-  background: rgb(var(--shade) / 0.3);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text-strong);
@@ -1423,14 +1408,14 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  background: #050a09;
+  background: var(--bg);
   border: 1px solid rgb(var(--good-rgb) / 0.16);
   border-radius: 8px;
   padding: 10px 14px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.5;
-  color: #cbd5e1;
+  color: var(--text);
   user-select: text;
 }
 .log-row {
@@ -1443,7 +1428,7 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
   background: rgb(var(--ink) / 0.03);
 }
 .log-time {
-  color: #64748b;
+  color: var(--muted);
   flex-shrink: 0;
 }
 .log-source {
@@ -1464,9 +1449,9 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
   border: 1px solid rgb(var(--info-rgb) / 0.28);
 }
 .log-source.engine {
-  color: #c084fc;
-  background: rgba(192, 132, 252, 0.15);
-  border: 1px solid rgba(192, 132, 252, 0.35);
+  color: var(--accent-a);
+  background: rgb(var(--accent-a-rgb) / 0.12);
+  border: 1px solid rgb(var(--accent-a-rgb) / 0.32);
 }
 .logs-source-filters {
   display: flex;
@@ -1505,8 +1490,8 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
   line-height: 18px;
 }
 .log-badge.INFO {
-  color: #38bdf8;
-  background: rgb(var(--song-a-rgb) / 0.12);
+  color: var(--info);
+  background: rgb(var(--info-rgb) / 0.12);
 }
 .log-badge.WARNING, .log-badge.WARN {
   color: var(--warn);
@@ -1517,16 +1502,16 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
   background: rgb(var(--bad-rgb) / 0.2);
 }
 .log-logger {
-  color: #a78bfa;
+  color: var(--accent-a);
   flex-shrink: 0;
 }
 .log-msg {
-  color: #e2e8f0;
+  color: var(--text);
   flex: 1;
   word-break: break-word;
 }
 .log-msg.ERROR {
-  color: #fca5a5;
+  color: var(--danger-text);
   font-weight: 600;
 }
 .logs-empty {
