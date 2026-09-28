@@ -821,6 +821,13 @@ def queue_view() -> list[dict]:
     return items
 
 
+def _learned_style(song: dict, corpus: dict) -> str:
+    """A corpus song's training caption, less the trigger word and the tempo the page
+    adds: the same parts, and the same override, as the export in _identity_view."""
+    return identities.caption("", song["description"] or corpus["description"] or "", corpus["voice"] or "",
+                              song["key"], None, song["style_hint"] or "")
+
+
 def _lora_corpus_styles() -> dict[str, list[dict]]:
     """Map each identity's LoRA filename to its included songs' learned styles.
 
@@ -833,26 +840,19 @@ def _lora_corpus_styles() -> dict[str, list[dict]]:
         out: dict[str, list[dict]] = {}
         for iden in identity_rows:
             songs = rows(
-                "SELECT id, title, style_hint, tempo, key, description FROM identity_songs "
+                "SELECT title, style_hint, tempo, key, description FROM identity_songs "
                 "WHERE identity_id = ? AND include = 1 ORDER BY position, id",
                 (iden["id"],),
             )
-            seen: dict[tuple, dict] = {}
+            seen = set()
             song_list = []
             for s in songs:
-                # The same parts, and the same override, as the export in _identity_view.
-                prompt = identities.caption("", s["description"] or iden["description"] or "", iden["voice"] or "",
-                                            s["key"], None, s["style_hint"] or "")
-                if not prompt:
+                prompt = _learned_style(s, iden)
+                if not prompt or (prompt, s["tempo"]) in seen:
                     continue
-                # The songs it stands for, so a cover of one of them can start from it.
-                if (prompt, s["tempo"]) in seen:
-                    seen[(prompt, s["tempo"])]["songs"].append(s["id"])
-                    continue
-                chip = {"title": s["title"], "prompt": prompt, "hint": s["style_hint"] or "",
-                        "tempo": s["tempo"], "key": s["key"], "songs": [s["id"]]}
-                seen[(prompt, s["tempo"])] = chip
-                song_list.append(chip)
+                seen.add((prompt, s["tempo"]))
+                song_list.append({"title": s["title"], "prompt": prompt, "hint": s["style_hint"] or "",
+                                  "tempo": s["tempo"], "key": s["key"]})
             if song_list:
                 out[iden["lora"]] = song_list
         return out
@@ -1081,7 +1081,8 @@ def corpus_songs() -> list[dict]:
             found = os.stat(row["stored_path"])
             known[(found.st_dev, found.st_ino)] = row["id"]
     groups: dict[str, dict] = {}
-    for song in rows("""SELECT s.*, i.name AS corpus FROM identity_songs s JOIN identities i ON i.id = s.identity_id
+    for song in rows("""SELECT s.*, i.name AS corpus, i.description AS corpus_description, i.voice AS corpus_voice
+                        FROM identity_songs s JOIN identities i ON i.id = s.identity_id
                         WHERE s.score_state = 'done' ORDER BY lower(i.name), s.position"""):
         files = _corpus_song_files(song)
         if not files:
@@ -1093,6 +1094,8 @@ def corpus_songs() -> list[dict]:
             "id": song["id"], "title": song["title"] or Path(song["file"]).stem, "duration": song["duration"],
             "key": song["key"], "tempo": song["tempo"], "caveat": _score_caveat(abc, song["duration"]),
             "source_id": made.get(song["id"]) or known.get((on_disk.st_dev, on_disk.st_ino)),
+            # What a cover of it starts from, as its learned-style chip has it.
+            "style": _learned_style(song, {"description": song["corpus_description"], "voice": song["corpus_voice"]}),
         })
     return list(groups.values())
 

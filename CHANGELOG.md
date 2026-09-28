@@ -27,9 +27,9 @@ cannot creep back in.
 
 ### Added
 
-- **A corpus song's own style.** Covering a corpus song with its corpus's LoRA, or a checkpoint of
-  it, fills the style box with that song's learned style, whichever is chosen first. It replaces an
-  empty style or another chip's, never one typed by hand.
+- **A corpus song's own style.** Picking a corpus song as the recording fills the Style box with
+  the style it was learned with, as its chip has it, with the chosen LoRA's trigger word in front.
+  Choosing a LoRA afterwards leaves a style typed by hand alone.
 
 ### Fixed
 

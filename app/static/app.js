@@ -1576,7 +1576,7 @@ async function useCorpusSong(songId) {
     }
     $('source-select').value = id;
     $('source-select').dispatchEvent(new Event('change'));
-    fillCorpusSongStyle(songId);
+    fillCorpusSongStyle(songId, true);
     // Its words came with it, so they go straight into an empty box; words already
     // typed there are left alone, and Extract lyrics still puts these in on request.
     if ($('lyrics') && !$('lyrics').value.trim()) {
@@ -3437,17 +3437,20 @@ function applyLoraStyle(prompt, trigger) {
   saveForm();
 }
 
-/* Covering a corpus song with its corpus's LoRA, or a checkpoint of it: the style it
-   was captioned with in training goes in the box, as if its chip had been clicked.
-   Only over an empty style or another chip's, never over one someone wrote. */
-function corpusSongOfSource(sourceId) {
+/* A corpus song as the recording: the style it was captioned with in training goes in
+   the box, as its chip would put it, after the chosen LoRA's trigger word if there is
+   one.  Choosing the song replaces whatever style was there; choosing a LoRA afterwards
+   only replaces an empty style or a learned one, never one someone wrote. */
+function corpusSong(test) {
   var found = null;
   (State.corpusSongs || []).forEach(function (group) {
-    (group.songs || []).forEach(function (song) {
-      if (sourceId && song.source_id === sourceId) { found = song.id; }
-    });
+    (group.songs || []).forEach(function (song) { if (!found && test(song)) { found = song; } });
   });
   return found;
+}
+
+function corpusSongStyle(song) {
+  return song && song.style ? loraStylePrompt({ prompt: song.style, tempo: song.tempo }) : '';
 }
 
 function styleIsReplaceable() {
@@ -3455,24 +3458,26 @@ function styleIsReplaceable() {
   allKnownLoraTriggers().forEach(function (t) { text = removeStyleWord(text, t); });
   text = tidyStyle(text);
   if (!text) { return true; }
+  var learned = function (prompt) { return tidyStyle(prompt) === text; };
   return loraCatalogue().some(function (lora) {
-    return (lora.styles || []).some(function (s) { return tidyStyle(loraStylePrompt(s)) === text; });
-  });
+    return (lora.styles || []).some(function (s) { return learned(loraStylePrompt(s)); });
+  }) || Boolean(corpusSong(function (song) { return learned(corpusSongStyle(song)); }));
 }
 
-function fillCorpusSongStyle(songId) {
+function fillCorpusSongStyle(songId, chosen) {
   if (State.mode !== 'cover') { return; }
-  var lora = loraChosen();
-  if (!songId && lora && lora.styles && !State.corpusSongs) {
+  var sourceId = $('source-select') ? $('source-select').value : '';
+  if (!songId && !sourceId) { return; }
+  if (!State.corpusSongs) {
     // A recording restored with the page, before the picker has listed the corpora.
-    loadCorpusSongs().then(function () { if (State.corpusSongs) { fillCorpusSongStyle(); } });
+    loadCorpusSongs().then(function () { if (State.corpusSongs) { fillCorpusSongStyle(songId, chosen); } });
     return;
   }
-  var id = songId || corpusSongOfSource($('source-select') ? $('source-select').value : '');
-  if (!lora || !id || !lora.styles) { return; }
-  var chip = lora.styles.filter(function (s) { return (s.songs || []).indexOf(id) >= 0; })[0];
-  if (!chip || !styleIsReplaceable()) { return; }
-  applyLoraStyle(loraStylePrompt(chip), lora.trigger || '');
+  var song = corpusSong(function (item) { return songId ? item.id === songId : item.source_id === sourceId; });
+  var style = corpusSongStyle(song);
+  if (!style || (!chosen && !styleIsReplaceable())) { return; }
+  var lora = loraChosen();
+  applyLoraStyle(style, (lora && lora.trigger) || '');
 }
 
 function paintPresets() {
@@ -6810,7 +6815,7 @@ function wire() {
         $('source-select').value = id;
         closeSourcePicker();
         $('source-select').dispatchEvent(new Event('change'));
-        fillCorpusSongStyle();
+        fillCorpusSongStyle(null, true);
       }
     });
   }

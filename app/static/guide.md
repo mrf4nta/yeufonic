@@ -244,7 +244,8 @@ its separated vocal. So below your recordings, the list offers **From your corpo
 corpus, with each song's key and tempo, and a filter for a big one. Pick a song and it becomes one
 of your recordings at once, with its score and its words, and nothing runs again. The words are laid
 under the score's sections, as **Extract lyrics** lays them, unless you checked them in the corpus,
-when they come as you left them. They go into the Lyrics box if it is empty.
+when they come as you left them. They go into the Lyrics box if it is empty. The Style box takes the
+style the song was learned with in the corpus, the same as its chip under a LoRA trained from it.
 
 The file is linked rather than copied where the disk allows, so it takes no more space, and it stays
 if the corpus is deleted. A few songs are marked *score: melody only* or *score: first 4 min*: their
@@ -259,10 +260,9 @@ work, or from different ones.
    the original. Another corpus's LoRA covers it in that other style and voice.
 3. Set the strengths as for any cover: the recording already sets the melody, so keep **Sound**
    near **0.50**, and raise it for more of the LoRA's voice and sound.
-4. With the corpus's own LoRA, or one of its checkpoints, the style box fills with this song's own
-   chip, in either order: song first or LoRA first. It keeps the song's genre and mood; another
-   chip, or the filter's tags, moves it somewhere else. It only replaces an empty style or another
-   chip's, never one you wrote. The tempo and key come from the score, whatever the style says.
+4. The Style box already holds the song's own style, and choosing a LoRA puts its trigger word in
+   front. That keeps the song's genre and mood; another chip, or the filter's tags, moves it
+   somewhere else. The tempo and key come from the score, whatever the style says.
 5. Press **Create cover**. **Variations** then renders it in the other interpretations, and
    **Sing again** gives another voice over the same score, as with any take.
 

@@ -165,8 +165,8 @@ you may keep Sound nearer to 0.50. The [user guide](app/static/guide.md#corpora-
 through it.
 
 Every analysed song in your corpora is ready to cover: pick it from the recording list, choose a
-LoRA, and render, with no transcribing or lyric extraction to wait for. With the song's own
-corpus LoRA, the style fills in with the one it was trained on. See
+LoRA, and render, with no transcribing or lyric extraction to wait for. The style fills in with
+the one the song was learned with. See
 [Covering a song from a corpus](app/static/guide.md#covering-a-song-from-a-corpus).
 
 Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs, and the Train

@@ -39,6 +39,17 @@ def test_analysed_songs_are_listed_by_corpus(client, tmp_path):
         ("s1", "Harbour Lights", "C major", 100, None, None)
 
 
+def test_a_listed_song_carries_the_style_it_was_trained_with(client, tmp_path):
+    """A cover of it starts from its learned style, as that song's chip would put it."""
+    a_song(tmp_path)
+    execute("UPDATE identities SET description = 'warm tape hiss', voice = 'female' WHERE id = 'c1'")
+    execute("UPDATE identity_songs SET style_hint = 'sea shanty' WHERE id = 's1'")
+    song = client.get("/api/corpus-songs").json()[0]["songs"][0]
+    assert song["style"] == "sea shanty, warm tape hiss, female vocal, key of C major"
+    assert song["style"] == main._learned_style(one("SELECT * FROM identity_songs WHERE id = 's1'"),
+                                                one("SELECT * FROM identities WHERE id = 'c1'"))
+
+
 def test_a_fallback_score_is_marked(client, tmp_path):
     a_song(tmp_path, abc=ABC.replace('"C"', '').replace('"G"', ''))
     assert client.get("/api/corpus-songs").json()[0]["songs"][0]["caveat"] == "melody only"
