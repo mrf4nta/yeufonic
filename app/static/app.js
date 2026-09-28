@@ -1576,6 +1576,7 @@ async function useCorpusSong(songId) {
     }
     $('source-select').value = id;
     $('source-select').dispatchEvent(new Event('change'));
+    fillCorpusSongStyle(songId);
     // Its words came with it, so they go straight into an empty box; words already
     // typed there are left alone, and Extract lyrics still puts these in on request.
     if ($('lyrics') && !$('lyrics').value.trim()) {
@@ -3417,6 +3418,63 @@ function loraStylesShown(lora, wrap, box) {
   return { shown: shown, more: more };
 }
 
+function loraStylePrompt(s) {
+  return (s.prompt || '') + (s.tempo ? ', ' + s.tempo + ' BPM' : '');
+}
+
+/* What a style chip does: its style in the box, after the LoRA's trigger word. */
+function applyLoraStyle(prompt, trigger) {
+  if (trigger) {
+    $('style').value = trigger + ', ' + prompt;
+    State.loraTrigger = trigger;
+  } else {
+    $('style').value = prompt;
+    State.loraTrigger = null;
+  }
+  $('style').dataset.touched = '1';
+  paintVocals();
+  paintStyleLoraNote();
+  saveForm();
+}
+
+/* Covering a corpus song with its corpus's LoRA, or a checkpoint of it: the style it
+   was captioned with in training goes in the box, as if its chip had been clicked.
+   Only over an empty style or another chip's, never over one someone wrote. */
+function corpusSongOfSource(sourceId) {
+  var found = null;
+  (State.corpusSongs || []).forEach(function (group) {
+    (group.songs || []).forEach(function (song) {
+      if (sourceId && song.source_id === sourceId) { found = song.id; }
+    });
+  });
+  return found;
+}
+
+function styleIsReplaceable() {
+  var text = $('style').value || '';
+  allKnownLoraTriggers().forEach(function (t) { text = removeStyleWord(text, t); });
+  text = tidyStyle(text);
+  if (!text) { return true; }
+  return loraCatalogue().some(function (lora) {
+    return (lora.styles || []).some(function (s) { return tidyStyle(loraStylePrompt(s)) === text; });
+  });
+}
+
+function fillCorpusSongStyle(songId) {
+  if (State.mode !== 'cover') { return; }
+  var lora = loraChosen();
+  if (!songId && lora && lora.styles && !State.corpusSongs) {
+    // A recording restored with the page, before the picker has listed the corpora.
+    loadCorpusSongs().then(function () { if (State.corpusSongs) { fillCorpusSongStyle(); } });
+    return;
+  }
+  var id = songId || corpusSongOfSource($('source-select') ? $('source-select').value : '');
+  if (!lora || !id || !lora.styles) { return; }
+  var chip = lora.styles.filter(function (s) { return (s.songs || []).indexOf(id) >= 0; })[0];
+  if (!chip || !styleIsReplaceable()) { return; }
+  applyLoraStyle(loraStylePrompt(chip), lora.trigger || '');
+}
+
 function paintPresets() {
   var lora = loraChosen();
   var wrap = $('lora-presets-wrap');
@@ -3430,8 +3488,7 @@ function paintPresets() {
       labelEl.textContent = 'Learned styles for ' + artistName + ' (click to apply):';
       var styles = loraStylesShown(lora, wrap, loraBox);
       var loraHtml = styles.shown.map(function (s) {
-        var prompt = s.prompt || '';
-        if (s.tempo) { prompt += ', ' + s.tempo + ' BPM'; }
+        var prompt = loraStylePrompt(s);
         // Labelled by the song's own style, not the corpus description every chip shares.
         var genreHint = s.hint ? s.hint.split(',')[0].trim() : '';
         var chipLabel = s.title ? esc(s.title) + (genreHint ? ' <span class="muted">\u00b7 ' + esc(genreHint) + '</span>' : '') : esc(genreHint || s.prompt);
@@ -6490,19 +6547,7 @@ function wire() {
     $('lora-presets').addEventListener('click', function (event) {
       var button = event.target.closest('[data-lora-style]');
       if (!button || !button.dataset.loraStyle) { return; }
-      var prompt = button.dataset.loraStyle;
-      var trigger = button.dataset.trigger;
-      if (trigger) {
-        $('style').value = trigger + ', ' + prompt;
-        State.loraTrigger = trigger;
-      } else {
-        $('style').value = prompt;
-        State.loraTrigger = null;
-      }
-      $('style').dataset.touched = '1';
-      paintVocals();
-      paintStyleLoraNote();
-      saveForm();
+      applyLoraStyle(button.dataset.loraStyle, button.dataset.trigger);
     });
   }
   $('presets').addEventListener('click', function (event) {
@@ -6765,6 +6810,7 @@ function wire() {
         $('source-select').value = id;
         closeSourcePicker();
         $('source-select').dispatchEvent(new Event('change'));
+        fillCorpusSongStyle();
       }
     });
   }
@@ -7131,6 +7177,7 @@ function wire() {
   $('style-lora').addEventListener('change', function () {
     var item = loraChosen();
     applyLoraTrigger(item && item.trigger);
+    fillCorpusSongStyle();
     wakeStyleLoraStrengths();
     paintStyleLoraStrengths();
     saveForm();

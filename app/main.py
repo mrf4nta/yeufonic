@@ -833,21 +833,26 @@ def _lora_corpus_styles() -> dict[str, list[dict]]:
         out: dict[str, list[dict]] = {}
         for iden in identity_rows:
             songs = rows(
-                "SELECT title, style_hint, tempo, key, description FROM identity_songs "
+                "SELECT id, title, style_hint, tempo, key, description FROM identity_songs "
                 "WHERE identity_id = ? AND include = 1 ORDER BY position, id",
                 (iden["id"],),
             )
-            seen = set()
+            seen: dict[tuple, dict] = {}
             song_list = []
             for s in songs:
                 # The same parts, and the same override, as the export in _identity_view.
                 prompt = identities.caption("", s["description"] or iden["description"] or "", iden["voice"] or "",
                                             s["key"], None, s["style_hint"] or "")
-                if not prompt or (prompt, s["tempo"]) in seen:
+                if not prompt:
                     continue
-                seen.add((prompt, s["tempo"]))
-                song_list.append({"title": s["title"], "prompt": prompt, "hint": s["style_hint"] or "",
-                                  "tempo": s["tempo"], "key": s["key"]})
+                # The songs it stands for, so a cover of one of them can start from it.
+                if (prompt, s["tempo"]) in seen:
+                    seen[(prompt, s["tempo"])]["songs"].append(s["id"])
+                    continue
+                chip = {"title": s["title"], "prompt": prompt, "hint": s["style_hint"] or "",
+                        "tempo": s["tempo"], "key": s["key"], "songs": [s["id"]]}
+                seen[(prompt, s["tempo"])] = chip
+                song_list.append(chip)
             if song_list:
                 out[iden["lora"]] = song_list
         return out

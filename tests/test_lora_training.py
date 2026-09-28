@@ -247,6 +247,7 @@ def test_a_learned_style_is_the_caption_the_lora_was_trained_on(client):
     captions = {song["title"]: song["caption"] for song in main._identity_view(one("SELECT * FROM identities WHERE id = 'c1'"))["songs"]}
 
     assert len(chips) == 3, "a song with no style suggestion still has a caption, so it gets a chip"
+    assert [chip["songs"] for chip in chips] == [["s0"], ["s1"], ["s2"]], "a cover of a corpus song finds its own chip"
     for chip in chips:
         # The page puts the trigger in front and the tempo after, as the caption has them.
         assert f"marlowsands, {chip['prompt']}, {chip['tempo']} BPM" == captions[chip["title"]]

@@ -25,6 +25,12 @@ cannot creep back in.
 
 ## Unreleased
 
+### Added
+
+- **A corpus song's own style.** Covering a corpus song with its corpus's LoRA, or a checkpoint of
+  it, fills the style box with that song's learned style, whichever is chosen first. It replaces an
+  empty style or another chip's, never one typed by hand.
+
 ### Fixed
 
 - A training checkpoint, or a previous run's LoRA, showed none of its LoRA's learned styles. It now
