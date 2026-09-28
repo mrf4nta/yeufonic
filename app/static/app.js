@@ -2005,6 +2005,10 @@ async function pollCorpora() {
   try {
     IDENTITIES_LIST = await api('/api/identities');
   } catch (err) {
+    // Try again: returning here without a next time left the badge frozen on its last
+    // count, still pulsing, after one failed call during a restart.
+    clearTimeout(State.corpusTimer);
+    State.corpusTimer = setTimeout(pollCorpora, CORPUS_POLL_IDLE);
     return;
   }
   var progress = {};
@@ -4035,7 +4039,36 @@ function renderIdentityActions(data) {
     (isExporting ? '<div class="identity-working">' + identityExporting(data.exporting) + '</div>' : '') +
     (isTraining ? '<div class="identity-working">' + identityTraining(State.training) + '</div>' : '') +
     identityRunAll(runAll) +
+    (isTraining ? '' : identityLastRun(data)) +
   '</div>';
+}
+
+/* How the corpus's last training run ended, when it did not simply finish: when,
+   why, how far it got, and, when it saved enough, a way to finish it from that
+   without training again. */
+function identityLastRun(data) {
+  var run = data.last_run;
+  if (!run) { return ''; }
+  var when = function (stamp) {
+    if (!stamp) { return ''; }
+    var at = new Date(stamp * 1000);
+    var today = at.toDateString() === new Date().toDateString();
+    return ' at ' + at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+      (today ? '' : ' on ' + at.toLocaleDateString([], { day: 'numeric', month: 'short' }));
+  };
+  if (run.state === 'failed' || run.state === 'cancelled') {
+    var saved = run.saved || {};
+    var why = run.state === 'cancelled' || run.error === 'cancelled' ? 'stopped' : (run.error || 'failed');
+    var after = saved.last_step ? ', after step ' + saved.last_step + ' of ' + run.steps : '';
+    return '<div class="identity-working bad">Training ended early' + when(run.finished_at) + ': ' + esc(why) + esc(after) + '.' +
+      (saved.finishable ? ' <button id="identity-finish-run" class="ghost small" data-run="' + esc(run.id) + '" title="' +
+        'Make what it saved the LoRA, as a finished run does, with its checkpoints under it. No GPU time.">' +
+        'Finish with what it saved</button>' : '') + '</div>';
+  }
+  if (run.state === 'done' && run.stage && run.stage.indexOf('finished from') === 0) {
+    return '<div class="identity-working muted">The LoRA was ' + esc(run.stage) + when(run.finished_at) + '.</div>';
+  }
+  return '';
 }
 
 /* Where Run all has got to, with its Stop, and the songs it had to leave out. */
@@ -4563,6 +4596,23 @@ async function identityClick(event) {
   }
   if (target.closest('#identity-train') || target.closest('#persona-train')) {
     openTrain();
+    return;
+  }
+  var finishRun = target.closest('#identity-finish-run');
+  if (finishRun) {
+    finishRun.disabled = true;
+    finishRun.textContent = 'Finishing\u2026';
+    try {
+      var finished = await api('/api/lora-runs/' + encodeURIComponent(finishRun.dataset.run) + '/finish', { method: 'POST' });
+      var said = $('identity-status');
+      if (said) { said.textContent = 'Finished: ' + finished.lora + ' is in the Style LoRA list.'; said.className = 'status good'; }
+      await pollState();
+      paintStyleLoras();
+    } catch (err) {
+      var bad = $('identity-status');
+      if (bad) { bad.textContent = err.message; bad.className = 'status bad'; }
+    }
+    pollIdentity();
     return;
   }
   if (target.closest('#identity-run-all')) {

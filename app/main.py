@@ -1838,6 +1838,7 @@ def _identity_view(identity: dict) -> dict:
             "working": jobs.identity_working({s["id"] for s in songs}) if busy else None,
             "exporting": EXPORTING.get(identity["id"]),
             "run_all": _run_all_view(identity["id"]),
+            "last_run": _last_run(identity),
             # A LoRA already trained under this corpus's name, for the Train window to ask about.
             "previous_lora": _previous_lora(identity),
             # Redraft marks the sections from the words, which needs the external LLM.
@@ -2428,6 +2429,64 @@ async def train_identity(identity_id: str, body: TrainIn | None = None) -> dict:
     return {**run, "state": "queued", "songs": len(songs)}
 
 
+@app.post("/api/lora-runs/{run_id}/finish")
+async def finish_lora_run(run_id: str) -> dict:
+    """Finish a run that stopped short, from what it saved, as a finished run would:
+    its best copy, or its last checkpoint, becomes the LoRA, with its checkpoints under
+    it.  No GPU time: for a run stopped by Stop, a crash or a limit, whose files are
+    still there."""
+    run = one("SELECT * FROM lora_runs WHERE id = ?", (run_id,))
+    if not run:
+        raise HTTPException(404, "no such training run")
+    if run["state"] not in ("failed", "cancelled"):
+        raise HTTPException(409, "this run did not stop short")
+    if _training_run():
+        raise HTTPException(409, "A LoRA is training. Finish this one when it has finished.")
+    identity = one("SELECT * FROM identities WHERE id = ?", (run["identity_id"],))
+    if not identity:
+        raise HTTPException(404, "the corpus is gone")
+    root = loras.folder()
+    saved = _run_saved(run, root)
+    if not saved or not saved["finishable"]:
+        raise HTTPException(400, "this run saved nothing to finish from")
+    try:
+        name = await jobs.finish_training(run, identity, stopped=True)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    after = f", after step {saved['last_step']} of {run['steps']}" if saved["last_step"] else ""
+    jobs._run_state(run_id, state="done", stage=f"finished from what it saved{after}", progress=1.0, error=None,
+                    finished_at=time.time())
+    log.info("Finished the stopped training run %s of corpus '%s' from what it saved%s -> %s",
+             run_id, identity["name"], after, name)
+    return {"lora": name, "last_step": saved["last_step"]}
+
+
+def _run_saved(run: dict, root: Path | None) -> dict | None:
+    """What a run that stopped short left behind: the trainer's best copy, its last
+    checkpoint, and whether that is enough to finish it (it is not, once a LoRA of that
+    name exists again)."""
+    if not root:
+        return None
+    name = run["lora_name"]
+    steps = jobs.run_checkpoints(name, root)
+    last = int(re.sub(r"\D", "", steps[-1].stem.rsplit("_step", 1)[1]) or 0) if steps else None
+    best = (root / f"{name}_best.safetensors").is_file()
+    finished = (root / f"{name}.safetensors").is_file()
+    return {"best": best, "last_step": last, "finishable": (best or bool(steps)) and not finished}
+
+
+def _last_run(identity: dict) -> dict | None:
+    """The corpus's latest training run, and for one that stopped short, what it saved."""
+    run = one("SELECT * FROM lora_runs WHERE identity_id = ? ORDER BY started_at IS NULL, started_at DESC LIMIT 1",
+              (identity["id"],))
+    if not run:
+        return None
+    view = {key: run[key] for key in ("id", "state", "stage", "error", "steps", "started_at", "finished_at")}
+    if run["state"] in ("failed", "cancelled"):
+        view["saved"] = _run_saved(run, loras.folder())
+    return view
+
+
 @app.post("/api/lora-runs/{run_id}/cancel")
 async def cancel_lora_run(run_id: str) -> dict:
     """Stop a training run."""
@@ -2561,7 +2620,16 @@ async def _end_run_all(identity_id: str, stage: str) -> None:
 
 def _run_all_view(identity_id: str) -> dict | None:
     run = RUN_ALL.get(identity_id)
-    return {key: value for key, value in run.items() if key not in ("task", "stopping")} if run else None
+    if not run:
+        return None
+    view = {key: value for key, value in run.items() if key not in ("task", "stopping")}
+    # Handed over, it ends with the training, which the corpus window reports itself.
+    if view["stage"] == "training":
+        latest = one("SELECT state FROM lora_runs WHERE identity_id = ? AND started_at >= ? "
+                     "ORDER BY started_at DESC LIMIT 1", (identity_id, run["since"]))
+        if latest and latest["state"] in ("done", "failed", "cancelled"):
+            view["stage"] = "ended"
+    return view
 
 
 async def _run_all(identity: dict, previous: str | None) -> None:

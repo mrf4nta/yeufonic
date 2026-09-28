@@ -344,7 +344,10 @@ engine built with `WITH_TRAINER=0`, takes it out.
    finishes. Progress shows under the buttons and on the main screen, where you can stop it,
    and the corpus's badge at the top of the page pulses while it trains. Training again keeps
    the LoRA from the last run under a dated name, in **Previous runs**, or deletes it, as you
-   choose. Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs. The
+   choose. A run that ends early, by **Stop** or a crash, says so under the buttons, with how far
+   it got. When it saved checkpoints, **Finish with what it saved** makes the trainer's best copy,
+   or its last checkpoint, the LoRA, as a finished run does, with no GPU time.
+   Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs. The
    Train window warns when less than that is free, so close anything else using the GPU first.
 
 **Run all**, beside the three, does Analyse, Export and Train one after the other, for a corpus you

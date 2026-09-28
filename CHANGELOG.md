@@ -31,6 +31,10 @@ cannot creep back in.
   corpus, with a filter. Picking one makes it a recording at once, with the score and words its
   analysis found, laid under the score's sections, and its separated vocal kept for Extract
   lyrics. The file is linked, not copied, where the disk allows. #14.
+- **Finish a training run that ended early** from what it saved. The corpus window says when and
+  why a run ended, and after which step; **Finish with what it saved** makes the trainer's best
+  copy, or its last checkpoint, the LoRA, as a finished run does, with its checkpoints under it
+  and no GPU time.
 - **Run all** in the corpus window analyses, exports and trains one after the other, on the server,
   so a big corpus needs no one to wait for each step. It asks about an earlier LoRA first, analyses
   only what still needs it, leaves out and names any song whose analysis fails, and waits for
@@ -42,6 +46,8 @@ cannot creep back in.
   look at progress, at step 1325 of 1400 while it was reporting a step every few seconds. The
   app told the engine to stop it. Training shows its progress and has Stop, and an engine that
   goes away, loses the job or dies is caught without a clock.
+- The corpora badge could freeze on its last count, still pulsing, after one failed update during
+  a restart. It now tries again.
 - The New corpus window's folder picker had no way back from one of its starting folders to the
   list of them, and on Windows listed each subfolder by its whole path. It now has *all folders*
   there, and shows subfolders by name. Fixes #13.

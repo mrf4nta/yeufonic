@@ -1364,86 +1364,108 @@ async def run_lora_train(run_id: str) -> None:
                             run["lora_name"], steps, rank_planner, rank_decoder,
                             config.TRAIN_MAX_MINUTES)
         await _run_graph("train", run_id, graph)
-        root = loras.folder()
-        produced = None
-        if root:
-            for cand_name in (f"{run['lora_name']}_best.safetensors", f"{run['lora_name']}.safetensors"):
-                cand = root / cand_name
-                if cand.exists():
-                    produced = cand
-                    break
-        if not produced or not produced.exists():
-            raise RuntimeError("the engine finished but wrote no LoRA file")
-        # The engine writes as root.  Its trainer is patched to leave the files readable;
-        # an engine image built before that patch leaves them to root alone, and nothing
-        # after this point can work.  Say so rather than finish half the job.
-        if not os.access(produced, os.R_OK):
-            raise RuntimeError(f"the engine wrote {produced.name} but this app cannot read it (it is readable "
-                               "by root only). Rebuild the engine image (docker compose build engine), and make "
-                               "the files readable: docker compose exec engine chmod 644 /app/models/loras/*.safetensors")
-
-        # Ensure all produced checkpoints and logs are readable by non-root processes
-        for p in root.glob(f"{run['lora_name']}*"):
-            with contextlib.suppress(OSError):
-                os.chmod(p, 0o644)
-
-        canonical = root / f"{run['lora_name']}.safetensors"
-        if produced != canonical:
-            with contextlib.suppress(OSError):
-                shutil.copyfile(produced, canonical)
-                with contextlib.suppress(OSError):
-                    os.chmod(canonical, 0o644)
-                produced = canonical
-        # The best is now the file above, so its copy goes.  The snapshots go too unless
-        # Settings keeps them, in a group of their own: the published LoRAs were each a
-        # checkpoint picked by ear, often well before the last, and the trainer's own
-        # "best" only follows the planner's loss.
-        if produced == canonical:
-            with contextlib.suppress(OSError):
-                (root / f"{run['lora_name']}_best.safetensors").unlink(missing_ok=True)
-        snapshots = sorted(root.glob(f"{run['lora_name']}_step*.safetensors"),
-                           key=lambda path: int(re.sub(r"\D", "", path.stem.rsplit("_step", 1)[1]) or 0))
-
-        # Parse training log if present to check loss progression against reference targets
-        # (blgr_rhodope: artist ~4.635, regularizer ~3.576, decoder ~1.069).
-        log_file = root / f"{run['lora_name']}_log.json"
-        if log_file.exists():
-            try:
-                log_data = json.loads(log_file.read_text(encoding="utf-8"))
-                if log_data and isinstance(log_data, list):
-                    last = log_data[-1]
-                    log.info("LoRA %s training finished. Final losses: artist=%s (target ~4.635), "
-                             "regularizer=%s (target ~3.576), decoder=%s (target ~1.069)",
-                             run["lora_name"], last.get("artist"), last.get("regularizer"), last.get("decoder"))
-            except Exception as e:
-                log.debug("Could not parse training log %s: %s", log_file, e)
-
-        # Name it, group it, and remember it on the corpus.
-        await asyncio.to_thread(loras.write_note, produced, identity["trigger_word"], identity["name"],
-                                title=identity["name"])
-        # Kept unless Settings says otherwise: each is as big as the LoRA itself.
-        if get_setting("training.checkpoints", "keep") == "delete":
-            for snapshot in snapshots:
-                with contextlib.suppress(OSError, ValueError):
-                    loras.remove(snapshot.name, root)
-            snapshots = []
-        for snapshot in snapshots:
-            step = snapshot.stem.rsplit("_step", 1)[1].lstrip("0") or "0"
-            await asyncio.to_thread(loras.write_note, snapshot, identity["trigger_word"], identity["name"],
-                                    title=f"{identity['name']} · step {step}", family=loras.CHECKPOINT_FAMILY)
-        execute("UPDATE identities SET lora = ? WHERE id = ?", (produced.name, identity["id"]))
-        with contextlib.suppress(Exception):
-            await ENGINE.refresh_options()
+        produced = await finish_training(run, identity)
         _run_state(run_id, state="done", stage=None, progress=1.0, finished_at=time.time(),
                    elapsed=round(time.time() - started, 1))
         log.info("LoRA training run %s for corpus '%s' finished in %.1fs -> %s",
-                 run_id, identity["name"], time.time() - started, produced.name)
+                 run_id, identity["name"], time.time() - started, produced)
     except Exception as exc:  # noqa: BLE001
         log.warning("training %s failed: %s", run_id, exc)
         _run_state(run_id, state="failed", error=str(exc)[:300], finished_at=time.time(),
                    elapsed=round(time.time() - started, 1))
     finally:
         await asyncio.to_thread(remove_tree, staged)
+
+
+def run_checkpoints(name: str, root: Path) -> list[Path]:
+    """A run's checkpoints (name_stepN), in step order."""
+    return sorted(root.glob(f"{name}_step*.safetensors"),
+                  key=lambda path: int(re.sub(r"\D", "", path.stem.rsplit("_step", 1)[1]) or 0))
+
+
+async def finish_training(run: dict, identity: dict, stopped: bool = False) -> str:
+    """What a run does once the engine has written its files: the trainer's best copy
+    becomes the LoRA, named after the corpus, noted and grouped; the checkpoints are
+    kept or deleted as Settings says, and noted under it; the corpus remembers it.
+
+    Also for a run that stopped short (stopped=True): the same from what it saved, its
+    best copy, or failing that its last checkpoint, which then stays a checkpoint too.
+    Returns the LoRA's file name."""
+    root = loras.folder()
+    if not root:
+        raise RuntimeError("the app cannot see the LoRA folder")
+    name = run["lora_name"]
+    produced = None
+    for cand_name in (f"{name}_best.safetensors", f"{name}.safetensors"):
+        cand = root / cand_name
+        if cand.exists():
+            produced = cand
+            break
+    snapshots = run_checkpoints(name, root)
+    if produced is None and stopped and snapshots:
+        produced = snapshots[-1]
+    if not produced or not produced.exists():
+        raise RuntimeError("the engine wrote no LoRA file" if not stopped else "the run saved nothing to finish from")
+    # The engine writes as root.  Its trainer is patched to leave the files readable;
+    # an engine image built before that patch leaves them to root alone, and nothing
+    # after this point can work.  Say so rather than finish half the job.
+    if not os.access(produced, os.R_OK):
+        raise RuntimeError(f"the engine wrote {produced.name} but this app cannot read it (it is readable "
+                           "by root only). Rebuild the engine image (docker compose build engine), and make "
+                           "the files readable: docker compose exec engine chmod 644 /app/models/loras/*.safetensors")
+
+    # Ensure all produced checkpoints and logs are readable by non-root processes
+    for p in root.glob(f"{name}*"):
+        with contextlib.suppress(OSError):
+            os.chmod(p, 0o644)
+
+    canonical = root / f"{name}.safetensors"
+    was_best = produced.name == f"{name}_best.safetensors"
+    if produced != canonical:
+        with contextlib.suppress(OSError):
+            shutil.copyfile(produced, canonical)
+            with contextlib.suppress(OSError):
+                os.chmod(canonical, 0o644)
+            produced = canonical
+    # The best is now the file above, so its copy goes.  The snapshots go too unless
+    # Settings keeps them, in a group of their own: the published LoRAs were each a
+    # checkpoint picked by ear, often well before the last, and the trainer's own
+    # "best" only follows the planner's loss.
+    if produced == canonical and was_best:
+        with contextlib.suppress(OSError):
+            (root / f"{name}_best.safetensors").unlink(missing_ok=True)
+
+    # Parse training log if present to check loss progression against reference targets
+    # (blgr_rhodope: artist ~4.635, regularizer ~3.576, decoder ~1.069).
+    log_file = root / f"{name}_log.json"
+    if log_file.exists():
+        try:
+            log_data = json.loads(log_file.read_text(encoding="utf-8"))
+            if log_data and isinstance(log_data, list):
+                last = log_data[-1]
+                log.info("LoRA %s training finished. Final losses: artist=%s (target ~4.635), "
+                         "regularizer=%s (target ~3.576), decoder=%s (target ~1.069)",
+                         name, last.get("artist"), last.get("regularizer"), last.get("decoder"))
+        except Exception as e:
+            log.debug("Could not parse training log %s: %s", log_file, e)
+
+    # Name it, group it, and remember it on the corpus.
+    await asyncio.to_thread(loras.write_note, produced, identity["trigger_word"], identity["name"],
+                            title=identity["name"])
+    # Kept unless Settings says otherwise: each is as big as the LoRA itself.
+    if get_setting("training.checkpoints", "keep") == "delete":
+        for snapshot in snapshots:
+            with contextlib.suppress(OSError, ValueError):
+                loras.remove(snapshot.name, root)
+        snapshots = []
+    for snapshot in snapshots:
+        step = snapshot.stem.rsplit("_step", 1)[1].lstrip("0") or "0"
+        await asyncio.to_thread(loras.write_note, snapshot, identity["trigger_word"], identity["name"],
+                                title=f"{identity['name']} · step {step}", family=loras.CHECKPOINT_FAMILY)
+    execute("UPDATE identities SET lora = ? WHERE id = ?", (produced.name, identity["id"]))
+    with contextlib.suppress(Exception):
+        await ENGINE.refresh_options()
+    return produced.name
 
 
 async def cancel_train(run_id: str) -> None:
