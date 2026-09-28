@@ -31,6 +31,9 @@ cannot creep back in.
   corpus, with a filter. Picking one makes it a recording at once, with the score and words its
   analysis found, laid under the score's sections, and its separated vocal kept for Extract
   lyrics. The file is linked, not copied, where the disk allows. #14.
+- **Filter a big LoRA's learned styles.** Past a dozen songs, a filter box and a row of the tags
+  that recur across the corpus narrow the style chips, tags combining; the list shows its first
+  dozen until Show all.
 - **Finish a training run that ended early** from what it saved. The corpus window says when and
   why a run ended, and after which step; **Finish with what it saved** makes the trainer's best
   copy, or its last checkpoint, the LoRA, as a finished run does, with its checkpoints under it

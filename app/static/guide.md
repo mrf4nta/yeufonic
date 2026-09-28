@@ -362,7 +362,11 @@ A job that runs out of GPU memory says so, with what to try: close other program
 lower the length cap, or, for training, leave the longest songs out. If the engine crashes and
 restarts, the job it was running is lost, and it says that too.
 
-When training finishes, the LoRA appears in the **Style LoRA** list with its trigger word. See
+When training finishes, the LoRA appears in the **Style LoRA** list with its trigger word. Choosing
+it shows a chip for each song it learned from, and clicking one puts that song's style in the box.
+Past a dozen songs, a filter box and a row of the tags that recur across the corpus (its genres,
+moods and instruments) narrow them; click two tags to find songs with both. The list shows its
+first dozen until **Show all**. See
 **Balancing Planner and Sound** below for starting strengths. To share it, press **Download** under
 the picker; see **Sharing a LoRA** below.
 

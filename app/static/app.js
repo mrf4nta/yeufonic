@@ -3278,6 +3278,104 @@ var PRESETS = {
   ]
 };
 
+/* ----------------------------------------------- a big LoRA's learned styles
+   A corpus gives a chip per song, 136 of them for a big one. Past a dozen, a filter
+   box and a row of the tags that recur across the corpus narrow them, and the list
+   shows its first dozen until asked for the rest. The tags come from the analysis,
+   so every corpus gets its own. Kept per LoRA, reset when another is chosen. */
+var LORA_STYLES_FOLD = 12;
+var LORA_STYLE_VIEW = { lora: null, text: '', tags: [], all: false };
+
+function loraStyleTags(styles) {
+  var count = {};
+  styles.forEach(function (s) {
+    var seen = {};
+    (s.prompt || '').split(',').forEach(function (raw) {
+      var tag = raw.trim().toLowerCase();
+      // The key and the voice say nothing about what a song is like.
+      if (!tag || seen[tag] || /^key of /.test(tag) || /\bvocals?\b/.test(tag)) { return; }
+      seen[tag] = true;
+      count[tag] = (count[tag] || 0) + 1;
+    });
+  });
+  // Worth a button when it picks out a few songs but not nearly all of them.
+  return Object.keys(count).filter(function (tag) {
+    return count[tag] >= 3 && count[tag] < styles.length * 0.9;
+  }).sort(function (a, b) { return count[b] - count[a] || a.localeCompare(b); }).slice(0, 14)
+    .map(function (tag) { return { tag: tag, count: count[tag] }; });
+}
+
+function loraStyleMatches(s, view) {
+  var text = ((s.title || '') + ' ' + (s.prompt || '')).toLowerCase();
+  var tags = (s.prompt || '').toLowerCase().split(',').map(function (t) { return t.trim(); });
+  if (view.text && text.indexOf(view.text.toLowerCase()) < 0) { return false; }
+  return view.tags.every(function (tag) { return tags.indexOf(tag) >= 0; });
+}
+
+function loraStylesShown(lora, wrap, box) {
+  var view = LORA_STYLE_VIEW;
+  if (view.lora !== lora.name) { LORA_STYLE_VIEW = view = { lora: lora.name, text: '', tags: [], all: false }; }
+  var tools = $('lora-style-tools');
+  var all = lora.styles || [];
+  if (all.length <= LORA_STYLES_FOLD) {
+    if (tools) { tools.classList.add('hidden'); }
+    return { shown: all, more: '' };
+  }
+  if (!tools) {
+    // Made here rather than in the page, so a page loaded before this still gets it.
+    tools = document.createElement('div');
+    tools.id = 'lora-style-tools';
+    tools.className = 'lora-style-tools';
+    wrap.insertBefore(tools, box);
+    tools.addEventListener('input', function (event) {
+      if (event.target.id !== 'lora-style-filter') { return; }
+      LORA_STYLE_VIEW.text = event.target.value.trim();
+      paintPresets();
+    });
+    tools.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-style-tag]');
+      if (!button) { return; }
+      var at = LORA_STYLE_VIEW.tags.indexOf(button.dataset.styleTag);
+      if (at >= 0) { LORA_STYLE_VIEW.tags.splice(at, 1); } else { LORA_STYLE_VIEW.tags.push(button.dataset.styleTag); }
+      paintPresets();
+    });
+    box.addEventListener('click', function (event) {
+      if (!event.target.closest('[data-style-more]')) { return; }
+      LORA_STYLE_VIEW.all = true;
+      paintPresets();
+    });
+  }
+  tools.classList.remove('hidden');
+  var matching = all.filter(function (s) { return loraStyleMatches(s, view); });
+  var tagHtml = loraStyleTags(all).map(function (item) {
+    var on = view.tags.indexOf(item.tag) >= 0;
+    return '<button type="button" class="chip compact style-tag' + (on ? ' active' : '') + '" data-style-tag="' + esc(item.tag) +
+      '" title="' + item.count + ' songs">' + esc(item.tag) + '</button>';
+  }).join('');
+  var head = '<div class="lora-style-find"><input id="lora-style-filter" type="search" placeholder="Filter ' + all.length +
+    ' styles" value="' + esc(view.text) + '"><span class="muted small">' +
+    (view.text || view.tags.length ? matching.length + ' of ' + all.length : '') + '</span></div>' +
+    '<div class="chips style-tags">' + tagHtml + '</div>';
+  // Rebuilt only when the tags change, so the filter box keeps its caret while typing.
+  var key = lora.name + '|' + view.tags.join(',') + '|' + (view.text || view.tags.length ? matching.length : '');
+  if (tools.dataset.key !== key) {
+    var typing = document.activeElement && document.activeElement.id === 'lora-style-filter';
+    tools.innerHTML = head;
+    tools.dataset.key = key;
+    if (typing) {
+      var input = $('lora-style-filter');
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }
+  var narrowed = Boolean(view.text || view.tags.length);
+  var shown = narrowed || view.all ? matching : matching.slice(0, LORA_STYLES_FOLD);
+  var more = shown.length < matching.length
+    ? '<button type="button" class="chip action compact" data-style-more="1">Show all ' + matching.length + '</button>'
+    : (narrowed && !matching.length ? '<span class="muted small">No style matches.</span>' : '');
+  return { shown: shown, more: more };
+}
+
 function paintPresets() {
   var lora = loraChosen();
   var wrap = $('lora-presets-wrap');
@@ -3289,7 +3387,8 @@ function paintPresets() {
       // Its own name: the group is shared by every corpus LoRA.
       var artistName = lora.title || lora.family || lora.name.replace(/\.safetensors$/, '');
       labelEl.textContent = 'Learned styles for ' + artistName + ' (click to apply):';
-      var loraHtml = lora.styles.map(function (s) {
+      var styles = loraStylesShown(lora, wrap, loraBox);
+      var loraHtml = styles.shown.map(function (s) {
         var prompt = s.prompt || '';
         if (s.tempo) { prompt += ', ' + s.tempo + ' BPM'; }
         // Labelled by the song's own style, not the corpus description every chip shares.
@@ -3297,7 +3396,7 @@ function paintPresets() {
         var chipLabel = s.title ? esc(s.title) + (genreHint ? ' <span class="muted">\u00b7 ' + esc(genreHint) + '</span>' : '') : esc(genreHint || s.prompt);
         var fullTitle = (s.title ? s.title + ': ' : '') + prompt;
         return '<button type="button" class="chip lora-style-chip" data-lora-style="' + esc(prompt) + '" data-trigger="' + esc(lora.trigger || '') + '" title="' + esc(fullTitle) + '">' + chipLabel + '</button>';
-      }).join('');
+      }).join('') + styles.more;
       if (loraBox.dataset.html !== loraHtml) {
         loraBox.innerHTML = loraHtml;
         loraBox.dataset.html = loraHtml;
@@ -6327,7 +6426,7 @@ function wire() {
   if ($('lora-presets')) {
     $('lora-presets').addEventListener('click', function (event) {
       var button = event.target.closest('[data-lora-style]');
-      if (!button) { return; }
+      if (!button || !button.dataset.loraStyle) { return; }
       var prompt = button.dataset.loraStyle;
       var trigger = button.dataset.trigger;
       if (trigger) {
