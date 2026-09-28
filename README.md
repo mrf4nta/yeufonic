@@ -46,6 +46,10 @@ folds it away:
 
 [![Comfy layout](docs/screenshots/comfy-layout.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/comfy-layout.png)
 
+The same in the **Light** theme, one of five in Settings → Theme:
+
+[![Light theme](docs/screenshots/light-theme.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/light-theme.png)
+
 Writing a song from a prompt, in the editor's three columns:
 
 [![Write a song](docs/screenshots/write-a-song.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/write-a-song.png)
