@@ -54,12 +54,12 @@ def test_a_file_as_rendered_left_behind_by_an_earlier_rename_is_put_back(client)
 def test_a_take_normalised_in_place_gets_its_original_back_and_the_present_layout(client):
     """The first version of normalising made song.flac louder and kept song.original.flac
     as rendered.  A rename left the original behind; put back, the take is converted."""
-    take = make_take(title="Hounds good")
-    louder = put(take_audio_path(take["id"], "Hounds good"), b"louder")
+    take = make_take(title="Lantern good")
+    louder = put(take_audio_path(take["id"], "Lantern good"), b"louder")
     execute("UPDATE takes SET audio_path = ?, normalised = 1 WHERE id = ?", (str(louder), take["id"]))
-    old = config.TAKES_DIR / f"hounds-{take['id']}"
-    put(old / "hounds.original.flac", b"as rendered")
-    put(old / "hounds.peaks.json", b"{}")
+    old = config.TAKES_DIR / f"lantern-{take['id']}"
+    put(old / "lantern.original.flac", b"as rendered")
+    put(old / "lantern.peaks.json", b"{}")
 
     relayout()
 
