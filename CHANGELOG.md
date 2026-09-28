@@ -43,6 +43,8 @@ cannot creep back in.
 
 ### Changed
 
+- **The engine's own ComfyUI page is documented,** in the README and the guide: where it is, and
+  that its jobs share the app's engine and GPU. Fixes #8.
 - **The length cap follows a recording's score.** Choosing a recording, for a cover or an
   instrumental, sets the cap to its score's length with half a minute to spare, where 360 seconds
   would cut a longer song short. A cap typed by hand, or a take's own, is left alone.
