@@ -38,6 +38,9 @@ cannot creep back in.
   there mid-flow. A take stopped by its cap is now faded out over its last few seconds, and with a
   recording the cap allows about ten seconds past the score rather than thirty, so an overrun is
   short. Fixes #24.
+- Now and then a render ended long before its score, and the take looked like a short song. A
+  render that ends before 60% of its score is now tried once more with a new seed before it's
+  called finished; if that ends early too, it's kept, and its card says it stopped early. Fixes #25.
 
 ## 0.0.6 (2026-09-28)
 

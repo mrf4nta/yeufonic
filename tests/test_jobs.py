@@ -172,7 +172,9 @@ def test_render_saves_audio_note_peaks_and_drops_the_engine_copy(monkeypatch, da
     engine_out = data_dir / "engine-output"
     engine_copy = tone(engine_out / "yeufonic" / "take_00001_.flac", 1.0)
     monkeypatch.setattr(config, "ENGINE_OUTPUT_DIR", engine_out)
-    take = make_take(status="queued", abc=ABC, title="Render Me")
+    # A one-second cap for the one-second tone: a render far shorter than its score
+    # would be tried again, which is another test's business.
+    take = make_take(status="queued", abc=ABC, title="Render Me", max_duration=1.0)
     use(monkeypatch, FakeEngine([render_history()], audio=engine_copy))
     asyncio.run(jobs.run_job("render", take["id"]))
     row = one("SELECT * FROM takes WHERE id = ?", (take["id"],))
@@ -305,3 +307,41 @@ def test_training_has_no_time_limit(monkeypatch):
     use(monkeypatch, FakeEngine([None, None, None, done({}, {})], started=True, state="running"))
     outcome, _job = asyncio.run(jobs._wait_for("render", "t1", "pid"))
     assert outcome == "timeout"
+
+
+# A score of 48 bars of 4/4 at 96 BPM: two minutes.
+LONG_ABC = ('X:1\nM:4/4\nL:1/16\nQ:1/4=96\nV: Vocal clef=treble name="Vocal Melody" snm="Vocal"\nK:C\n'
+            '% verse\nV: Vocal\n' + '"C"c4d4e4f4|' * 48 + '\n')
+
+
+def test_a_render_that_stops_long_before_its_score_is_tried_once_more(monkeypatch, data_dir, client):
+    """The model sometimes writes a song's end long before its score runs out. The
+    app renders it once more with a new seed before calling it done; a second early
+    end is kept, and the take says it stopped early."""
+    short = tone(data_dir / "short.flac", 5.0)
+    take = make_take(status="queued", abc=LONG_ABC, title="Early", max_duration=360)
+    jobs.RETRIED_EARLY.discard(take["id"])
+    while not jobs.QUEUE.empty():
+        jobs.QUEUE.get_nowait()
+    use(monkeypatch, FakeEngine([render_history()], audio=short))
+    asyncio.run(jobs.run_job("render", take["id"]))
+    row = one("SELECT * FROM takes WHERE id = ?", (take["id"],))
+    assert row["status"] == "queued" and row["seed"] != 1, "tried again, with a new seed"
+    assert jobs.QUEUE.get_nowait() == {"kind": "render", "id": take["id"]}
+    assert not (config.TAKES_DIR / f"early-{take['id']}" / "early.flac").exists(), "the short render is not kept"
+
+    use(monkeypatch, FakeEngine([render_history()], audio=short))
+    asyncio.run(jobs.run_job("render", take["id"]))
+    row = one("SELECT * FROM takes WHERE id = ?", (take["id"],))
+    assert row["status"] == "done", "a second early end is kept"
+    assert client.get(f"/api/takes/{take['id']}").json()["stopped_early"] is True
+    assert take["id"] not in jobs.RETRIED_EARLY, "a later render gets its own retry"
+
+
+def test_a_render_that_ends_near_its_score_is_left_alone(monkeypatch, data_dir, client):
+    full = tone(data_dir / "full.flac", 118.0)
+    take = make_take(status="queued", abc=LONG_ABC, title="Whole", max_duration=360)
+    use(monkeypatch, FakeEngine([render_history()], audio=full))
+    asyncio.run(jobs.run_job("render", take["id"]))
+    assert one("SELECT status FROM takes WHERE id = ?", (take["id"],))["status"] == "done"
+    assert client.get(f"/api/takes/{take['id']}").json()["stopped_early"] is False

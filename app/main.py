@@ -1296,6 +1296,7 @@ def list_takes(
     for take in got:
         take["has_audio"] = bool(take["audio_path"] and Path(take["audio_path"]).exists())
         take["ran_to_cap"] = ran_to_cap(take)
+        take["stopped_early"] = score.stopped_early(take.get("duration"), take.get("abc"), take.get("max_duration"))
         if take.get("prompt_id") and take["status"] == "running":
             take["live"] = ENGINE.snapshot(take["prompt_id"])
     _attach_stem_sets(got)
@@ -1314,6 +1315,7 @@ def get_take(take_id: str) -> dict:
         raise HTTPException(404, "no such take")
     take["has_audio"] = bool(take["audio_path"] and Path(take["audio_path"]).exists())
     take["ran_to_cap"] = ran_to_cap(take)
+    take["stopped_early"] = score.stopped_early(take.get("duration"), take.get("abc"), take.get("max_duration"))
     if take.get("prompt_id") and take["status"] == "running":
         take["live"] = ENGINE.snapshot(take["prompt_id"])
     return take

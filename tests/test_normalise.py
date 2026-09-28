@@ -80,7 +80,9 @@ def test_a_take_asked_to_be_normalised_is_when_its_render_finishes(monkeypatch, 
 
     rendered = quiet_tone(data_dir / "engine" / "take_00001_.flac")
     monkeypatch.setattr(config, "ENGINE_OUTPUT_DIR", data_dir / "engine-output")
-    take = make_take(status="queued", abc=ABC, title="Quiet")
+    # A cap near the three-second tone: a render far shorter than its score would be
+    # tried again, which is another test's business.
+    take = make_take(status="queued", abc=ABC, title="Quiet", max_duration=10.0)
     execute("UPDATE takes SET normalise = 1 WHERE id = ?", (take["id"],))
     use(monkeypatch, FakeEngine([render_history()], audio=rendered))
     set_setting("normalise.level", "-16")

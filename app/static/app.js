@@ -5776,10 +5776,15 @@ function paintTakes() {
           '<button class="status-x" data-act="dismiss-weak" data-id="' + take.id + '" title="It sounds fine: dismiss" aria-label="Dismiss">\u00d7</button></div>'
         : '<button class="take-status weak" data-act="normalise"' + ' data-id="' + take.id + '" title="Came out at ' + take.loudness.toFixed(1) +
           ' dB, far below the usual level. Takes like this often sound thin or distorted, and some are only quiet. If it still sounds wrong once normalised, try another seed.">Weak render: click here to normalise, or try another seed</button>';
+    } else if (take.stopped_early) {
+      // The model wrote the song's end long before its score ran out, twice: the app
+      // had already tried once more with a new seed.
+      live = '<div class="take-status weak" title="The render ended at ' + clock(take.duration || 0) +
+        ', long before the end of its score, and did again when the app tried once more with a new seed. Render again for another try.">Stopped early: render again for the full song</div>';
     } else if (take.ran_to_cap) {
-      // The model never wrote the song's end, so it ran on until the Length cap cut it.
+      // The model never wrote the song's end, so it ran on until the Length cap, and was faded out there.
       live = '<div class="take-status weak" title="The score ends well before the ' + Math.round(take.max_duration) +
-        ' s cap, but the music kept going and was cut at the cap. The end may loop, wander or stop dead. Another seed usually ends properly.">Ran to the length cap: may not end cleanly</div>';
+        ' s cap, but the music kept going until the cap, where it was faded out. The end may loop or wander. Another seed usually ends properly.">Ran to the length cap: may not end cleanly</div>';
     } else if (take.normalised) {
       live = '<button class="take-status normalised" data-act="unnormalise" data-id="' + take.id +
         '" title="' + normalisedTo(take) + ' Click to go back to the level it was rendered at.">Normalised</button>';

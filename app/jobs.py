@@ -34,6 +34,9 @@ CURRENT: dict = {}
 CURRENT_STEMS: dict = {}
 # Ids whose running job was cancelled.  The job notices and stops.
 CANCELLED: set[str] = set()
+# Renders tried once more because they ended well before their score (in memory:
+# a restart forgets, and at worst a take gets a second retry).
+RETRIED_EARLY: set[str] = set()
 # Identity songs being copied in and having their vocal separated, on the CPU.
 IDENTITY_QUEUE: "asyncio.Queue[dict]" = asyncio.Queue()
 # Corpus songs whose running GPU step was stopped: it goes back to not started, not failed.
@@ -625,6 +628,22 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
     for stale in (normalised_path(dest), original_path(dest)):
         with contextlib.suppress(OSError):
             stale.unlink(missing_ok=True)
+    # Ended long before its score: the model wrote its end early (about one render in
+    # eighty, most of them instrumentals). Tried once more with a new seed before
+    # anyone is told it's ready; a second early end is kept, and its card says so.
+    if kind == "render" and ref_id not in RETRIED_EARLY:
+        rendered_for = await asyncio.to_thread(audio_duration, dest)
+        if score.stopped_early(rendered_for, record.get("abc"), float(record.get("max_duration") or 0)):
+            RETRIED_EARLY.add(ref_id)
+            with contextlib.suppress(OSError):
+                dest.unlink(missing_ok=True)
+            seed = int.from_bytes(os.urandom(4), "big")
+            execute("UPDATE takes SET status = 'queued', stage = NULL, seed = ?, sound_seed = NULL WHERE id = ?", (seed, ref_id))
+            log.info("Render of '%s' stopped at %.0fs, well before its score; trying once more with seed %d",
+                     record.get("title") or ref_id, rendered_for or 0, seed)
+            await QUEUE.put({"kind": "render", "id": ref_id})
+            return
+    RETRIED_EARLY.discard(ref_id)
     # Stopped by the length cap, not by its own ending: fade it out rather than leave
     # it cut off mid-bar, before its level is read or a louder copy is made (#24).
     cap = float(record.get("max_duration") or 0)

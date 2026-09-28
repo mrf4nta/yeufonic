@@ -72,6 +72,21 @@ def estimate(abc: str) -> dict | None:
     return {"bars": bars[longest], "bpm": bpm, "seconds": round(quarters[longest] * 60 / bpm, 1)}
 
 
+EARLY_SHARE = 0.6    # a render shorter than this share of its score stopped early
+EARLY_MIN = 30.0     # seconds: a score shorter than this is not judged
+
+
+def stopped_early(duration: float | None, abc: str | None, cap: float | None) -> bool:
+    """A render that ended well before its score did: the model wrote its end long
+    before the music it was given ran out.  Measured against the score, or the cap
+    when that is the shorter."""
+    planned = estimate(abc or "")
+    if not duration or not planned:
+        return False
+    expected = min(planned["seconds"], cap or planned["seconds"])
+    return expected >= EARLY_MIN and duration < EARLY_SHARE * expected
+
+
 def vocal_bars(abc: str, voice_name: str = "Vocal") -> list[str]:
     """The bars of one voice, the Vocal voice unless told otherwise, in order."""
     bars, voice = [], None
