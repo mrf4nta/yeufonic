@@ -6,7 +6,8 @@ on Windows: no Docker, no WSL and no administrator prompt.
 ## What it does
 
 1. **Shows the terms** of each part (`terms.txt`) and asks whether to include Gemma, for lyric
-   drafts on this PC (8 GB).
+   drafts on this PC (8 GB). If you plan on configuring Yeufonic to use your own LLM via its API
+   (recommended for richer results), then you can leave this out.
 2. **Copies our own files** into `%LOCALAPPDATA%\Programs\Yeufonic`: the app, our engine node,
    `setup.ps1`, `launcher.py` and the notices.
 3. **Runs `setup.ps1`** in a window that shows its progress.
