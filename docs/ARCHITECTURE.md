@@ -94,6 +94,12 @@ The page is one static HTML file plus `app.js`. It polls `/api/state` every two 
 status, queue, current job progress, options such as the LoRA list) and `/api/takes` every three to
 six, and repaints from what comes back.
 
+**The score preview** is the page's own work: abcjs is vendored into `app/static/` and draws, plays
+and exports the score as a MIDI file in the browser, so no job, queue or engine is involved. The
+app's part is serving it the note samples — `app/soundfonts.py`, kept in
+`data/models/soundfonts` — which are fetched from their upstream publisher the first time an
+instrument is played, one set per instrument, each about 7 MB.
+
 ## How the app talks to the engine
 
 The app uses ComfyUI's own HTTP API, the same one ComfyUI's web interface uses.
@@ -358,6 +364,7 @@ assume `http://localhost:8090`.
 | Corpora | `/api/identities/…` (create, analyse, export, train, install) |
 | Lyrics drafts | `POST /api/lyrics`, `GET /api/lyrics/{id}` |
 | Settings | `GET/PUT /api/settings`, `POST /api/settings/test-llm`, `POST /api/settings/llm-models` |
+| Score preview | `GET /api/soundfonts` (which sample sets are here, and how far each can play), `POST /api/soundfonts/{instrument}/download`, `GET /soundfonts/{instrument}-mp3/{note}.mp3` |
 
 Write a song, with the plan rendered as soon as it is ready:
 
@@ -411,6 +418,7 @@ data/
   stems/                 stem sets
   identities/<id>/       a corpus: songs, vocals, lyrics, the exported dataset/
   models/whisper/        Whisper's weights, cached on first use
+  models/soundfonts/     note samples the score preview plays with, one set per instrument
 models/                  (read by the engine; the app reads it and writes only loras/)
   checkpoints/           yue2_3b_bf16.safetensors
   loras/                 real-audio, instrumental, style LoRAs, their .txt notes, families.txt

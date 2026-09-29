@@ -30,22 +30,22 @@ cannot creep back in.
 - **Hear a score plan, and take it to a DAW.** The Score window's **Notation** tab plays the plan
   with abcjs, as the box has it: **Play**, the progress, restart and a tempo control sit above the
   staves, the note being played is picked out, and clicking a note puts the cursor on the ABC it
-  came from. **Download MIDI** saves the same score as a MIDI file: the two written voices, and,
-  unless **Chords** is unticked, a piano part playing the chord symbols, which is the only place
-  the harmony reaches a DAW as notes. The samples the player needs, about 7 MB, are fetched from
-  their upstream home the first time and kept in the library, so it works offline afterwards.
-  None of it uses the engine, and a plan is heard as it is edited, saved or not. Closing the
-  window, or moving to another tab, stops it, and a score that runs past what its instruments can
+  came from. A plan is heard as it is edited, saved or not, none of it uses the engine, and closing
+  the window or moving to another tab stops it. **Download MIDI** saves the score for a DAW, the
+  chord symbols written out as a part of their own — the only place the harmony is written as notes
+  — and a plan that changes its metre part way is written in the metre it starts in, while the notes
+  keep their own lengths.
+- **Every voice plays the instrument the style names.** A score names none: YuE2 writes a melody, a
+  second line and chord symbols. With **Instruments** ticked the preview reads the Style the take
+  was made with and plays those lines with something that fits — a guitar, a piano, strings, a
+  synth, whichever the words point at — stands in for a sung line with a voice, gives the chord
+  symbols a part and a bass of their own, and adds drums when the style asks for them, written
+  against the score's metre: a backbeat for rock, four to the floor for dance, a ride for jazz,
+  something sparser for a ballad. The line beside the player says what it chose, and unticking it
+  plays a piano throughout as before. It is a reading of the style, not of the render. Each
+  instrument is fetched from its upstream publisher the first time it is used — about 7 MB each,
+  kept in the library, offline afterwards — and a score that runs past what its instruments can
   play is shifted by whole octaves into range, with a line saying how far.
-- **Each voice plays an instrument the style names.** A score names none: YuE2 writes a melody, a
-  second line and chord symbols. With **Instruments** ticked, the preview reads the Style the take
-  was made with and plays those two lines with something that fits — a guitar, a piano, strings, a
-  synth, whichever the words point at — stands in for a sung line with a voice, and gives the chord
-  symbols a part and a bass of their own, and a style that names drums gets a drum part, written
-  against the score's metre. The line beside the player says what it chose, and unticking it plays
-  a piano throughout as before. It is a reading of the style, not of the render.
-  Each instrument is fetched from its publisher the first time it is played, about 7 MB, and the
-  MIDI file carries the same instruments for a DAW.
 
 ## 0.0.8 (2026-09-29)
 

@@ -103,8 +103,9 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   replace, or edit any single chord by hand in the score.
 - **Hear a plan, and export it.** The Score window's **Notation** tab plays the plan as you have
   edited it, with the note it is on picked out and each line played with an instrument the style
-  names, and **Download MIDI** saves the score for a DAW, the chord symbols included as a part of
-  their own.
+  names — a guitar, a piano, strings, a synth — and drums when the style asks for them. **Download
+  MIDI** saves the score for a DAW with the same instruments, the chord symbols included as a part
+  of their own.
 - **Stems.** Extract vocals, drums, bass, other, and optionally guitar and piano, on CPU, while
   the GPU stays free. Or split into just the vocals and the instruments, for a backing track.
   Download them singly or as a zip.
@@ -202,7 +203,8 @@ installation.
   while it prepares the songs, so 16 GB is the practical minimum, and an 8 GB card can't train
   (it can still use LoRAs trained elsewhere). AMD and Intel graphics are not supported.
 - 16 GB of RAM and about 40 GB of free disk.
-- An internet connection for about 24 GB of downloads, most of it the models.
+- An internet connection for about 24 GB of downloads, most of it the models. The score preview
+  fetches its own note samples as they are played, about 7 MB for each instrument.
 
 The installer checks all of this before it downloads anything.
 
