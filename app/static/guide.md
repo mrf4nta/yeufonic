@@ -141,7 +141,8 @@ itself are unchanged. A score with no notes in it yet has nothing to play and sa
 
 The player needs its note samples, about 7 MB, which are not part of the app: press **Get the
 sounds** once and they are fetched from their upstream home and kept in the library, so playback
-works offline afterwards. Until then the staves are drawn as usual and only the player waits.
+works offline afterwards. Until then the staves are drawn as usual and the transport sits there
+greyed, with that button beside it.
 
 ### Harmony
 

@@ -1855,7 +1855,9 @@ button.ghost.run-all { margin-left: 10px; }
    enough for three digits beside the number spinners. */
 .abcjs-inline-audio .abcjs-btn { width: 34px; height: 34px; padding: 8px 5px; }
 .abcjs-inline-audio .abcjs-midi-tempo { width: 54px; }
-.abcjs-inline-audio.abcjs-disabled { opacity: 0.45; }
+/* abcjs's own disabled state is a colour and nothing more, so a greyed transport
+   would still take a click and then fail on samples that are not there. */
+.abcjs-inline-audio.abcjs-disabled { opacity: 0.45; pointer-events: none; }
 .abcjs-inline-audio .abcjs-btn g { fill: var(--muted); }
 .abcjs-inline-audio .abcjs-btn:hover g { fill: var(--text); }
 .abcjs-inline-audio .abcjs-midi-tempo,

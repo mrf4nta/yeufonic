@@ -1430,8 +1430,8 @@ function notationPaintNote() {
   if (NOTATION.message) { note.textContent = NOTATION.message; return; }
   if (NOTATION.busy) { note.textContent = 'Getting the note samples…'; return; }
   if (!notationSoundsReady()) {
-    note.textContent = 'Hearing it needs the note samples: about ' +
-      ((NOTATION.sounds && NOTATION.sounds.megabytes) || 7) + ' MB, fetched once, then it works offline.';
+    note.textContent = 'Press Get the sounds once — about ' +
+      ((NOTATION.sounds && NOTATION.sounds.megabytes) || 7) + ' MB — and the player works offline afterwards.';
     return;
   }
   note.textContent = NOTATION.transpose ? notationTransposeWords(NOTATION.transpose) : '';
@@ -1446,8 +1446,10 @@ function notationPaintBar() {
     button.classList.toggle('hidden', ready);
     button.disabled = NOTATION.busy;
   }
+  // The transport stays on screen from the first look: hiding it until the samples
+  // arrive reads as controls that are missing rather than one step still to take.
   var widget = $('notation-audio');
-  if (widget) { widget.classList.toggle('hidden', !ready || !NOTATION.hasScore || !NOTATION.playable); }
+  if (widget) { widget.classList.toggle('hidden', !NOTATION.hasScore || !NOTATION.playable); }
   notationPaintNote();
 }
 
@@ -1538,13 +1540,12 @@ function notationInit() {
   return NOTATION.synth;
 }
 
-/* Hand the drawn score to the synthesiser — only when the samples are here, so Play
-   cannot fail quietly on a 404. */
+/* Hand the drawn score to the synthesiser.  What the score can do is worked out whatever
+   state the samples are in — that answer decides whether the transport is on screen at all —
+   and only the hand-over itself waits for them, so Play cannot fail quietly on a 404. */
 function notationSetTune() {
   if (!NOTATION.synth || !NOTATION.tune) { return; }
-  if (!notationSoundsReady()) { NOTATION.synth.disable(true); return; }
   var chords = $('notation-chords');
-  NOTATION.synth.disable(false);
   // A score other than the one handed over last: abcjs keeps both the buffer it primed
   // and the flags that say the tune is ready, and setTune resets neither, so Play would
   // sound the take before this one.  Clearing the flag primes this tune on the next
@@ -1572,6 +1573,13 @@ function notationSetTune() {
     notationPaintNote();
     return;
   }
+  if (!notationSoundsReady()) {
+    // One fetch away rather than a fault: the transport stays where it is, greyed.
+    NOTATION.synth.disable(true);
+    notationPaintNote();
+    return;
+  }
+  NOTATION.synth.disable(false);
   NOTATION.synth.setTune(NOTATION.tune, false, {
     soundFontUrl: '/soundfonts/',
     chordsOff: chordsOff,
