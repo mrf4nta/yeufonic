@@ -40,7 +40,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, score, stems, trainsize
+from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, score, soundfonts, stems, trainsize
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -1899,6 +1899,36 @@ async def variations(take_id: str, body: VariationsIn) -> dict:
         created.append({"id": record["id"], "title": record["title"], "interpretation": name})
     log.info("Queued %d variations for take '%s' (%s)", len(created), take.get("title") or take_id, take_id)
     return {"created": created}
+
+
+# ---------------------------------------------------------------- sounds for the score preview
+@app.get("/soundfonts/{instrument}-mp3/{note}.mp3")
+def soundfont_note(instrument: str, note: str) -> Response:
+    """One note sample, for abcjs.  404 when the sounds have not been fetched."""
+    path = soundfonts.sample(instrument, note)
+    if not path:
+        raise HTTPException(404, "no such sample")
+    return FileResponse(path, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+@app.get("/api/soundfonts")
+def soundfonts_status() -> dict:
+    have = soundfonts.installed()
+    return {"installed": have, "available": [{"id": key, "name": name} for key, name in soundfonts.SETS.items()],
+            "megabytes": 7, "ready": bool(have)}
+
+
+@app.post("/api/soundfonts/{instrument}/download")
+async def soundfonts_download(instrument: str) -> dict:
+    """Fetch an instrument's samples from their upstream home.  Only when asked."""
+    if instrument not in soundfonts.SETS:
+        raise HTTPException(404, "no such instrument")
+    try:
+        fetched = await asyncio.to_thread(soundfonts.download, instrument)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Could not fetch the %s samples: %s", instrument, exc)
+        raise HTTPException(502, f"could not fetch the sounds ({exc.__class__.__name__}). Check the connection and try again.") from exc
+    return {"fetched": fetched, "installed": soundfonts.installed()}
 
 
 class TriesIn(BaseModel):
