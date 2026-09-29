@@ -1430,8 +1430,8 @@ function notationPaintNote() {
   if (NOTATION.message) { note.textContent = NOTATION.message; return; }
   if (NOTATION.busy) { note.textContent = 'Getting the note samples…'; return; }
   if (!notationSoundsReady()) {
-    note.textContent = 'Press Get the sounds once — about ' +
-      ((NOTATION.sounds && NOTATION.sounds.megabytes) || 7) + ' MB — and the player works offline afterwards.';
+    note.textContent = 'Play, or Get the sounds, fetches the note samples once — about ' +
+      ((NOTATION.sounds && NOTATION.sounds.megabytes) || 7) + ' MB — and it works offline afterwards.';
     return;
   }
   note.textContent = NOTATION.transpose ? notationTransposeWords(NOTATION.transpose) : '';
@@ -1463,7 +1463,7 @@ async function notationSoundsState() {
   return NOTATION.sounds;
 }
 
-async function notationGetSounds() {
+async function notationGetSounds(thenPlay) {
   if (NOTATION.busy) { return; }
   NOTATION.busy = true;
   notationNote('');
@@ -1474,6 +1474,7 @@ async function notationGetSounds() {
     await api('/api/soundfonts/' + encodeURIComponent(id) + '/download', { method: 'POST' });
     await notationSoundsState();
     notationSetTune();          // they are here now: hand the score over
+    if (thenPlay && NOTATION.playable) { NOTATION.synth.play(); }
   } catch (err) {
     notationNote('Could not fetch the sounds: ' + err.message);
   } finally {
@@ -1530,6 +1531,17 @@ function notationInit() {
     var el = document.querySelector('#notation-audio ' + selector);
     if (el) { el.title = words[selector]; el.setAttribute('aria-label', words[selector]); }
   });
+  // abcjs would run its own play and fail on samples that are not there yet, so the
+  // first press fetches them and then starts: the transport is never a dead control.
+  var holder = $('notation-audio');
+  if (holder) {
+    holder.addEventListener('click', function (event) {
+      if (notationSoundsReady()) { return; }
+      event.preventDefault();
+      event.stopPropagation();
+      notationGetSounds(true);
+    }, true);
+  }
   var midi = $('notation-midi');
   if (midi) { midi.addEventListener('click', notationDownloadMidi); }
   var sounds = $('notation-sounds');
@@ -1574,8 +1586,9 @@ function notationSetTune() {
     return;
   }
   if (!notationSoundsReady()) {
-    // One fetch away rather than a fault: the transport stays where it is, greyed.
-    NOTATION.synth.disable(true);
+    // One fetch away rather than a fault: the transport stays as it is, and pressing Play
+    // fetches the samples and starts (see the click interceptor in notationInit).
+    NOTATION.synth.disable(false);
     notationPaintNote();
     return;
   }
