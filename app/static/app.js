@@ -1322,6 +1322,7 @@ var PIANO_LOW = 21, PIANO_HIGH = 108;
    so the list runs from the most particular word to the most general.  The number is a
    General MIDI program and the id is the sample set of that name (app/soundfonts.py);
    the score, the staves and the box are untouched — this is how the preview sounds. */
+var PREVIEW_PIANO = { id: 'acoustic_grand_piano', label: 'piano', program: 0, words: ['piano', 'keys', 'ballad'] };
 var PREVIEW_INSTRUMENTS = [
   { id: 'distortion_guitar', label: 'distorted guitar', program: 30,
     words: ['distortion', 'distorted', 'heavy metal', 'hard rock', 'punk', 'grunge', 'metal'] },
@@ -1349,7 +1350,7 @@ var PREVIEW_INSTRUMENTS = [
     words: ['synth', 'synthesizer', 'electronic', 'edm', 'dance', 'techno', 'house'] },
   { id: 'electric_guitar_clean', label: 'clean guitar', program: 27,
     words: ['electric guitar', 'jangly', 'jangle', 'twangy', 'guitar'] },
-  { id: 'acoustic_grand_piano', label: 'piano', program: 0, words: ['piano', 'keys', 'ballad'] }
+  PREVIEW_PIANO
 ];
 // What plays the chord symbols, and their bass notes.
 var PREVIEW_COMP = [
@@ -1372,6 +1373,33 @@ var PREVIEW_BASS = [
   { id: 'electric_bass_pick', label: 'pick bass', program: 34, words: ['pick', 'punk', 'rock'] }
 ];
 var PREVIEW_BASS_DEFAULT = { id: 'electric_bass_finger', label: 'finger bass', program: 33 };
+/* The drums, when the style names them.  abcjs writes the part itself from one of
+   these: a rhythm of hits and rests, then a pitch and a volume for each hit, scaled to
+   fit a bar of the score's own metre.  C2 is a kick, D2 a snare, Gb2 a closed hi-hat,
+   F#3 a ride — the usual general-MIDI drum numbers. */
+var PREVIEW_DRUMS = [
+  { id: 'club', label: 'drums',
+    words: ['dance', 'house', 'techno', 'edm', 'disco', 'electronic', 'trance', 'club', 'synth-pop', 'synthpop'],
+    rhythm: 'd2d2d2d2d2d2d2d2', pitches: [36, 42, 36, 42, 36, 42, 36, 42],
+    volumes: [104, 50, 100, 50, 104, 50, 100, 50] },
+  { id: 'jazz', label: 'drums', words: ['jazz', 'swing', 'bebop', 'big band', 'blues'],
+    rhythm: 'd2d2d2d2d2d2d2d2', pitches: [51, 51, 38, 51, 51, 51, 38, 51],
+    volumes: [70, 60, 90, 60, 70, 60, 90, 60] },
+  { id: 'sparse', label: 'drums',
+    words: ['ballad', 'gentle', 'slow', 'soft', 'acoustic', 'singer-songwriter', 'lullaby', 'ambient'],
+    rhythm: 'd2z2d2z2d2z2d2z2', pitches: [36, 38, 36, 38],
+    volumes: [80, 76, 80, 76] },
+  { id: 'backbeat', label: 'drums', words: ['drum', 'percussion', 'breakbeat', 'shaker'],
+    rhythm: 'd2d2d2d2d2d2d2d2', pitches: [36, 42, 38, 42, 36, 42, 38, 42],
+    volumes: [100, 52, 104, 52, 100, 52, 104, 52] }
+];
+// Words that mean a kit or a drum machine is there.  A dance style rarely says "drums",
+// and one that says "no drums" means it.
+var PREVIEW_DRUM_WORDS = ['drum', 'percussion', 'breakbeat', 'beat', 'shaker', 'brushes', '808',
+                          'house', 'techno', 'edm', 'dance', 'disco', 'trance', 'club',
+                          'jazz', 'swing', 'bebop'];
+var PREVIEW_NO_DRUMS = ['no drums', 'no percussion', 'without drums', 'drumless', 'no beat', 'unaccompanied'];
+
 // A sung line wants a voice, and a style that asks for a choir gets one.
 var PREVIEW_VOICE = { id: 'voice_oohs', label: 'voice', program: 53 };
 var PREVIEW_CHOIR = { id: 'choir_aahs', label: 'choir', program: 52,
@@ -1412,10 +1440,20 @@ function notationChoice(text) {
   var style = notationStyleText();
   if ((box && !box.checked) || !style) { return null; }
   var lead = notationMatch(PREVIEW_INSTRUMENTS, style);
-  if (!lead) { return null; }
   var comp = notationMatch(PREVIEW_COMP, style);
-  if (!comp) { comp = lead.program === 27 ? PREVIEW_COMP[3] : PREVIEW_INSTRUMENTS[PREVIEW_INSTRUMENTS.length - 1]; }
-  var bass = notationMatch(PREVIEW_BASS, style) || PREVIEW_BASS_DEFAULT;
+  var bass = notationMatch(PREVIEW_BASS, style);
+  var drum = null;
+  var drumless = PREVIEW_NO_DRUMS.some(function (word) { return style.indexOf(word) >= 0; });
+  if (!drumless && PREVIEW_DRUM_WORDS.some(function (word) { return style.indexOf(word) >= 0; })) {
+    drum = notationMatch(PREVIEW_DRUMS, style) || PREVIEW_DRUMS[PREVIEW_DRUMS.length - 1];
+  }
+  // A style can name only the backing — a jazz trio is its bass and its drums, with the
+  // piano understood.  So the melody falls back to a piano rather than giving up on all
+  // of it; only a style that names nothing we can play is left alone.
+  if (!lead && !comp && !bass && !drum) { return null; }
+  if (!lead) { lead = PREVIEW_PIANO; }
+  if (!comp) { comp = PREVIEW_PIANO; }
+  if (!bass) { bass = PREVIEW_BASS_DEFAULT; }
   var choir = notationMatch([PREVIEW_CHOIR], style) || null;
   var sung = notationVoiceHasNotes(text || (($('score-big') && $('score-big').value) || ''), 'Vocal');
   var voice = sung ? (choir || PREVIEW_VOICE) : null;
@@ -1423,11 +1461,16 @@ function notationChoice(text) {
   var words = [];
   if (voice) { words.push(voice.label); }
   words.push(lead.label);
+  if (drum) { words.push(drum.label); }
   if (chordsOn) { words.push(comp.label, bass.label); }
   return { voice: voice ? voice.program : null, voiceId: voice ? voice.id : null, voiceLabel: voice ? voice.label : '',
            lead: lead.program, leadId: lead.id, leadLabel: lead.label,
            chord: chordsOn ? comp.program : null, chordId: chordsOn ? comp.id : null, chordLabel: comp.label,
            bass: chordsOn ? bass.program : null, bassId: chordsOn ? bass.id : null, bassLabel: bass.label,
+           // abcjs writes the drum part from this: a rhythm, then a pitch and a volume
+           // for each of its hits.
+           drumId: drum ? 'percussion' : null, drumBars: 1,
+           drumPattern: drum ? [drum.rhythm].concat(drum.pitches, drum.volumes).join(' ') : null,
            words: words.filter(function (w, i) { return words.indexOf(w) === i; }).join(', ') };
 }
 
@@ -1583,7 +1626,8 @@ function notationNote(text) { NOTATION.message = text || ''; notationPaintNote()
    chose nothing.  A set is fetched whole or not at all, so readiness is per instrument. */
 function notationNeeded() {
   var choice = NOTATION.choice;
-  var ids = choice ? [choice.voiceId, choice.leadId, choice.chordId, choice.bassId] : ['acoustic_grand_piano'];
+  var ids = choice ? [choice.voiceId, choice.leadId, choice.chordId, choice.bassId, choice.drumId]
+                   : ['acoustic_grand_piano'];
   ids = ids.filter(function (id) { return Boolean(id); });
   return ids.filter(function (id, i) { return ids.indexOf(id) === i; });
 }
@@ -1730,7 +1774,13 @@ function notationRepaint() {
    the part abcjs writes from the chord symbols, which is the only way the harmony
    reaches a DAW as notes. */
 function notationMidiBytes(abc) {
-  var result = ABCJS.synth.getMidiFile(abc, { midiOutputType: 'binary' });
+  var options = notationPlayOptions();
+  // The octave shift is only there to fit the sample sets: a DAW has no such limit, so
+  // the file is written as the score stands.
+  delete options.midiTranspose;
+  delete options.soundFontUrl;
+  options.midiOutputType = 'binary';
+  var result = ABCJS.synth.getMidiFile(abc, options);
   var first = Array.isArray(result) ? result[0] : result;      // abcjs hands back [Uint8Array]
   if (first instanceof Uint8Array) { return first; }
   if (typeof first === 'string') { return new Uint8Array(first.split(',').map(Number)); }
@@ -1798,6 +1848,27 @@ function notationInit() {
   return NOTATION.synth;
 }
 
+/* What the preview plays with, as abcjs options: the same set feeds the synthesiser and
+   the MIDI file, so what is heard is what is exported.  The chord part, its bass notes
+   and the drums are abcjs's own writing rather than lines in the score, and this is how
+   it is told about them. */
+function notationPlayOptions() {
+  var chords = $('notation-chords');
+  var choice = NOTATION.choice;
+  var options = {
+    soundFontUrl: '/soundfonts/',
+    chordsOff: chords ? !chords.checked : false,
+    program: 0,
+    midiTranspose: NOTATION.transpose
+  };
+  if (choice) {
+    if (choice.chord !== null) { options.chordprog = choice.chord; }
+    if (choice.bass !== null) { options.bassprog = choice.bass; }
+    if (choice.drumPattern) { options.drum = choice.drumPattern; options.drumBars = choice.drumBars; }
+  }
+  return options;
+}
+
 /* Hand the drawn score to the synthesiser.  What the score can do is worked out whatever
    state the samples are in — that answer decides whether the transport is on screen at all —
    and only the hand-over itself waits for them, so Play cannot fail quietly on a 404. */
@@ -1838,17 +1909,7 @@ function notationSetTune() {
     return;
   }
   NOTATION.synth.disable(false);
-  var playing = {
-    soundFontUrl: '/soundfonts/',
-    chordsOff: chordsOff,
-    program: 0,
-    midiTranspose: NOTATION.transpose
-  };
-  // What the chord symbols and their bass notes are played with, when the style named
-  // something: abcjs takes these as options rather than as lines in the score.
-  if (NOTATION.choice && NOTATION.choice.chord !== null) { playing.chordprog = NOTATION.choice.chord; }
-  if (NOTATION.choice && NOTATION.choice.bass !== null) { playing.bassprog = NOTATION.choice.bass; }
-  NOTATION.synth.setTune(NOTATION.tune, false, playing);
+  NOTATION.synth.setTune(NOTATION.tune, false, notationPlayOptions());
   notationPaintNote();
 }
 

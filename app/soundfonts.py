@@ -61,6 +61,9 @@ SETS = {
     "flute": "Flute",
     "lead_2_sawtooth": "Sawtooth lead",
     "pad_2_warm": "Warm pad",
+    # The drum track abcjs writes from a pattern, on the percussion channel.  Named by
+    # pitch, as the others are: C2 is a kick, D2 a snare, Gb2 a closed hi-hat.
+    "percussion": "Drums",
 }
 
 _FLATS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]

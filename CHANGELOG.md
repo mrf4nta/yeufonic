@@ -41,8 +41,9 @@ cannot creep back in.
   second line and chord symbols. With **Instruments** ticked, the preview reads the Style the take
   was made with and plays those two lines with something that fits — a guitar, a piano, strings, a
   synth, whichever the words point at — stands in for a sung line with a voice, and gives the chord
-  symbols a part and a bass of their own. The line beside the player says what it chose, and
-  unticking it plays a piano throughout as before. It is a reading of the style, not of the render.
+  symbols a part and a bass of their own, and a style that names drums gets a drum part, written
+  against the score's metre. The line beside the player says what it chose, and unticking it plays
+  a piano throughout as before. It is a reading of the style, not of the render.
   Each instrument is fetched from its publisher the first time it is played, about 7 MB, and the
   MIDI file carries the same instruments for a DAW.
 

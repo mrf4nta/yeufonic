@@ -132,8 +132,11 @@ left playing with no control in reach.
 **Instruments** plays each voice with an instrument the Style names, rather than a piano
 throughout: a style that says *electric guitar, drums* is heard with a guitar, its chords played by
 another, and a bass under them; a sung line is stood in for by a voice, and an instrumental's
-melody is not. The line beside the player says what it chose, and unticking it goes back to the
-piano you would otherwise hear. This is a reading of the style, not of the render: YuE2 decides the
+melody is not. A style that names drums gets a drum part too, written against the score's own
+metre — a backbeat for rock, four to the floor for dance, a ride for jazz, something sparser for a
+ballad — and it plays all the way through, since the score has no sections for it to sit out. The
+line beside the player says what it chose, and unticking it goes back to the piano you would
+otherwise hear. This is a reading of the style, not of the render: YuE2 decides the
 real performance and adds parts the score never had, so treat it as the plan played in the right
 colours rather than as what the take will sound like.
 
