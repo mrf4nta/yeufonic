@@ -1311,7 +1311,7 @@ function sectionChords(section) {
 var NOTATION = { synth: null, tune: null, tuned: null, tunedChords: null, transpose: 0, notes: 0,
                  playable: false, hasScore: false, empty: true, text: '', marked: [], sounds: null, message: '',
                  busy: false, at: -1, shift: 0, lead: 0, inserts: [], choice: null, fetching: 0,
-                 tunedRange: null };
+                 tunedRange: null, preparing: false };
 // The note samples are one file per key of a piano, A0 to C8.
 var PIANO_LOW = 21, PIANO_HIGH = 108;
 
@@ -1614,10 +1614,16 @@ function notationMark(event) {
 }
 
 var NOTATION_CURSOR = {
-  // Two transports over one pair of speakers is unusable: the player stops.
-  onStart: function () { var main = $('audio'); if (main && !main.paused) { main.pause(); } },
+  // The first moment there is sound: until this fires the page is preparing the song.
+  onStart: function () {
+    NOTATION.preparing = false;
+    notationPaintNote();
+    // Two transports over one pair of speakers is unusable: the player stops.
+    var main = $('audio');
+    if (main && !main.paused) { main.pause(); }
+  },
   onEvent: notationMark,
-  onFinished: notationUnmark
+  onFinished: function () { NOTATION.preparing = false; notationUnmark(); notationPaintNote(); }
 };
 
 function notationNote(text) { NOTATION.message = text || ''; notationPaintNote(); }
@@ -1665,6 +1671,10 @@ function notationPaintNote() {
       : 'Getting the note samples…';
     return;
   }
+  // Building the song for the first time takes a moment — a whole score is prepared as one
+  // buffer before any of it sounds — and a control that looks dead while that happens reads
+  // as broken.
+  if (NOTATION.preparing) { note.textContent = 'Getting the preview ready…'; return; }
   if (NOTATION.empty) { note.textContent = ''; return; }        // the staves say "No score yet."
   if (!NOTATION.hasScore) { note.textContent = 'This score has no notes in it yet.'; return; }
   if (!NOTATION.playable) {
@@ -1747,6 +1757,8 @@ function notationResume(at, playing) {
   var synth = NOTATION.synth;
   if (!synth || !NOTATION.playable) { return; }
   if (playing) {
+    NOTATION.preparing = true;
+    notationPaintNote();
     var started = synth.play();
     if (started && typeof started.then === 'function') {
       started.then(function () { if (at) { synth.seek(at); } });
@@ -1829,7 +1841,11 @@ function notationInit() {
   var holder = $('notation-audio');
   if (holder) {
     holder.addEventListener('click', function (event) {
-      if (notationSoundsReady()) { return; }
+      if (notationSoundsReady()) {
+        // Let abcjs handle it, but say what is happening until sound starts.
+        if (!NOTATION.synth.isStarted && !NOTATION.preparing) { NOTATION.preparing = true; notationPaintNote(); }
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       notationGetSounds(true);
