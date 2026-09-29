@@ -14,6 +14,8 @@ export default [
         clearInterval: 'readonly',
         requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly', confirm: 'readonly', prompt: 'readonly',
         Event: 'readonly', FormData: 'readonly', Path2D: 'readonly', MediaMetadata: 'readonly',
+        // The score preview hands a MIDI file to the browser as a Blob and an object URL.
+        URL: 'readonly', Blob: 'readonly',
         ABCJS: 'readonly', console: 'readonly'
       }
     },

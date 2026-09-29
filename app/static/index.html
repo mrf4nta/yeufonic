@@ -17,6 +17,8 @@
       } catch (err) { /* private mode: dark */ }
     })();
   </script>
+<!-- abcjs's own audio-control styles, then ours: every colour below is set again by the theme. -->
+<link rel="stylesheet" href="/static/abcjs-audio.css?v={{VERSION}}">
 <link rel="stylesheet" href="/static/styles.css?v={{VERSION}}">
 <link rel="icon" type="image/svg+xml" href="/static/icon.svg?v={{VERSION}}">
 <!-- PNGs too: a window of its own (Edge's app mode, on Windows) takes its taskbar icon from these. -->
@@ -523,7 +525,16 @@
       <span id="score-count" class="muted small"></span>
     </div>
     <div class="score-view" id="view-chart"><pre id="chart-big" class="chart"></pre></div>
-    <div class="score-view hidden" id="view-notation"><div id="notation-big"></div></div>
+    <div class="score-view hidden" id="view-notation">
+      <div class="score-play">
+        <div id="notation-audio"></div>
+        <label class="check" title="Play the chord symbols as a piano part"><input type="checkbox" id="notation-chords" checked> Chords</label>
+        <button id="notation-midi" class="ghost" title="Save this score as a MIDI file, to arrange in a DAW">Download MIDI</button>
+        <button id="notation-sounds" class="ghost hidden" title="The note samples playback uses, fetched once from their upstream home">Get the sounds</button>
+        <span id="notation-note" class="hint"></span>
+      </div>
+      <div id="notation-big"></div>
+    </div>
     <div class="score-view hidden" id="view-lyrics"><div id="lyrics-view"></div></div>
   </div>
 </div>

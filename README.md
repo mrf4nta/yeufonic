@@ -101,6 +101,9 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   beside it, and three views below: a chord chart, real staff notation, and the lyrics with each
   section's chords. Chord symbols sit in double quotes. Fix one everywhere with find and
   replace, or edit any single chord by hand in the score.
+- **Hear a plan, and export it.** The Score window's **Notation** tab plays the plan as you have
+  edited it, with the note it is on picked out, and **Download MIDI** saves the score for a DAW,
+  the chord symbols included as a piano part.
 - **Stems.** Extract vocals, drums, bass, other, and optionally guitar and piano, on CPU, while
   the GPU stays free. Or split into just the vocals and the instruments, for a backing track.
   Download them singly or as a zip.

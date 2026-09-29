@@ -1832,3 +1832,34 @@ button.ghost.run-all { margin-left: 10px; }
 .lora-style-find { display: flex; align-items: center; gap: 10px; }
 .lora-style-find input { max-width: 260px; padding: 6px 12px; font-size: 13px; border-radius: 999px; }
 .lora-style-tools .style-tags { margin-top: 7px; gap: 5px; }
+
+/* ---- the score preview (Score → Notation) ----
+   abcjs draws its own audio controls and ships its own stylesheet; every colour of
+   that one is set again here from the theme's tokens, so the bar reads as part of the
+   window in all five themes. */
+.score-play {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.score-play .check { margin: 0; white-space: nowrap; }
+#notation-audio { min-height: 30px; }
+#notation-note { flex: 1 1 220px; }
+.abcjs-inline-audio {
+  background: var(--card-2) !important; border: 1px solid var(--line);
+  border-radius: 10px; height: 30px; padding: 0 6px;
+}
+.abcjs-inline-audio.abcjs-disabled { opacity: 0.45; }
+.abcjs-inline-audio .abcjs-btn g { fill: var(--muted); }
+.abcjs-inline-audio .abcjs-btn:hover g { fill: var(--text); }
+.abcjs-inline-audio .abcjs-midi-tempo,
+.abcjs-inline-audio .abcjs-midi-clock { color: var(--muted); }
+.abcjs-inline-audio .abcjs-midi-progress-background { background-color: var(--card-3); }
+.abcjs-inline-audio .abcjs-midi-progress-indicator { background-color: var(--accent-a); }
+.abcjs-inline-audio .abcjs-midi-progress-indicator:hover { background-color: var(--accent-b); }
+.abcjs-inline-audio input[type="range"] { accent-color: var(--accent-a); }
+
+/* The note the preview is on: abcjs hands the cursor control the elements it is
+   sounding, and the class is added to them. */
+.notation-playing, .notation-playing path, .notation-playing rect {
+  fill: var(--accent-b) !important; stroke: var(--accent-b) !important;
+}

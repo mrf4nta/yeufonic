@@ -89,11 +89,19 @@ differ, the publisher's terms apply.
 - It is not part of this repository. `engine/Dockerfile` installs it into the engine at a pinned
   commit (unless built with `WITH_TRAINER=0`), where it trains the style LoRAs made from a corpus.
 
-### abcjs (staff notation)
+### abcjs (staff notation, and hearing a plan)
 
 - By Paul Rosen and Gregory Dyke. **MIT**. Source: [paulrosen/abcjs](https://github.com/paulrosen/abcjs).
 - Vendored in `app/static/abcjs-basic-min.js`, with its licence in
-  [app/static/abcjs.LICENSE.md](app/static/abcjs.LICENSE.md).
+  [app/static/abcjs.LICENSE.md](app/static/abcjs.LICENSE.md), and its audio-control stylesheet in
+  `app/static/abcjs-audio.css` (same package and licence; the colours in it are set again by the
+  app's themes).
+- **The note samples the player uses are not bundled.** It fetches them, when asked, from
+  [paulrosen/midi-js-soundfonts](https://github.com/paulrosen/midi-js-soundfonts) into
+  `data/models/soundfonts`, and the app serves them from there. That repository states the
+  licences of its FluidR3_GM (CC BY 3.0) and MusyngKite (CC BY-SA 3.0) sets; the `abcjs` set used
+  here is a third one, with no licence stated, so it is fetched from its publisher rather than
+  redistributed with this app.
 
 ### marked (the guide's renderer)
 

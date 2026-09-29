@@ -1303,34 +1303,236 @@ function sectionChords(section) {
   return out;
 }
 
+/* --------------------------------------------------------------- hearing a plan
+   The Notation tab draws the score with abcjs, whose vendored build carries a
+   synthesiser as well: it fetches one small MP3 per note it needs from
+   /soundfonts/, plays the score, and writes the same score out as a MIDI file.
+   Nothing here goes near the engine: it is the ABC in the box, as you edited it. */
+var NOTATION = { synth: null, tune: null, text: '', marked: [], sounds: null, message: '', busy: false,
+                 at: -1, shift: 0, lead: 0 };
+
+/* The score as it is drawn, and where our own title went in.  It is drawn as it is
+   written: filtering the header out lost the per-voice M: lines a plan uses for a
+   change of metre, so only an empty T: is filled, and the offsets say where, so a
+   click on a note can still find its place in the box. */
+function notationAbc() {
+  var raw = ($('score-big') && $('score-big').value) || '';
+  var lead = raw.length - raw.replace(/^\s+/, '').length;
+  var title = (($('title') && $('title').value) || '').trim() || 'Score';
+  var lines = raw.slice(lead).split('\n');
+  var at = -1, shift = 0, pos = 0;
+  for (var i = 0; i < lines.length; i++) {
+    if (/^T:/.test(lines[i])) {
+      if (!lines[i].slice(2).trim()) {
+        var filled = 'T: ' + title;
+        at = pos;
+        shift = filled.length - lines[i].length;
+        lines[i] = filled;
+      }
+      return { text: lines.join('\n'), at: at, shift: shift, lead: lead };
+    }
+    pos += lines[i].length + 1;
+  }
+  // No title line at all: abcjs would call the tune Untitled. This one goes after X:.
+  var put = /^X:/.test(lines[0] || '') ? 1 : 0;
+  at = put ? lines[0].length + 1 : 0;
+  shift = ('T: ' + title + '\n').length;
+  lines.splice(put, 0, 'T: ' + title);
+  return { text: lines.join('\n'), at: at, shift: shift, lead: lead };
+}
+
+function notationSourceIndex(index) {
+  var i = index + NOTATION.lead;
+  if (NOTATION.at < 0 || i < NOTATION.at) { return i; }
+  return Math.max(NOTATION.at, i - NOTATION.shift);
+}
+
+/* Clicking a note puts the cursor on the ABC it came from. */
+function notationPickNote(abcelem) {
+  var box = $('score-big');
+  if (!box || !abcelem || typeof abcelem.startChar !== 'number' || typeof abcelem.endChar !== 'number') { return; }
+  var start = notationSourceIndex(abcelem.startChar);
+  var end = Math.max(start, notationSourceIndex(abcelem.endChar));
+  try {
+    box.focus();
+    box.setSelectionRange(start, end);
+  } catch (err) { /* a hidden box cannot take a selection */ }
+}
+
+function notationUnmark() {
+  NOTATION.marked.forEach(function (el) { if (el && el.classList) { el.classList.remove('notation-playing'); } });
+  NOTATION.marked = [];
+}
+
+function notationMark(event) {
+  if (!event || !event.elements) { return; }
+  notationUnmark();
+  event.elements.forEach(function (group) {
+    Array.prototype.forEach.call(group || [], function (el) {
+      if (el && el.classList) { el.classList.add('notation-playing'); NOTATION.marked.push(el); }
+    });
+  });
+}
+
+var NOTATION_CURSOR = {
+  // Two transports over one pair of speakers is unusable: the player stops.
+  onStart: function () { var main = $('audio'); if (main && !main.paused) { main.pause(); } },
+  onEvent: notationMark,
+  onFinished: notationUnmark
+};
+
+function notationNote(text) { NOTATION.message = text || ''; notationPaintNote(); }
+
+function notationSoundsReady() { return Boolean(NOTATION.sounds && NOTATION.sounds.ready); }
+
+function notationPaintNote() {
+  var note = $('notation-note');
+  if (!note) { return; }
+  if (NOTATION.message) { note.textContent = NOTATION.message; return; }
+  if (NOTATION.busy) { note.textContent = 'Getting the note samples…'; return; }
+  if (!notationSoundsReady()) {
+    note.textContent = 'Hearing it needs the note samples: about ' +
+      ((NOTATION.sounds && NOTATION.sounds.megabytes) || 7) + ' MB, fetched once, then it works offline.';
+    return;
+  }
+  note.textContent = '';
+}
+
+function notationPaintBar() {
+  var ready = notationSoundsReady();
+  var button = $('notation-sounds');
+  if (button) {
+    var size = NOTATION.sounds && NOTATION.sounds.megabytes ? ' (' + NOTATION.sounds.megabytes + ' MB)' : '';
+    button.textContent = NOTATION.busy ? 'Getting the sounds…' : 'Get the sounds' + size;
+    button.classList.toggle('hidden', ready);
+    button.disabled = NOTATION.busy;
+  }
+  var widget = $('notation-audio');
+  if (widget) { widget.classList.toggle('hidden', !ready); }
+  notationPaintNote();
+}
+
+async function notationSoundsState() {
+  try { NOTATION.sounds = await api('/api/soundfonts'); }
+  catch (err) { NOTATION.sounds = null; }
+  notationPaintBar();
+  // The answer arrives after the first hand-over, and it is what decides whether the
+  // controls are live: without this the bar stays disabled until something else moves.
+  notationSetTune();
+  return NOTATION.sounds;
+}
+
+async function notationGetSounds() {
+  if (NOTATION.busy) { return; }
+  NOTATION.busy = true;
+  notationNote('');
+  notationPaintBar();
+  try {
+    var offered = (NOTATION.sounds && NOTATION.sounds.available) || [];
+    var id = offered.length && offered[0].id ? offered[0].id : 'acoustic_grand_piano';
+    await api('/api/soundfonts/' + encodeURIComponent(id) + '/download', { method: 'POST' });
+    await notationSoundsState();
+    notationSetTune();          // they are here now: hand the score over
+  } catch (err) {
+    notationNote('Could not fetch the sounds: ' + err.message);
+  } finally {
+    NOTATION.busy = false;
+    notationPaintBar();
+  }
+}
+
+/* The score as a MIDI file: the two written voices, and, unless Chords is unticked,
+   the piano part abcjs writes from the chord symbols, which is the only way the
+   harmony reaches a DAW as notes. */
+function notationMidiBytes(abc) {
+  var result = ABCJS.synth.getMidiFile(abc, { midiOutputType: 'binary' });
+  var first = Array.isArray(result) ? result[0] : result;      // abcjs hands back [Uint8Array]
+  if (first instanceof Uint8Array) { return first; }
+  if (typeof first === 'string') { return new Uint8Array(first.split(',').map(Number)); }
+  if (Array.isArray(first)) { return new Uint8Array(first); }
+  if (first && first.data) { return new Uint8Array(first.data); }
+  return null;
+}
+
+function notationDownloadMidi() {
+  if (typeof ABCJS === 'undefined' || !ABCJS.synth || !ABCJS.synth.getMidiFile) { return; }
+  var score = notationAbc();
+  if (!score.text.trim()) { notationNote('There is no score to save yet.'); return; }
+  var bytes = null;
+  try { bytes = notationMidiBytes(score.text); } catch (err) { bytes = null; }
+  if (!bytes || !bytes.length) { notationNote('This score could not be written as MIDI.'); return; }
+  var name = (($('title') && $('title').value) || 'score').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'score';
+  var url = URL.createObjectURL(new Blob([bytes], { type: 'audio/midi' }));
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = name + '.mid';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+function notationInit() {
+  if (NOTATION.synth) { return NOTATION.synth; }
+  if (typeof ABCJS === 'undefined' || !ABCJS.synth || !ABCJS.synth.SynthController || !$('notation-audio')) { return null; }
+  NOTATION.synth = new ABCJS.synth.SynthController();
+  NOTATION.synth.load('#notation-audio', NOTATION_CURSOR, {
+    displayPlay: true, displayProgress: true, displayWarp: true, displayRestart: true, displayLoop: false
+  });
+  var midi = $('notation-midi');
+  if (midi) { midi.addEventListener('click', notationDownloadMidi); }
+  var sounds = $('notation-sounds');
+  if (sounds) { sounds.addEventListener('click', notationGetSounds); }
+  var chords = $('notation-chords');
+  if (chords) { chords.addEventListener('change', function () { notationSetTune(); }); }
+  notationSoundsState();
+  return NOTATION.synth;
+}
+
+/* Hand the drawn score to the synthesiser — only when the samples are here, so Play
+   cannot fail quietly on a 404. */
+function notationSetTune() {
+  if (!NOTATION.synth || !NOTATION.tune) { return; }
+  if (!notationSoundsReady()) { NOTATION.synth.disable(true); return; }
+  var chords = $('notation-chords');
+  NOTATION.synth.disable(false);
+  NOTATION.synth.setTune(NOTATION.tune, false, {
+    soundFontUrl: '/soundfonts/',
+    chordsOff: chords ? !chords.checked : false,
+    program: 0
+  });
+}
+
 function renderNotationView() {
   var host = $('notation-big');
-  var abc = ($('score-big').value || '').trim();
+  if (!host) { return; }
+  var score = notationAbc();
+  var abc = score.text.trim();
   if (!abc || typeof ABCJS === 'undefined') {
     host.innerHTML = '<p class="hint">No score yet.</p>';
     return;
   }
-  // Rebuild the header: our own title, the score's own musical settings.
-  var body = abc.split('\n').filter(function (line) {
-    return !/^[XTM LQK]:/.test(line.trim());
-  }).join('\n');
-  var pick = function (key, fallback) {
-    var m = abc.match(new RegExp('^' + key + ':\\s*(.*)$', 'm'));
-    return m ? m[1] : fallback;
-  };
-  var full = 'X:1\nT:' + ($('title').value || 'Score') + '\n' +
-    'M:' + pick('M', '4/4') + '\nL:' + pick('L', '1/8') + '\n' +
-    'Q:' + pick('Q', '1/4=100') + '\nK:' + pick('K', 'C') + '\n' + body;
+  NOTATION.at = score.at;
+  NOTATION.shift = score.shift;
+  NOTATION.lead = score.lead;
+  var drawn = null;
   try {
     // No responsive mode: abcjs then positions the SVG in the flow, so it scrolls
     // inside its pane instead of painting over the editor.
-    ABCJS.renderAbc('notation-big', full, {
+    drawn = ABCJS.renderAbc('notation-big', abc, {
       scale: 1.15, staffwidth: 980,
-      foregroundColor: themeColour('--text') || '#f4f4f7', staffColor: themeColour('--muted') || '#9b9ba8'
+      foregroundColor: themeColour('--text') || '#f4f4f7', staffColor: themeColour('--muted') || '#9b9ba8',
+      clickListener: notationPickNote
     });
   } catch (err) {
     host.innerHTML = '<p class="hint">This score will not render as notation.</p>';
+    return;
   }
+  NOTATION.tune = drawn && drawn[0] ? drawn[0] : null;
+  NOTATION.text = abc;
+  notationInit();
+  notationSetTune();
 }
 
 /* An instrumental's third view: each section of the plan with its chords.  The

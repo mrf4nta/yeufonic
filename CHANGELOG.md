@@ -23,6 +23,19 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Added
+
+- **Hear a score plan, and take it to a DAW.** The Score window's **Notation** tab plays the plan
+  with abcjs, as the box has it: **Play**, the progress, restart and a tempo control sit above the
+  staves, the note being played is picked out, and clicking a note puts the cursor on the ABC it
+  came from. **Download MIDI** saves the same score as a MIDI file: the two written voices, and,
+  unless **Chords** is unticked, a piano part playing the chord symbols, which is the only place
+  the harmony reaches a DAW as notes. The samples the player needs, about 7 MB, are fetched from
+  their upstream home the first time and kept in the library, so it works offline afterwards.
+  None of it uses the engine, and a plan is heard as it is edited, saved or not.
+
 ## 0.0.8 (2026-09-29)
 
 ### Added
