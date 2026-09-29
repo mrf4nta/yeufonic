@@ -126,13 +126,18 @@ The **Notation** tab has a player above the staves. Press **Play** to hear the p
 it, edits and all, so a melody you are unsure of can be judged by ear before a render is spent on
 it. The notes it is playing are picked out as it goes, and its tempo control changes the preview
 only, not the score. Playing it stops whatever the player bar had, since two things at once is no
-use to anyone.
+use to anyone, and closing the window — or moving to Chart or Lyrics — stops it too, so nothing is
+left playing with no control in reach.
 
 **Download MIDI** saves the score for a DAW. It carries the two written voices and, unless you
 untick **Chords**, a piano part playing the chord symbols, which is the only place the harmony is
 written as notes. A plan that changes its metre part way is written in the metre it starts in —
 only that one is recorded — while the notes keep their own lengths. Clicking a note in the staves
 puts the cursor on the ABC that wrote it.
+
+A score with a note above the piano's top or below its bottom is played shifted by whole octaves
+until it fits, and the line beside the player says how far; the staves, the MIDI file and the score
+itself are unchanged. A score with no notes in it yet has nothing to play and says so.
 
 The player needs its note samples, about 7 MB, which are not part of the app: press **Get the
 sounds** once and they are fetched from their upstream home and kept in the library, so playback

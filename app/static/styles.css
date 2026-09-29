@@ -1842,18 +1842,31 @@ button.ghost.run-all { margin-left: 10px; }
   margin: 0 0 10px;
 }
 .score-play .check { margin: 0; white-space: nowrap; }
-#notation-audio { min-height: 30px; }
+/* The player keeps its own width.  A flex item may shrink, and a shrunken one clips
+   the clock and the tempo box instead of wrapping. */
+#notation-audio { flex: none; }
+#notation-audio input[type="checkbox"] { accent-color: var(--accent-a); }
 #notation-note { flex: 1 1 220px; }
 .abcjs-inline-audio {
   background: var(--card-2) !important; border: 1px solid var(--line);
-  border-radius: 10px; height: 30px; padding: 0 6px;
+  border-radius: 10px; height: 34px; padding: 0 8px;
 }
+/* Bigger than abcjs's own, so the icons read at a glance, and a tempo box wide
+   enough for three digits beside the number spinners. */
+.abcjs-inline-audio .abcjs-btn { width: 34px; height: 34px; padding: 8px 5px; }
+.abcjs-inline-audio .abcjs-midi-tempo { width: 54px; }
 .abcjs-inline-audio.abcjs-disabled { opacity: 0.45; }
 .abcjs-inline-audio .abcjs-btn g { fill: var(--muted); }
 .abcjs-inline-audio .abcjs-btn:hover g { fill: var(--text); }
 .abcjs-inline-audio .abcjs-midi-tempo,
 .abcjs-inline-audio .abcjs-midi-clock { color: var(--muted); }
-.abcjs-inline-audio .abcjs-midi-progress-background { background-color: var(--card-3); }
+.abcjs-inline-audio .abcjs-midi-clock { font-size: 15px; }
+.abcjs-inline-audio .abcjs-tempo-wrapper { font-size: 12px; }
+/* abcjs lets the scrubber take the room left over, and a widget that fits its content
+   leaves it a stub that reads as a switch rather than a bar. */
+.abcjs-inline-audio .abcjs-midi-progress-background {
+  background-color: var(--card-3); border-color: rgb(var(--ink) / 0.18); min-width: 150px;
+}
 .abcjs-inline-audio .abcjs-midi-progress-indicator { background-color: var(--accent-a); }
 .abcjs-inline-audio .abcjs-midi-progress-indicator:hover { background-color: var(--accent-b); }
 .abcjs-inline-audio input[type="range"] { accent-color: var(--accent-a); }

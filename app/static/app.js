@@ -1308,8 +1308,41 @@ function sectionChords(section) {
    synthesiser as well: it fetches one small MP3 per note it needs from
    /soundfonts/, plays the score, and writes the same score out as a MIDI file.
    Nothing here goes near the engine: it is the ABC in the box, as you edited it. */
-var NOTATION = { synth: null, tune: null, text: '', marked: [], sounds: null, message: '', busy: false,
-                 at: -1, shift: 0, lead: 0 };
+var NOTATION = { synth: null, tune: null, tuned: null, tunedChords: null, transpose: 0, notes: 0,
+                 playable: false, hasScore: false, text: '', marked: [], sounds: null, message: '',
+                 busy: false, at: -1, shift: 0, lead: 0 };
+// The note samples are one file per key of a piano, A0 to C8.
+var PIANO_LOW = 21, PIANO_HIGH = 108;
+
+/* What the preview can make of a score: how many notes it holds, and how far it has to
+   shift to fit the piano's 88 keys.  A plan can carry a note outside them — a runaway
+   one does — and one missing sample stops the whole preview, so the tune is moved by
+   whole octaves until it fits.  The score is untouched: this is how it sounds here.
+   No notes at all is a different answer from notes nothing can reach. */
+function notationPlayable(chordsOff) {
+  var range = function (shift) {
+    var flat = NOTATION.tune.setUpAudio({ chordsOff: chordsOff, midiTranspose: shift });
+    var lo = 999, hi = -1, count = 0;
+    flat.tracks.forEach(function (track) {
+      track.forEach(function (note) {
+        if (typeof note.pitch !== 'number') { return; }
+        count += 1;
+        lo = Math.min(lo, note.pitch);
+        hi = Math.max(hi, note.pitch);
+      });
+    });
+    return { notes: count, lo: lo, hi: hi };
+  };
+  var plain = range(0);
+  if (!plain.notes) { return { notes: 0, shift: 0, fits: false }; }
+  var shift = null;
+  [0, -12, 12, -24, 24, -36, 36].some(function (candidate) {
+    var found = range(candidate);
+    if (found.lo >= PIANO_LOW && found.hi <= PIANO_HIGH) { shift = candidate; return true; }
+    return false;
+  });
+  return { notes: plain.notes, shift: shift === null ? 0 : shift, fits: shift !== null };
+}
 
 /* The score as it is drawn, and where our own title went in.  It is drawn as it is
    written: filtering the header out lost the per-voice M: lines a plan uses for a
@@ -1385,6 +1418,12 @@ function notationNote(text) { NOTATION.message = text || ''; notationPaintNote()
 
 function notationSoundsReady() { return Boolean(NOTATION.sounds && NOTATION.sounds.ready); }
 
+function notationTransposeWords(shift) {
+  var octaves = Math.abs(shift) / 12;
+  var how = octaves === 1 ? 'an octave' : octaves + ' octaves';
+  return 'Played ' + how + (shift < 0 ? ' lower' : ' higher') + ', to fit the piano\u2019s range.';
+}
+
 function notationPaintNote() {
   var note = $('notation-note');
   if (!note) { return; }
@@ -1395,7 +1434,7 @@ function notationPaintNote() {
       ((NOTATION.sounds && NOTATION.sounds.megabytes) || 7) + ' MB, fetched once, then it works offline.';
     return;
   }
-  note.textContent = '';
+  note.textContent = NOTATION.transpose ? notationTransposeWords(NOTATION.transpose) : '';
 }
 
 function notationPaintBar() {
@@ -1408,17 +1447,17 @@ function notationPaintBar() {
     button.disabled = NOTATION.busy;
   }
   var widget = $('notation-audio');
-  if (widget) { widget.classList.toggle('hidden', !ready); }
+  if (widget) { widget.classList.toggle('hidden', !ready || !NOTATION.hasScore || !NOTATION.playable); }
   notationPaintNote();
 }
 
 async function notationSoundsState() {
   try { NOTATION.sounds = await api('/api/soundfonts'); }
   catch (err) { NOTATION.sounds = null; }
-  notationPaintBar();
-  // The answer arrives after the first hand-over, and it is what decides whether the
-  // controls are live: without this the bar stays disabled until something else moves.
+  // The answer decides whether the controls are live and what can be played at all, so
+  // the score is handed over first and the bar painted from what that settled.
   notationSetTune();
+  notationPaintBar();
   return NOTATION.sounds;
 }
 
@@ -1480,6 +1519,15 @@ function notationInit() {
   NOTATION.synth.load('#notation-audio', NOTATION_CURSOR, {
     displayPlay: true, displayProgress: true, displayWarp: true, displayRestart: true, displayLoop: false
   });
+  // abcjs's own words for these are not the app's: say what they do, in its voice.
+  var words = { '.abcjs-midi-start': 'Play the score, or pause it',
+                '.abcjs-midi-reset': 'Back to the beginning',
+                '.abcjs-midi-progress-background': 'Click or drag to move through the score',
+                '.abcjs-midi-tempo': 'Speed of this preview only: the score keeps its own tempo' };
+  Object.keys(words).forEach(function (selector) {
+    var el = document.querySelector('#notation-audio ' + selector);
+    if (el) { el.title = words[selector]; el.setAttribute('aria-label', words[selector]); }
+  });
   var midi = $('notation-midi');
   if (midi) { midi.addEventListener('click', notationDownloadMidi); }
   var sounds = $('notation-sounds');
@@ -1497,11 +1545,49 @@ function notationSetTune() {
   if (!notationSoundsReady()) { NOTATION.synth.disable(true); return; }
   var chords = $('notation-chords');
   NOTATION.synth.disable(false);
+  // A score other than the one handed over last: abcjs keeps both the buffer it primed
+  // and the flags that say the tune is ready, and setTune resets neither, so Play would
+  // sound the take before this one.  Clearing the flag primes this tune on the next
+  // Play; setTune has already stopped whatever was playing, and the marks the cursor
+  // left on the drawing that has just gone are cleared here.
+  var chordsOff = chords ? !chords.checked : false;
+  if (NOTATION.tuned !== NOTATION.tune || NOTATION.tunedChords !== chordsOff) {
+    NOTATION.synth.isLoaded = false;
+    notationUnmark();
+    NOTATION.tuned = NOTATION.tune;
+    NOTATION.tunedChords = chordsOff;
+    var playable = notationPlayable(chordsOff);
+    NOTATION.notes = playable.notes;
+    NOTATION.transpose = playable.shift;
+    NOTATION.playable = playable.fits;
+    NOTATION.hasScore = playable.notes > 0;
+  }
+  if (!NOTATION.hasScore || !NOTATION.playable) {
+    NOTATION.synth.disable(true);
+    NOTATION.message = NOTATION.hasScore
+      // Nothing can reach these: the samples for them do not exist.
+      ? 'This score has notes outside the piano\u2019s range (A0 to C8), so it cannot be played here. ' +
+        'The staves and the MIDI file are still yours.'
+      : 'This score has no notes in it yet.';
+    notationPaintNote();
+    return;
+  }
   NOTATION.synth.setTune(NOTATION.tune, false, {
     soundFontUrl: '/soundfonts/',
-    chordsOff: chords ? !chords.checked : false,
-    program: 0
+    chordsOff: chordsOff,
+    program: 0,
+    midiTranspose: NOTATION.transpose
   });
+  notationPaintNote();
+}
+
+/* Stop the preview.  abcjs has no stop of its own: handing the same score over again
+   pauses it, rewinds it and clears the flag its play button toggles — which pausing
+   alone leaves set, so the next click would only pause it again. */
+function notationStop() {
+  var synth = NOTATION.synth;
+  if (synth && synth.isStarted) { notationSetTune(); }
+  notationUnmark();
 }
 
 function renderNotationView() {
@@ -1511,6 +1597,14 @@ function renderNotationView() {
   var abc = score.text.trim();
   if (!abc || typeof ABCJS === 'undefined') {
     host.innerHTML = '<p class="hint">No score yet.</p>';
+    // Nothing to hand over, and nothing to leave behind from the last one either.
+    NOTATION.tune = null;
+    NOTATION.tuned = null;
+    NOTATION.hasScore = false;
+    NOTATION.playable = false;
+    notationUnmark();
+    if (NOTATION.synth) { NOTATION.synth.disable(true); }
+    notationPaintBar();
     return;
   }
   NOTATION.at = score.at;
@@ -1531,8 +1625,10 @@ function renderNotationView() {
   }
   NOTATION.tune = drawn && drawn[0] ? drawn[0] : null;
   NOTATION.text = abc;
+  NOTATION.hasScore = Boolean(NOTATION.tune);
   notationInit();
   notationSetTune();
+  notationPaintBar();
 }
 
 /* An instrumental's third view: each section of the plan with its chords.  The
@@ -1593,12 +1689,14 @@ function paintScoreView() {
     if (box) { box.classList.toggle('hidden', name !== view); }
   });
   if (view === 'chart') {
+    notationStop();          // nothing on screen would stop it
     $('chart-big').textContent = chordChart($('score-big').value || '') || '';
     $('score-view-note').textContent = '';
   } else if (view === 'notation') {
     $('score-view-note').textContent = 'Drawn from the ABC with abcjs. It follows your edits.';
     renderNotationView();
   } else {
+    notationStop();
     renderLyricsView();
   }
 }
@@ -1622,6 +1720,7 @@ function openScoreEditor(view) {
 }
 
 function closeScoreEditor() {
+  notationStop();            // a preview left playing has no controls to stop it with
   $('score-modal').classList.add('hidden');
   document.body.style.overflow = '';
   $('abc').focus();
@@ -8722,6 +8821,7 @@ function openEditor(where) {
 
 function closeEditor() {
   if (!editorOpen()) { return; }
+  notationStop();
   $('editor-modal').classList.add('hidden');
   document.body.style.overflow = '';
   paintSheet();
