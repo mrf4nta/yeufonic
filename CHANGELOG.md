@@ -29,8 +29,8 @@ cannot creep back in.
 
 - **Search the takes.** A search box beside the library's filters finds takes with every word typed
   in the title, style, lyrics or LoRA name. It looks through the space on show, or every space with
-  the All spaces chip, where a card from another space names it. The last few searches that found something
-  are offered under the box. Fixes #26.
+  the All spaces chip, where a card from another space names it. The last few searches that found
+  something are offered under the box. Fixes #26.
 
 ### Changed
 
@@ -41,6 +41,10 @@ cannot creep back in.
 
 ### Fixed
 
+- The plan check let through plans that read as scores but couldn't be sung: a vocal line
+  spanning more than three octaves, the metre changing more than four times, or a dozen chords
+  with double sharps or flats. These are now caught, and, like any unreadable plan, written once
+  more with a new seed before the take is marked failed. Fixes #5.
 - A render that doesn't stop at the end of its score plays on to the length cap, and was cut off
   there mid-flow. A take stopped by its cap is now faded out over its last few seconds, and with a
   recording the cap allows about ten seconds past the score rather than thirty, so an overrun is

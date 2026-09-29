@@ -87,6 +87,80 @@ def stopped_early(duration: float | None, abc: str | None, cap: float | None) ->
     return expected >= EARLY_MIN and duration < EARLY_SHARE * expected
 
 
+# A plan the model wrote with its thread lost can still be readable ABC: a vocal line
+# leaping across octaves, bars of 1/8 then 9/8, chords spelled with double sharps.
+# Written plans measured well inside these (the widest line 34 semitones, at most three
+# metre changes, nine such chords); the runaways went far past them (#5).
+RUNAWAY_SPAN = 36       # semitones: three octaves
+RUNAWAY_METERS = 4      # changes of metre in the melody
+RUNAWAY_DOUBLES = 12    # chord symbols with a double sharp or flat
+NOTE = re.compile(r"([_^=]*)([A-Ga-g])([,']*)")
+NOT_NOTES = re.compile(r'"[^"]*"|![^!]*!|\+[^+]*\+|\[[A-Za-z]:[^\]]*\]|%.*$')
+DOUBLE_CHORD = re.compile(r'"[A-G](?:##|bb)')
+STEPS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def voice_lines(abc: str, voice_name: str) -> list[str]:
+    """The music lines of one voice, headers and comments left out."""
+    lines, voice = [], None
+    for raw in (abc or "").splitlines():
+        line = raw.strip()
+        match = VOICE.match(line)
+        if match:
+            voice = match.group(1)
+            continue
+        if voice == voice_name and line and not line.startswith("%") and not HEADER.match(line):
+            lines.append(line)
+    return lines
+
+
+def pitch_span(abc: str, voice_name: str = "Vocal") -> int:
+    """Semitones from the lowest note of a voice to its highest.  The key's own sharps
+    and flats are left out: a semitone either way does not matter here."""
+    pitches = []
+    for line in voice_lines(abc, voice_name):
+        for accidental, letter, octaves in NOTE.findall(NOT_NOTES.sub(" ", line)):
+            pitches.append(STEPS[letter.upper()] + (12 if letter.islower() else 0)
+                           + 12 * (octaves.count("'") - octaves.count(","))
+                           + accidental.count("^") - accidental.count("_"))
+    return max(pitches) - min(pitches) if pitches else 0
+
+
+def meter_changes(abc: str, voice_name: str = "Vocal") -> int:
+    """How many times the metre changes, in the header and then in one voice."""
+    changes, current, voice = 0, None, None
+    for raw in (abc or "").splitlines():
+        line = raw.strip()
+        match = VOICE.match(line)
+        if match:
+            voice = match.group(1)
+            continue
+        if voice not in (None, voice_name):
+            continue
+        for meter in re.finditer(r"(?:^|\[)M:\s*([^\]\s]+)", line):
+            if current is not None and meter.group(1) != current:
+                changes += 1
+            current = meter.group(1)
+    return changes
+
+
+def runaway(abc: str, instrumental: bool = False) -> list[str]:
+    """What makes a written plan unsingable though it reads as a score.  Only for plans
+    the model has just written: a transcription can change metre as often as its song."""
+    melody = "Ins" if instrumental else "Vocal"
+    found = []
+    span = pitch_span(abc, melody)
+    if span > RUNAWAY_SPAN:
+        found.append(f"a {'melody' if instrumental else 'vocal line'} {span / 12:.0f} octaves wide")
+    changes = meter_changes(abc, melody)
+    if changes > RUNAWAY_METERS:
+        found.append(f"the metre changing {changes} times")
+    doubles = len(DOUBLE_CHORD.findall(abc or ""))
+    if doubles > RUNAWAY_DOUBLES:
+        found.append(f"{doubles} chords with double sharps or flats")
+    return found
+
+
 def vocal_bars(abc: str, voice_name: str = "Vocal") -> list[str]:
     """The bars of one voice, the Vocal voice unless told otherwise, in order."""
     bars, voice = [], None

@@ -50,6 +50,16 @@ class PlanEngine:
         pass
 
 
+def plan_twice(take_id):
+    """Write the plan, and then the second try an unreadable first plan asks for."""
+    asyncio.run(jobs.run_job("plan", take_id))
+    first = one("SELECT status, seed FROM takes WHERE id = ?", (take_id,))
+    if first["status"] == "queued":
+        assert jobs.QUEUE.get_nowait() == {"kind": "plan", "id": take_id}
+        asyncio.run(jobs.run_job("plan", take_id))
+    return first
+
+
 def test_an_unreadable_plan_fails_instead_of_landing(monkeypatch):
     real_sleep = asyncio.sleep
     monkeypatch.setattr(jobs.asyncio, "sleep", lambda _s: real_sleep(0))
@@ -58,11 +68,64 @@ def test_an_unreadable_plan_fails_instead_of_landing(monkeypatch):
         jobs.QUEUE.get_nowait()
     take = make_take(status="queued")
     execute("UPDATE takes SET variety = 'wild', auto_render = 1 WHERE id = ?", (take["id"],))
-    asyncio.run(jobs.run_job("plan", take["id"]))
+    first = plan_twice(take["id"])
+    assert first["status"] == "queued" and first["seed"] != take["seed"]   # tried once more, new seed
     row = one("SELECT status, error, abc FROM takes WHERE id = ?", (take["id"],))
     assert row["status"] == "failed" and not row["abc"]
-    assert "unreadable (no vocal part)" in row["error"] and "calmer Plan variety" in row["error"]
+    assert "unreadable twice (no vocal part)" in row["error"] and "calmer Plan variety" in row["error"]
     assert jobs.QUEUE.empty()   # auto-render did not queue a render
+    assert take["id"] not in jobs.RETRIED_PLANS
+
+
+def test_a_second_try_that_reads_well_lands(monkeypatch):
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(jobs.asyncio, "sleep", lambda _s: real_sleep(0))
+    engine = PlanEngine(BROKEN)
+    monkeypatch.setattr(jobs, "ENGINE", engine)
+    while not jobs.QUEUE.empty():
+        jobs.QUEUE.get_nowait()
+    take = make_take(status="queued")
+    asyncio.run(jobs.run_job("plan", take["id"]))
+    assert jobs.QUEUE.get_nowait() == {"kind": "plan", "id": take["id"]}
+    engine.abc = GOOD
+    asyncio.run(jobs.run_job("plan", take["id"]))
+    row = one("SELECT status, error, abc FROM takes WHERE id = ?", (take["id"],))
+    assert row["status"] == "planned" and row["abc"] == GOOD and not row["error"]
+
+
+# A plan that reads as a score but has lost its thread: the vocal line leaps across
+# six octaves and the metre lurches through bars of 1/8, and its chords are spelled
+# with double sharps.
+HEAD = ('X:1\nM:4/4\nL:1/8\nQ:1/4=100\nV: Vocal clef=treble name="Vocal Melody" snm="Vocal"\n'
+        'V: Ins clef=treble name="Ins Melody" snm="Inst."\nK:C\n% verse\n')
+SINGABLE = HEAD + 'V: Vocal\n' + '"C"c2d2e2g2|"Am"a2g2e2c2|"F"F4A4|"G"G8|' * 3 + '\nV: Ins\n' + 'C,,8|c\'\'8|' * 6 + '\n'
+RUNAWAY = (HEAD + 'V: Vocal\n' + '"C"C,,2c\'\'\'2C,,2c\'\'\'2|[M:1/8]"F##dim"c|[M:9/8]"G##7"d9|[M:4/4]' * 4 +
+           '"C##"c8|' * 12 + '\n')
+
+
+def test_a_runaway_plan_is_caught():
+    assert score.runaway(SINGABLE) == []   # a wide instrument part is not the vocal line
+    assert score.problems(RUNAWAY) == []   # it reads as a score
+    assert score.runaway(RUNAWAY) == ["a vocal line 6 octaves wide", "the metre changing 12 times",
+                                      "20 chords with double sharps or flats"]
+    # A metre that changes for a bar or two and back, as songs do, is fine.
+    assert score.meter_changes(HEAD + 'V: Vocal\nc8|[M:3/4]c6|[M:4/4]c8|\n') == 2
+    # An instrumental's melody is its Ins part.
+    assert score.runaway(SINGABLE, instrumental=True) == ["a melody 5 octaves wide"]
+
+
+def test_a_runaway_plan_is_written_once_more(monkeypatch):
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(jobs.asyncio, "sleep", lambda _s: real_sleep(0))
+    monkeypatch.setattr(jobs, "ENGINE", PlanEngine(RUNAWAY))
+    while not jobs.QUEUE.empty():
+        jobs.QUEUE.get_nowait()
+    take = make_take(status="queued")
+    execute("UPDATE takes SET variety = 'bold' WHERE id = ?", (take["id"],))
+    assert plan_twice(take["id"])["status"] == "queued"
+    row = one("SELECT status, error FROM takes WHERE id = ?", (take["id"],))
+    assert row["status"] == "failed" and "a vocal line 6 octaves wide" in row["error"]
+    assert "calmer Plan variety" in row["error"]
 
 
 def test_a_broken_score_is_not_rendered(client):
@@ -81,7 +144,7 @@ def test_instrumental_collapse_advice(monkeypatch):
         jobs.QUEUE.get_nowait()
     take = make_take(status="queued", kind="instrumental")
     execute("UPDATE takes SET style_lora_clip = 1.0, harmony = 1 WHERE id = ?", (take["id"],))
-    asyncio.run(jobs.run_job("plan", take["id"]))
+    plan_twice(take["id"])
     row = one("SELECT status, error, abc FROM takes WHERE id = ?", (take["id"],))
     assert row["status"] == "failed" and not row["abc"]
     assert "repetitive token collapse" in row["error"]

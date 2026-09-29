@@ -37,6 +37,9 @@ CANCELLED: set[str] = set()
 # Renders tried once more because they ended well before their score (in memory:
 # a restart forgets, and at worst a take gets a second retry).
 RETRIED_EARLY: set[str] = set()
+# Plans written once more because the first came out unreadable or runaway (in memory,
+# as above).
+RETRIED_PLANS: set[str] = set()
 # Identity songs being copied in and having their vocal separated, on the CPU.
 IDENTITY_QUEUE: "asyncio.Queue[dict]" = asyncio.Queue()
 # Corpus songs whose running GPU step was stopped: it goes back to not started, not failed.
@@ -571,10 +574,21 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
         if not abc:
             fail(kind, ref_id, "the engine returned no score plan")
             return
-        issues = score.problems(abc, instrumental=record.get("kind") == "instrumental")
+        is_inst = record.get("kind") == "instrumental"
+        issues = score.problems(abc, instrumental=is_inst) or score.runaway(abc, instrumental=is_inst)
+        # A plan that lost its thread is written once more with a new seed before anyone
+        # is told; a second in a row fails, with advice on the settings (#5).
+        if issues and ref_id not in RETRIED_PLANS:
+            RETRIED_PLANS.add(ref_id)
+            seed = int.from_bytes(os.urandom(4), "big")
+            execute("UPDATE takes SET status = 'queued', stage = NULL, seed = ?, sound_seed = NULL WHERE id = ?", (seed, ref_id))
+            log.info("Plan for '%s' came out unreadable (%s); writing it once more with seed %d",
+                     record.get("title") or ref_id, ", ".join(issues), seed)
+            await QUEUE.put({"kind": "plan", "id": ref_id})
+            return
+        RETRIED_PLANS.discard(ref_id)
         if issues:
             advice_parts = []
-            is_inst = record.get("kind") == "instrumental"
             clip_val = float(record.get("style_lora_clip") or 0.0)
             harmony_val = int(record.get("harmony") or 0)
             variety_val = record.get("variety")
@@ -585,7 +599,7 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
             if variety_val in ("bold", "quirky", "wild"):
                 advice_parts.append("choose a calmer Plan variety")
             advice = f". Try to {', or '.join(advice_parts)}" if advice_parts else ""
-            fail(kind, ref_id, f"the plan came out unreadable ({', '.join(issues)}). Write a new plan{advice}.")
+            fail(kind, ref_id, f"the plan came out unreadable twice ({', '.join(issues)}). Write a new plan{advice}.")
             return
         elapsed = time.time() - started
         changed = execute(
