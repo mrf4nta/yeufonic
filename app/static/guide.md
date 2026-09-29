@@ -129,20 +129,31 @@ only, not the score. Playing it stops whatever the player bar had, since two thi
 use to anyone, and closing the window — or moving to Chart or Lyrics — stops it too, so nothing is
 left playing with no control in reach.
 
-**Download MIDI** saves the score for a DAW. It carries the two written voices and, unless you
-untick **Chords**, a piano part playing the chord symbols, which is the only place the harmony is
-written as notes. A plan that changes its metre part way is written in the metre it starts in —
-only that one is recorded — while the notes keep their own lengths. Clicking a note in the staves
-puts the cursor on the ABC that wrote it.
+**Instruments** plays each voice with an instrument the Style names, rather than a piano
+throughout: a style that says *electric guitar, drums* is heard with a guitar, its chords played by
+another, and a bass under them; a sung line is stood in for by a voice, and an instrumental's
+melody is not. The line beside the player says what it chose, and unticking it goes back to the
+piano you would otherwise hear. This is a reading of the style, not of the render: YuE2 decides the
+real performance and adds parts the score never had, so treat it as the plan played in the right
+colours rather than as what the take will sound like.
 
-A score with a note above the piano's top or below its bottom is played shifted by whole octaves
-until it fits, and the line beside the player says how far; the staves, the MIDI file and the score
-itself are unchanged. A score with no notes in it yet has nothing to play and says so.
+**Download MIDI** saves the score for a DAW, with the same instruments. It carries the two written
+voices and, unless you untick **Chords**, a part playing the chord symbols, which is the only place
+the harmony is written as notes. A plan that changes its metre part way is written in the metre it
+starts in — only that one is recorded — while the notes keep their own lengths. Clicking a note in
+the staves puts the cursor on the ABC that wrote it.
 
-The player needs its note samples, about 7 MB, which are not part of the app: press **Get the
-sounds** once and they are fetched from their upstream home and kept in the library, so playback
-works offline afterwards. Until then the staves are drawn as usual and the transport sits there
-greyed, with that button beside it.
+A score with a note above what these instruments can play, or below it, is played shifted by whole
+octaves until it fits, and the line beside the player says how far; the staves, the MIDI file and
+the score itself are unchanged. The instruments are not all the same size — a bass stops well below
+a piano — which is why the line is there when a score is shifted. A score with no notes in it yet
+has nothing to play and says so.
+
+The player needs its note samples, which are not part of the app: each instrument is about 7 MB,
+fetched from its upstream home the first time a preview plays with it and kept in the library, so
+it works offline afterwards. **Play** fetches whatever the current score needs and then starts, and
+**Get the sounds** fetches the same without playing, for anyone who would rather have it ready
+first.
 
 ### Harmony
 

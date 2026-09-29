@@ -98,10 +98,11 @@ differ, the publisher's terms apply.
   app's themes).
 - **The note samples the player uses are not bundled.** It fetches them, when asked, from
   [paulrosen/midi-js-soundfonts](https://github.com/paulrosen/midi-js-soundfonts) into
-  `data/models/soundfonts`, and the app serves them from there. That repository states the
-  licences of its FluidR3_GM (CC BY 3.0) and MusyngKite (CC BY-SA 3.0) sets; the `abcjs` set used
-  here is a third one, with no licence stated, so it is fetched from its publisher rather than
-  redistributed with this app.
+  `data/models/soundfonts`, and the app serves them from there — one set per instrument the
+  preview can play, about 7 MB each, and only the ones a score asks for. That repository states
+  the licences of its FluidR3_GM (CC BY 3.0) and MusyngKite (CC BY-SA 3.0) sets; the `abcjs` set
+  used here is a third one, with no licence stated, so it is fetched from its publisher rather
+  than redistributed with this app.
 
 ### marked (the guide's renderer)
 

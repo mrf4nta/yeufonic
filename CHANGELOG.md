@@ -35,8 +35,16 @@ cannot creep back in.
   the harmony reaches a DAW as notes. The samples the player needs, about 7 MB, are fetched from
   their upstream home the first time and kept in the library, so it works offline afterwards.
   None of it uses the engine, and a plan is heard as it is edited, saved or not. Closing the
-  window, or moving to another tab, stops it, and a score that runs past the piano's 88 keys is
-  played shifted by whole octaves into range, with a line saying how far.
+  window, or moving to another tab, stops it, and a score that runs past what its instruments can
+  play is shifted by whole octaves into range, with a line saying how far.
+- **Each voice plays an instrument the style names.** A score names none: YuE2 writes a melody, a
+  second line and chord symbols. With **Instruments** ticked, the preview reads the Style the take
+  was made with and plays those two lines with something that fits — a guitar, a piano, strings, a
+  synth, whichever the words point at — stands in for a sung line with a voice, and gives the chord
+  symbols a part and a bass of their own. The line beside the player says what it chose, and
+  unticking it plays a piano throughout as before. It is a reading of the style, not of the render.
+  Each instrument is fetched from its publisher the first time it is played, about 7 MB, and the
+  MIDI file carries the same instruments for a DAW.
 
 ## 0.0.8 (2026-09-29)
 

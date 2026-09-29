@@ -1915,6 +1915,9 @@ def soundfont_note(instrument: str, note: str) -> Response:
 def soundfonts_status() -> dict:
     have = soundfonts.installed()
     return {"installed": have, "available": [{"id": key, "name": name} for key, name in soundfonts.SETS.items()],
+            # How far each set that is here can play, so the preview can shift a score
+            # into it: the sets are not all the same size.
+            "ranges": {name: soundfonts.range_of(name) for name in have},
             "megabytes": 7, "ready": bool(have)}
 
 

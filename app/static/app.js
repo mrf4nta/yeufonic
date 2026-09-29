@@ -1310,16 +1310,152 @@ function sectionChords(section) {
    Nothing here goes near the engine: it is the ABC in the box, as you edited it. */
 var NOTATION = { synth: null, tune: null, tuned: null, tunedChords: null, transpose: 0, notes: 0,
                  playable: false, hasScore: false, text: '', marked: [], sounds: null, message: '',
-                 busy: false, at: -1, shift: 0, lead: 0 };
+                 busy: false, at: -1, shift: 0, lead: 0, inserts: [], choice: null, fetching: 0,
+                 tunedRange: null };
 // The note samples are one file per key of a piano, A0 to C8.
 var PIANO_LOW = 21, PIANO_HIGH = 108;
+
+/* ------------------------------------------------- what each voice plays with
+   A score names no instruments: YuE2 writes a melody, a second line and chord symbols.
+   The style the take was made with does name them, so the preview reads it and plays
+   each voice with something that fits instead of a piano throughout.  First match wins,
+   so the list runs from the most particular word to the most general.  The number is a
+   General MIDI program and the id is the sample set of that name (app/soundfonts.py);
+   the score, the staves and the box are untouched — this is how the preview sounds. */
+var PREVIEW_INSTRUMENTS = [
+  { id: 'distortion_guitar', label: 'distorted guitar', program: 30,
+    words: ['distortion', 'distorted', 'heavy metal', 'hard rock', 'punk', 'grunge', 'metal'] },
+  { id: 'overdriven_guitar', label: 'overdriven guitar', program: 29, words: ['overdriven', 'fuzz', 'garage'] },
+  { id: 'acoustic_guitar_nylon', label: 'nylon guitar', program: 24,
+    words: ['nylon', 'classical guitar', 'flamenco', 'spanish guitar'] },
+  { id: 'acoustic_guitar_steel', label: 'steel guitar', program: 25,
+    words: ['acoustic guitar', 'fingerpick', 'fingerpicking', 'strummed', 'unplugged', 'singer-songwriter'] },
+  { id: 'banjo', label: 'banjo', program: 105, words: ['banjo', 'bluegrass'] },
+  { id: 'violin', label: 'violin', program: 40, words: ['violin', 'fiddle'] },
+  { id: 'cello', label: 'cello', program: 42, words: ['cello'] },
+  { id: 'string_ensemble_1', label: 'strings', program: 48,
+    words: ['string', 'orchestral', 'orchestra', 'chamber', 'cinematic', 'baroque'] },
+  { id: 'brass_section', label: 'brass', program: 61,
+    words: ['brass', 'trumpet', 'trombone', 'horn section', 'big band'] },
+  { id: 'alto_sax', label: 'saxophone', program: 65, words: ['sax'] },
+  { id: 'flute', label: 'flute', program: 73, words: ['flute', 'whistle', 'recorder'] },
+  { id: 'marimba', label: 'marimba', program: 12, words: ['marimba', 'kalimba', 'mallet'] },
+  { id: 'vibraphone', label: 'vibraphone', program: 11, words: ['vibraphone', 'glockenspiel', 'xylophone', 'bells'] },
+  { id: 'drawbar_organ', label: 'organ', program: 16, words: ['organ', 'hammond', 'gospel', 'church'] },
+  { id: 'electric_piano_1', label: 'electric piano', program: 4,
+    words: ['rhodes', 'wurlitzer', 'electric piano', 'lo-fi', 'lofi', 'lo fi'] },
+  { id: 'pad_2_warm', label: 'warm pad', program: 89, words: ['pad', 'ambient', 'atmospheric', 'shoegaze'] },
+  { id: 'lead_2_sawtooth', label: 'synth lead', program: 81,
+    words: ['synth', 'synthesizer', 'electronic', 'edm', 'dance', 'techno', 'house'] },
+  { id: 'electric_guitar_clean', label: 'clean guitar', program: 27,
+    words: ['electric guitar', 'jangly', 'jangle', 'twangy', 'guitar'] },
+  { id: 'acoustic_grand_piano', label: 'piano', program: 0, words: ['piano', 'keys', 'ballad'] }
+];
+// What plays the chord symbols, and their bass notes.
+var PREVIEW_COMP = [
+  { id: 'electric_piano_1', label: 'electric piano', program: 4,
+    words: ['rhodes', 'electric piano', 'lo-fi', 'lofi', 'lo fi', 'soul'] },
+  { id: 'drawbar_organ', label: 'organ', program: 16, words: ['organ', 'hammond', 'gospel', 'church'] },
+  { id: 'pad_2_warm', label: 'warm pad', program: 89, words: ['synth', 'electronic', 'ambient', 'dream pop'] },
+  // The strummed ones come before the electric: "acoustic guitar" has "guitar" in it,
+  // and a folk or country song wants the steel, not a clean electric.
+  { id: 'acoustic_guitar_steel', label: 'steel guitar', program: 25,
+    words: ['acoustic guitar', 'folk', 'country', 'bluegrass', 'banjo', 'strummed', 'unplugged'] },
+  { id: 'electric_guitar_clean', label: 'clean guitar', program: 27,
+    words: ['indie', 'rock', 'jangle', 'punk', 'grunge', 'guitar'] }
+];
+var PREVIEW_BASS = [
+  { id: 'slap_bass_1', label: 'slap bass', program: 36, words: ['slap', 'funk'] },
+  { id: 'synth_bass_1', label: 'synth bass', program: 38,
+    words: ['synth', 'electronic', 'edm', 'dance', 'techno', 'house', 'hip hop', 'hip-hop'] },
+  { id: 'acoustic_bass', label: 'upright bass', program: 32, words: ['jazz', 'upright', 'double bass', 'swing'] },
+  { id: 'electric_bass_pick', label: 'pick bass', program: 34, words: ['pick', 'punk', 'rock'] }
+];
+var PREVIEW_BASS_DEFAULT = { id: 'electric_bass_finger', label: 'finger bass', program: 33 };
+// A sung line wants a voice, and a style that asks for a choir gets one.
+var PREVIEW_VOICE = { id: 'voice_oohs', label: 'voice', program: 53 };
+var PREVIEW_CHOIR = { id: 'choir_aahs', label: 'choir', program: 52,
+                      words: ['choir', 'choral', 'harmonies', 'backing vocals', 'vocal harmony'] };
+
+function notationStyleText() { return (($('style') && $('style').value) || '').toLowerCase(); }
+
+function notationMatch(list, style) {
+  var found = null;
+  list.some(function (item) {
+    if (item.words.some(function (word) { return style.indexOf(word) >= 0; })) { found = item; return true; }
+    return false;
+  });
+  return found;
+}
+
+/* Whether a voice has any notes in it — the Vocal voice of an instrumental is rests
+   carrying the chords, and a stand-in for a singer would be wrong there. */
+function notationVoiceHasNotes(text, name) {
+  var inside = false;
+  var lines = (text || '').split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    var voice = /^V:\s*(\w+)/.exec(line);
+    if (voice) { inside = voice[1] === name; continue; }
+    if (!inside || /^[A-Za-z]:/.test(line) || line.charAt(0) === '%') { continue; }
+    var bare = line.replace(/"[^"]*"/g, ' ');
+    if (/[A-Ga-g]/.test(bare)) { return true; }
+  }
+  return false;
+}
+
+/* What the preview will play, or null to leave it the piano it always was.  Nothing is
+   guessed from the audio: this reads the style the take was made with, which is the
+   only thing here that names instruments. */
+function notationChoice(text) {
+  var box = $('notation-instruments');
+  var style = notationStyleText();
+  if ((box && !box.checked) || !style) { return null; }
+  var lead = notationMatch(PREVIEW_INSTRUMENTS, style);
+  if (!lead) { return null; }
+  var comp = notationMatch(PREVIEW_COMP, style);
+  if (!comp) { comp = lead.program === 27 ? PREVIEW_COMP[3] : PREVIEW_INSTRUMENTS[PREVIEW_INSTRUMENTS.length - 1]; }
+  var bass = notationMatch(PREVIEW_BASS, style) || PREVIEW_BASS_DEFAULT;
+  var choir = notationMatch([PREVIEW_CHOIR], style) || null;
+  var sung = notationVoiceHasNotes(text || (($('score-big') && $('score-big').value) || ''), 'Vocal');
+  var voice = sung ? (choir || PREVIEW_VOICE) : null;
+  var chordsOn = !$('notation-chords') || $('notation-chords').checked;
+  var words = [];
+  if (voice) { words.push(voice.label); }
+  words.push(lead.label);
+  if (chordsOn) { words.push(comp.label, bass.label); }
+  return { voice: voice ? voice.program : null, voiceId: voice ? voice.id : null, voiceLabel: voice ? voice.label : '',
+           lead: lead.program, leadId: lead.id, leadLabel: lead.label,
+           chord: chordsOn ? comp.program : null, chordId: chordsOn ? comp.id : null, chordLabel: comp.label,
+           bass: chordsOn ? bass.program : null, bassId: chordsOn ? bass.id : null, bassLabel: bass.label,
+           words: words.filter(function (w, i) { return words.indexOf(w) === i; }).join(', ') };
+}
 
 /* What the preview can make of a score: how many notes it holds, and how far it has to
    shift to fit the piano's 88 keys.  A plan can carry a note outside them — a runaway
    one does — and one missing sample stops the whole preview, so the tune is moved by
    whole octaves until it fits.  The score is untouched: this is how it sounds here.
-   No notes at all is a different answer from notes nothing can reach. */
+   No notes at all is a different answer from notes nothing can reach.
+
+   The instruments are not all the same size — a bass stops at Gb5 and a voice at Gb6 —
+   so the range to fit comes from the sets this score will play through, and a set that
+   is not here yet is taken as a piano's.  The chord track's bass part is left out of it:
+   abcjs writes that low by itself, and a bass's narrow range would otherwise drag a
+   whole song down an octave. */
+function notationFitRange() {
+  var low = PIANO_LOW, high = PIANO_HIGH;
+  var choice = NOTATION.choice;
+  var ranges = (NOTATION.sounds && NOTATION.sounds.ranges) || {};
+  var ids = choice ? [choice.voiceId, choice.leadId, choice.chordId] : ['acoustic_grand_piano'];
+  ids.forEach(function (id) {
+    var range = id ? ranges[id] : null;
+    if (range && range.length === 2) { low = Math.max(low, range[0]); high = Math.min(high, range[1]); }
+  });
+  return high >= low ? { low: low, high: high } : { low: PIANO_LOW, high: PIANO_HIGH };
+}
+
 function notationPlayable(chordsOff) {
+  var fit = notationFitRange();
   var range = function (shift) {
     var flat = NOTATION.tune.setUpAudio({ chordsOff: chordsOff, midiTranspose: shift });
     var lo = 999, hi = -1, count = 0;
@@ -1338,46 +1474,73 @@ function notationPlayable(chordsOff) {
   var shift = null;
   [0, -12, 12, -24, 24, -36, 36].some(function (candidate) {
     var found = range(candidate);
-    if (found.lo >= PIANO_LOW && found.hi <= PIANO_HIGH) { shift = candidate; return true; }
+    if (found.lo >= fit.low && found.hi <= fit.high) { shift = candidate; return true; }
     return false;
   });
   return { notes: plain.notes, shift: shift === null ? 0 : shift, fits: shift !== null };
 }
 
-/* The score as it is drawn, and where our own title went in.  It is drawn as it is
-   written: filtering the header out lost the per-voice M: lines a plan uses for a
-   change of metre, so only an empty T: is filled, and the offsets say where, so a
-   click on a note can still find its place in the box. */
+/* The score as it is drawn, and where the lines the preview added went in.  It is drawn
+   as it is written: filtering the header out lost the per-voice M: lines a plan uses for
+   a change of metre.  Only an empty T: is filled, and each voice is told what to play;
+   both are recorded, so a click on a note still finds its place in the box. */
 function notationAbc() {
   var raw = ($('score-big') && $('score-big').value) || '';
   var lead = raw.length - raw.replace(/^\s+/, '').length;
   var title = (($('title') && $('title').value) || '').trim() || 'Score';
   var lines = raw.slice(lead).split('\n');
-  var at = -1, shift = 0, pos = 0;
+  var choice = notationChoice(raw);
+  NOTATION.choice = choice;      // what the sounds and the hand-over read after this
+  var out = [], inserts = [], at = -1, shift = 0, pos = 0, chars = 0, inBody = false, given = {};
+  var hasTitle = lines.some(function (line) { return /^T:/.test(line); });
+  function emit(line, injected) {
+    // the line and the newline it brought, which is what the offsets have to take off
+    if (injected) { inserts.push({ at: chars, len: line.length + 1 }); }
+    out.push(line);
+    chars += line.length + 1;
+  }
   for (var i = 0; i < lines.length; i++) {
-    if (/^T:/.test(lines[i])) {
-      if (!lines[i].slice(2).trim()) {
-        var filled = 'T: ' + title;
-        at = pos;
-        shift = filled.length - lines[i].length;
-        lines[i] = filled;
-      }
-      return { text: lines.join('\n'), at: at, shift: shift, lead: lead };
+    var line = lines[i];
+    var trimmed = line.trim();
+    if (!hasTitle && (i === 0 || /^X:/.test(trimmed))) {
+      // No title line at all: abcjs would call the tune Untitled.  It goes after X:.
+      emit(line, false);
+      pos += line.length + 1;
+      at = pos;
+      shift = ('T: ' + title + '\n').length;
+      emit('T: ' + title, true);
+      continue;
+    }
+    if (/^T:/.test(trimmed) && !line.slice(2).trim()) {
+      var filled = 'T: ' + title;
+      at = pos;
+      shift = filled.length - line.length;
+      line = filled;
+    }
+    if (/^K:/.test(trimmed)) {
+      if (choice && choice.chord !== null) { emit('%%MIDI chordprog ' + choice.chord, true); }
+      if (choice && choice.bass !== null) { emit('%%MIDI bassprog ' + choice.bass, true); }
+      inBody = true;
+    }
+    emit(line, false);
+    var voice = /^V:\s*(\w+)/.exec(trimmed);
+    if (inBody && voice && choice && !given[voice[1]]) {
+      var program = voice[1] === 'Vocal' ? choice.voice : choice.lead;
+      if (program !== null && program !== undefined) { given[voice[1]] = true; emit('%%MIDI program ' + program, true); }
     }
     pos += lines[i].length + 1;
   }
-  // No title line at all: abcjs would call the tune Untitled. This one goes after X:.
-  var put = /^X:/.test(lines[0] || '') ? 1 : 0;
-  at = put ? lines[0].length + 1 : 0;
-  shift = ('T: ' + title + '\n').length;
-  lines.splice(put, 0, 'T: ' + title);
-  return { text: lines.join('\n'), at: at, shift: shift, lead: lead };
+  return { text: out.join('\n'), at: at, shift: shift, lead: lead, inserts: inserts };
 }
 
+/* Where a character in what is drawn came from in the box: the preview's own lines come
+   back off, then the title that was filled in, then the blank space the drawing skipped. */
 function notationSourceIndex(index) {
-  var i = index + NOTATION.lead;
-  if (NOTATION.at < 0 || i < NOTATION.at) { return i; }
-  return Math.max(NOTATION.at, i - NOTATION.shift);
+  var removed = 0;
+  (NOTATION.inserts || []).forEach(function (ins) { if (ins.at < index) { removed += ins.len; } });
+  var trimmed = index - removed - NOTATION.lead;
+  if (NOTATION.at >= 0 && trimmed >= NOTATION.at) { trimmed -= NOTATION.shift; }
+  return Math.max(0, trimmed + NOTATION.lead);
 }
 
 /* Clicking a note puts the cursor on the ABC it came from. */
@@ -1416,7 +1579,26 @@ var NOTATION_CURSOR = {
 
 function notationNote(text) { NOTATION.message = text || ''; notationPaintNote(); }
 
-function notationSoundsReady() { return Boolean(NOTATION.sounds && NOTATION.sounds.ready); }
+/* The sample sets this score is about to use: what the style chose, or the piano when it
+   chose nothing.  A set is fetched whole or not at all, so readiness is per instrument. */
+function notationNeeded() {
+  var choice = NOTATION.choice;
+  var ids = choice ? [choice.voiceId, choice.leadId, choice.chordId, choice.bassId] : ['acoustic_grand_piano'];
+  ids = ids.filter(function (id) { return Boolean(id); });
+  return ids.filter(function (id, i) { return ids.indexOf(id) === i; });
+}
+
+function notationMissing() {
+  var have = (NOTATION.sounds && NOTATION.sounds.installed) || [];
+  return notationNeeded().filter(function (id) { return have.indexOf(id) < 0; });
+}
+
+function notationSoundSize(count) {
+  var each = (NOTATION.sounds && NOTATION.sounds.megabytes) || 7;
+  return each * (count === undefined ? notationMissing().length : count);
+}
+
+function notationSoundsReady() { return Boolean(NOTATION.sounds) && notationMissing().length === 0; }
 
 function notationTransposeWords(shift) {
   var octaves = Math.abs(shift) / 12;
@@ -1428,21 +1610,32 @@ function notationPaintNote() {
   var note = $('notation-note');
   if (!note) { return; }
   if (NOTATION.message) { note.textContent = NOTATION.message; return; }
-  if (NOTATION.busy) { note.textContent = 'Getting the note samples…'; return; }
-  if (!notationSoundsReady()) {
-    note.textContent = 'Play, or Get the sounds, fetches the note samples once — about ' +
-      ((NOTATION.sounds && NOTATION.sounds.megabytes) || 7) + ' MB — and it works offline afterwards.';
+  if (NOTATION.busy) {
+    var many = notationMissing().length;
+    note.textContent = many > 1
+      ? 'Getting the note samples (' + NOTATION.fetching + ' of ' + many + ')…'
+      : 'Getting the note samples…';
     return;
   }
-  note.textContent = NOTATION.transpose ? notationTransposeWords(NOTATION.transpose) : '';
+  if (!notationSoundsReady()) {
+    var short = notationMissing().length;
+    note.textContent = 'Play, or Get the sounds, fetches ' +
+      (short === 1 ? 'one instrument' : short + ' instruments') + ' once — about ' +
+      notationSoundSize(short) + ' MB — and it works offline afterwards.';
+    return;
+  }
+  var said = [];
+  if (NOTATION.choice) { said.push('Played as ' + NOTATION.choice.words + ', from the style.'); }
+  if (NOTATION.transpose) { said.push(notationTransposeWords(NOTATION.transpose)); }
+  note.textContent = said.join(' ');
 }
 
 function notationPaintBar() {
   var ready = notationSoundsReady();
   var button = $('notation-sounds');
   if (button) {
-    var size = NOTATION.sounds && NOTATION.sounds.megabytes ? ' (' + NOTATION.sounds.megabytes + ' MB)' : '';
-    button.textContent = NOTATION.busy ? 'Getting the sounds…' : 'Get the sounds' + size;
+    button.textContent = NOTATION.busy ? 'Getting the sounds…'
+      : 'Get the sounds (' + notationSoundSize() + ' MB)';
     button.classList.toggle('hidden', ready);
     button.disabled = NOTATION.busy;
   }
@@ -1465,13 +1658,21 @@ async function notationSoundsState() {
 
 async function notationGetSounds(thenPlay) {
   if (NOTATION.busy) { return; }
+  var missing = notationMissing();
+  if (!missing.length) {
+    if (thenPlay && NOTATION.playable && NOTATION.synth) { NOTATION.synth.play(); }
+    return;
+  }
   NOTATION.busy = true;
+  NOTATION.fetching = 0;
   notationNote('');
   notationPaintBar();
   try {
-    var offered = (NOTATION.sounds && NOTATION.sounds.available) || [];
-    var id = offered.length && offered[0].id ? offered[0].id : 'acoustic_grand_piano';
-    await api('/api/soundfonts/' + encodeURIComponent(id) + '/download', { method: 'POST' });
+    for (var i = 0; i < missing.length; i++) {
+      NOTATION.fetching = i + 1;
+      notationPaintBar();
+      await api('/api/soundfonts/' + encodeURIComponent(missing[i]) + '/download', { method: 'POST' });
+    }
     await notationSoundsState();
     notationSetTune();          // they are here now: hand the score over
     if (thenPlay && NOTATION.playable) { NOTATION.synth.play(); }
@@ -1547,7 +1748,10 @@ function notationInit() {
   var sounds = $('notation-sounds');
   if (sounds) { sounds.addEventListener('click', notationGetSounds); }
   var chords = $('notation-chords');
-  if (chords) { chords.addEventListener('change', function () { notationSetTune(); }); }
+  // Both of these change what is played and which samples it needs.
+  if (chords) { chords.addEventListener('change', function () { notationSetTune(); notationPaintBar(); }); }
+  var instruments = $('notation-instruments');
+  if (instruments) { instruments.addEventListener('change', function () { renderNotationView(); notationPaintBar(); }); }
   notationSoundsState();
   return NOTATION.synth;
 }
@@ -1564,11 +1768,13 @@ function notationSetTune() {
   // Play; setTune has already stopped whatever was playing, and the marks the cursor
   // left on the drawing that has just gone are cleared here.
   var chordsOff = chords ? !chords.checked : false;
-  if (NOTATION.tuned !== NOTATION.tune || NOTATION.tunedChords !== chordsOff) {
+  var rangeKey = JSON.stringify(notationFitRange());
+  if (NOTATION.tuned !== NOTATION.tune || NOTATION.tunedChords !== chordsOff || NOTATION.tunedRange !== rangeKey) {
     NOTATION.synth.isLoaded = false;
     notationUnmark();
     NOTATION.tuned = NOTATION.tune;
     NOTATION.tunedChords = chordsOff;
+    NOTATION.tunedRange = rangeKey;
     var playable = notationPlayable(chordsOff);
     NOTATION.notes = playable.notes;
     NOTATION.transpose = playable.shift;
@@ -1593,12 +1799,17 @@ function notationSetTune() {
     return;
   }
   NOTATION.synth.disable(false);
-  NOTATION.synth.setTune(NOTATION.tune, false, {
+  var playing = {
     soundFontUrl: '/soundfonts/',
     chordsOff: chordsOff,
     program: 0,
     midiTranspose: NOTATION.transpose
-  });
+  };
+  // What the chord symbols and their bass notes are played with, when the style named
+  // something: abcjs takes these as options rather than as lines in the score.
+  if (NOTATION.choice && NOTATION.choice.chord !== null) { playing.chordprog = NOTATION.choice.chord; }
+  if (NOTATION.choice && NOTATION.choice.bass !== null) { playing.bassprog = NOTATION.choice.bass; }
+  NOTATION.synth.setTune(NOTATION.tune, false, playing);
   notationPaintNote();
 }
 
@@ -1631,6 +1842,7 @@ function renderNotationView() {
   NOTATION.at = score.at;
   NOTATION.shift = score.shift;
   NOTATION.lead = score.lead;
+  NOTATION.inserts = score.inserts || [];
   var drawn = null;
   try {
     // No responsive mode: abcjs then positions the SVG in the flow, so it scrolls
