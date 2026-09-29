@@ -2049,7 +2049,7 @@ function paintScoreView() {
     $('chart-big').textContent = chordChart($('score-big').value || '') || '';
     $('score-view-note').textContent = '';
   } else if (view === 'notation') {
-    $('score-view-note').textContent = 'Drawn from the ABC with abcjs. It follows your edits.';
+    $('score-view-note').textContent = '';
     renderNotationView();
   } else {
     notationStop();
