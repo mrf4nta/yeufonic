@@ -34,6 +34,13 @@ cannot creep back in.
 
 ### Changed
 
+- **Training takes as much of each song as the card allows.** The cut was a fixed 3½ minutes, so
+  most songs in a corpus were cut short. `TRAIN_MAX_MINUTES` and `TRAIN_MAX_TOKENS` now default
+  to `auto`: when a corpus is exported and when training starts, the app reads the graphics
+  card's free memory and works out how much of each song the dataset builder can hold, and a
+  context to fit (about 5½ minutes on a 16 GB card, never below 3½ nor above 6, nor past the
+  longest song). The Logs window says what was chosen. Setting either to a number, such as
+  `3.5`, overrides it, and a training run that runs out of memory now says so.
 - **Training cuts a long song at a section end.** A song longer than the training limit was cut
   where the limit fell, mid-bar, with the whole song's words, so the planner learned that songs
   stop abruptly and were sung words they never reached. The export now cuts it at the end of the

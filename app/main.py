@@ -40,7 +40,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, score, stems
+from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, score, stems, trainsize
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -1912,9 +1912,15 @@ def _identity(identity_id: str) -> dict:
 _persona = _identity
 
 
-def _training_cut(song: dict) -> dict | None:
-    """Where the trainer's length limit cuts this song, and the words that stay (#7)."""
-    limit = config.TRAIN_MAX_MINUTES * 60
+def _train_sizing(identity_id: str) -> dict:
+    """How much of each song a corpus trains on, from the card as it is now."""
+    durations = [r["duration"] for r in rows(
+        "SELECT duration FROM identity_songs WHERE identity_id = ? AND include = 1", (identity_id,))]
+    return trainsize.for_corpus(durations, ENGINE.gpu())
+
+
+def _training_cut(song: dict, limit: float) -> dict | None:
+    """Where the trainer's length limit (seconds) cuts this song, and the words that stay (#7)."""
     if not song.get("stored_path") or not song.get("duration") or song["duration"] <= limit + 1:
         return None
     folder = Path(song["stored_path"]).parent
@@ -1931,8 +1937,9 @@ def _training_cut(song: dict) -> dict | None:
 
 def _identity_view(identity: dict) -> dict:
     songs = rows("SELECT * FROM identity_songs WHERE identity_id = ? ORDER BY position", (identity["id"],))
+    limit = _train_sizing(identity["id"])["minutes"] * 60
     for song in songs:
-        cut = _training_cut(song) if song["include"] else None
+        cut = _training_cut(song, limit) if song["include"] else None
         song["trained_to"] = cut["seconds"] if cut else None
         song["caption"] = identities.caption(identity["trigger_word"], song["description"] or identity["description"],
                                              identity["voice"], song["key"], song["tempo"],
@@ -2637,6 +2644,8 @@ async def _export(identity: dict, view: dict, chosen: list[dict]) -> dict:
     await asyncio.to_thread(remove_tree, dest)
     dest.mkdir(parents=True, exist_ok=True)
     written, skipped, unchecked, cut_short = [], [], [], []
+    sizing = _train_sizing(identity_id)
+    log.info("Exporting corpus '%s' for training on %s", identity["name"], sizing["reason"])
     for number, song in enumerate(chosen):
         EXPORTING[identity_id].update(done=number, song=song["title"])
         if not song["stored_path"] or not Path(song["stored_path"]).is_file():
@@ -2646,7 +2655,7 @@ async def _export(identity: dict, view: dict, chosen: list[dict]) -> dict:
         name = identities.export_name(song)
         # A song longer than the trainer's limit is cut at the end of a section, faded out,
         # and keeps only the words still sung (#7).
-        cut = await asyncio.to_thread(_training_cut, song)
+        cut = await asyncio.to_thread(_training_cut, song, sizing["minutes"] * 60)
         command = ["ffmpeg", "-v", "error", "-y", "-i", song["stored_path"]]
         if cut:
             fade_from = max(0.0, cut["seconds"] - identities.TRAIN_FADE)
@@ -2662,7 +2671,8 @@ async def _export(identity: dict, view: dict, chosen: list[dict]) -> dict:
         if not song["lyrics_checked"]:
             unchecked.append(song["title"])
     manifest = {"identity": identity["name"], "trigger_word": identity["trigger_word"], "consent": True,
-                "songs": written, "unchecked_lyrics": unchecked, "cut_for_training": cut_short, "exported_at": time.time(), "app": config.VERSION}
+                "songs": written, "unchecked_lyrics": unchecked, "cut_for_training": cut_short, "train_minutes": sizing["minutes"],
+                "exported_at": time.time(), "app": config.VERSION}
     (dest / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     execute("UPDATE identities SET exported_at = ?, export_dir = ? WHERE id = ?", (time.time(), str(dest), identity_id))
     log.info("Exported training dataset for corpus '%s' (%d songs) -> %s", identity["name"], len(written), dest)

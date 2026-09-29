@@ -50,3 +50,23 @@ def test_a_card_that_cannot_be_read_gets_the_default():
     assert unknown["minutes"] == trainsize.FLOOR_MINUTES and not unknown["tight"]
     assert "could not be read" in unknown["reason"]
     assert trainsize.choose(card(14.7), [])["minutes"] == trainsize.FLOOR_MINUTES     # a corpus with no songs yet
+
+
+def test_the_settings_win_over_the_card(monkeypatch):
+    from app import config
+    monkeypatch.setattr(config, "TRAIN_MINUTES_AUTO", True)
+    monkeypatch.setattr(config, "TRAIN_TOKENS_AUTO", True)
+    auto = trainsize.for_corpus(LONG, card(14.7))
+    assert auto["minutes"] == 5.5 and auto["tokens"] == 10240 and "14.7 GB available" in auto["reason"]
+    # A card that runs out is given less by setting a number.
+    monkeypatch.setattr(config, "TRAIN_MINUTES_AUTO", False)
+    monkeypatch.setattr(config, "TRAIN_MAX_MINUTES", 3.0)
+    smaller = trainsize.for_corpus(LONG, card(14.7))
+    assert smaller["minutes"] == 3.0 and "TRAIN_MAX_MINUTES" in smaller["reason"]
+    assert smaller["tokens"] == trainsize.tokens_for(180) or smaller["tokens"] == trainsize.MIN_TOKENS
+    monkeypatch.setattr(config, "TRAIN_TOKENS_AUTO", False)
+    monkeypatch.setattr(config, "TRAIN_MAX_TOKENS", 12288)
+    assert trainsize.for_corpus(LONG, card(14.7))["tokens"] == 12288
+    # Unreadable card, and auto: the default.
+    monkeypatch.setattr(config, "TRAIN_MINUTES_AUTO", True)
+    assert trainsize.for_corpus(LONG, None)["minutes"] == trainsize.FLOOR_MINUTES

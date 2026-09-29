@@ -63,7 +63,7 @@ def test_a_job_lost_when_the_engine_stopped_says_so(monkeypatch):
 def test_training_lost_to_running_out_gets_the_training_hint(monkeypatch):
     engine = use(monkeypatch, FakeEngine([], started=True, state="gone"))
     engine.oom_at = time.time() + 1
-    with pytest.raises(RuntimeError, match="ran out of memory.*longest songs"):
+    with pytest.raises(RuntimeError, match="ran out of memory.*TRAIN_MAX_MINUTES"):
         asyncio.run(jobs._run_graph("train", "run1", {}))
 
 
@@ -103,7 +103,7 @@ def test_the_engines_note_as_its_job_thread_died_names_a_lost_job(monkeypatch, t
     monkeypatch.setattr(jobs.config, "ENGINE_OUTPUT_DIR", tmp_path)
     write_fault(tmp_path, prompt_id="pid", at=time.time() + 1, out_of_memory=True, type="AcceleratorError", message="x")
     use(monkeypatch, FakeEngine([], started=True, state="gone"))
-    with pytest.raises(RuntimeError, match="ran out of memory.*longest songs"):
+    with pytest.raises(RuntimeError, match="ran out of memory.*TRAIN_MAX_MINUTES"):
         asyncio.run(jobs._run_graph("train", "run1", {}))
 
 
@@ -229,7 +229,7 @@ def test_training_on_an_engine_without_a_job_thread_says_to_restart(monkeypatch,
     engine = use(monkeypatch, FakeEngine([], started=True, state="running"))
     engine.stuck_on = None
     write_fault(tmp_path, prompt_id="pid", at=time.time() + 1, out_of_memory=True, type="AcceleratorError", message="x")
-    with pytest.raises(RuntimeError, match="longest songs.*restarted"):
+    with pytest.raises(RuntimeError, match="TRAIN_MAX_MINUTES.*restarted"):
         asyncio.run(jobs._run_graph("train", "run1", {}))
 
 

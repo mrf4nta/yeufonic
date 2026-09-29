@@ -619,8 +619,8 @@ heard back to an earlier step with **Checkpoints**.
 | `TRAIN_PASSES` | `10` | passes over each song. A corpus big enough for more steps than the floor gets these: 60 songs gives 600 |
 | `TRAIN_STEPS` | unset | a fixed step count for every run, in place of the two above |
 | `TRAIN_CHECKPOINT_EVERY` | `50` | steps between the checkpoints a run saves |
-| `TRAIN_MAX_MINUTES` | `3.5` | how much of each song is trained on, from its start, in minutes. Preparing a song for training holds it whole on the GPU, so the longest a card can take depends on its memory: about 6 minutes on 16 GB. Raise `TRAIN_MAX_TOKENS` with it |
-| `TRAIN_MAX_TOKENS` | `8192` | the Planner's context: it learns each song whole, as one sequence, and leaves out any song too long for it. 8192 holds songs to about 5 minutes; for longer, use `12288` (with `TRAIN_MAX_MINUTES` of `5.5`, for example). It costs little in itself: time and memory follow the songs' real length |
+| `TRAIN_MAX_MINUTES` | `auto` | how much of each song is trained on, from its start, in minutes. `auto` works it out from the graphics card's free memory when a corpus is exported and when training starts, and never goes below 3.5, above 6, or past the longest song: about 5.5 on a 16 GB card. Preparing a song for training holds it whole on the GPU, so if that runs out of memory, set a lower number (`3.5`, say). The Logs window shows what was chosen |
+| `TRAIN_MAX_TOKENS` | `auto` | the Planner's context: it learns each song whole, as one sequence, and leaves out any song too long for it. `auto` sizes it to the longest song after the cut (at least 8192, at most 16384); a number fixes it. It costs little in itself: time and memory follow the songs' real length |
 | `TRAIN_RANK_PLANNER` | `64` | how much the Planner half, which shapes the melody and structure, can hold. Higher can capture more, and makes a bigger file that overfits more easily |
 | `TRAIN_RANK_DECODER` | `32` | the same for the Sound half |
 | `TRAIN_DECODER_STEPS` | `1000` | steps for the Sound half, whatever the corpus size |

@@ -102,6 +102,42 @@ def test_a_finished_run_is_named_after_the_corpus_and_keeps_its_snapshots(client
     assert one("SELECT lora FROM identities WHERE id = 'corpus1'")["lora"] == "alicia_lora.safetensors"
 
 
+def test_a_run_trains_on_as_much_of_each_song_as_the_card_allows(client, monkeypatch, tmp_path):
+    """Worked out when Train is pressed, from the card as it is then: the minutes reach the
+    dataset builder and the context reaches the trainer. Numbers in the settings win."""
+    import asyncio
+    from app import jobs, loras
+
+    root = tmp_path / "loras"
+    root.mkdir()
+    monkeypatch.setattr(config, "ENGINE_INPUT_DIR", tmp_path / "engine-input")
+    monkeypatch.setattr(loras, "folder", lambda: root)
+    monkeypatch.setattr(config, "TRAIN_MINUTES_AUTO", True)
+    monkeypatch.setattr(config, "TRAIN_TOKENS_AUTO", True)
+    monkeypatch.setattr(jobs.ENGINE, "gpu", lambda: {"vram_free": 14.7 * 1024 ** 3, "engine_vram": 0})
+    seen = {}
+
+    async def trained(kind, run_id, graph):
+        seen["graph"] = graph
+        (root / "alicia_lora_best.safetensors").write_bytes(b"x")
+    monkeypatch.setattr(jobs, "_run_graph", trained)
+
+    a_corpus()
+    execute("""INSERT INTO identity_songs(id, identity_id, file, title, sha256, duration, include, position)
+               VALUES('s1', 'corpus1', 'a.flac', 'A', 'h1', 400, 1, 0)""")
+    execute("""INSERT INTO lora_runs(id, identity_id, lora_name, steps, rank, state)
+               VALUES('run1', 'corpus1', 'alicia_lora', 100, 16, 'queued')""")
+    asyncio.run(jobs.run_lora_train("run1"))
+    assert seen["graph"]["3"]["inputs"]["max_minutes"] == 5.5
+    assert seen["graph"]["5"]["inputs"]["max_tokens"] == 10240
+
+    monkeypatch.setattr(config, "TRAIN_MINUTES_AUTO", False)
+    monkeypatch.setattr(config, "TRAIN_MAX_MINUTES", 4.0)
+    execute("UPDATE lora_runs SET state = 'queued' WHERE id = 'run1'")
+    asyncio.run(jobs.run_lora_train("run1"))
+    assert seen["graph"]["3"]["inputs"]["max_minutes"] == 4.0
+
+
 def test_steps_follow_the_size_of_the_corpus_above_a_floor(monkeypatch):
     """About ten passes over each song, the trainer's rule of thumb, rounded up to a
     checkpoint, and never fewer than 500.  Ten passes alone give a small corpus too few

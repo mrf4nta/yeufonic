@@ -174,6 +174,7 @@ def test_the_export_cuts_a_long_song_with_a_fade_and_the_words_still_sung(client
     (folder / "score.abc").write_text(
         "X:1\nM:4/4\nL:1/4\nQ:1/4=120\nV: Vocal\nK:C\n% intro\n" + "z4|" * 2 + "\n% verse\n" + "c4|" * 3 +
         "\n% chorus\n" + "c4|" * 3 + "\n% outro\n" + "z4|" * 2 + "\n")
+    monkeypatch.setattr(config, "TRAIN_MINUTES_AUTO", False)
     monkeypatch.setattr(config, "TRAIN_MAX_MINUTES", 1.0)                 # 60 s
     view = client.get(f"/api/identities/{made['id']}").json()
     assert next(s for s in view["songs"] if s["id"] == song["id"])["trained_to"] == 50.0

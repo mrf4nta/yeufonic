@@ -140,8 +140,13 @@ TRAIN_RANK = TRAIN_RANK_PLANNER
 # codes and an end token.  A song whose sequence is longer than TRAIN_MAX_TOKENS is left
 # out of Planner training altogether, so songs are cut at TRAIN_MAX_MINUTES to fit.  A
 # larger context lets longer songs in whole, at the cost of memory and time.
-TRAIN_MAX_MINUTES = float(os.environ.get("TRAIN_MAX_MINUTES", "3.5"))
-TRAIN_MAX_TOKENS = int(os.environ.get("TRAIN_MAX_TOKENS", "8192"))
+# Both are worked out from the graphics card (see trainsize.py) unless set to numbers.
+_MINUTES = os.environ.get("TRAIN_MAX_MINUTES", "auto").strip().lower()
+_TOKENS = os.environ.get("TRAIN_MAX_TOKENS", "auto").strip().lower()
+TRAIN_MINUTES_AUTO = _MINUTES in ("", "auto")
+TRAIN_TOKENS_AUTO = _TOKENS in ("", "auto")
+TRAIN_MAX_MINUTES = 3.5 if TRAIN_MINUTES_AUTO else float(_MINUTES)
+TRAIN_MAX_TOKENS = 8192 if TRAIN_TOKENS_AUTO else int(_TOKENS)
 TRAIN_END_TOKEN_WEIGHT = float(os.environ.get("TRAIN_END_TOKEN_WEIGHT", "1.0"))
 TRAIN_CLIP_SECONDS = float(os.environ.get("TRAIN_CLIP_SECONDS", "30.0"))
 REGULARIZER_PACK = os.environ.get("REGULARIZER_PACK", "minted_regularizer_pack_v2.pt")

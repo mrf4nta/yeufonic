@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, identities, instrumental, llm, loras, lyrics, score, stems
+from . import config, identities, instrumental, llm, loras, lyrics, score, stems, trainsize
 from .db import bump_average, execute, get_setting, one, rows
 from .engine import OUT_OF_MEMORY, Engine, load_template
 from .library import (audio_duration, ensure_peaks, fade_out_end, loudness, inside, normal_target, normalise, normalised_path, original_path, remove_tree,
@@ -1016,7 +1016,7 @@ def _gemma_graph(prompt: str, audio_files: list[str], max_length: int) -> dict:
 
 # What to try when the GPU runs out, by job.
 OOM_HINTS = {
-    "train": "Close anything else using the GPU, or leave the longest songs out, and train again.",
+    "train": "Close anything else using the GPU, or set TRAIN_MAX_MINUTES to a lower number (see the README), and train again.",
     "render": "Close anything else using the GPU, or lower the length cap, and render again.",
     "plan": "Close anything else using the GPU, or lower the length cap, and plan again.",
 }
@@ -1280,7 +1280,7 @@ run_persona_job = run_identity_job
 
 def train_graph(audio_folder: str, dataset_name: str, lora_name: str, steps: int,
                 rank_planner: int = 64, rank_decoder: int = 32,
-                max_minutes: float = 3.5) -> dict:
+                max_minutes: float = 3.5, max_tokens: int | None = None) -> dict:
     """The dual-branch FS_Audio training graph in ComfyUI prompt API format.
 
     Trains both planner LoRA (composition/harmony/phrasing) and decoder LoRA
@@ -1342,7 +1342,7 @@ def train_graph(audio_folder: str, dataset_name: str, lora_name: str, steps: int
                 "kl_weight": 0.1,
                 "score_first_fraction": config.TRAIN_SCORE_FIRST,
                 "end_token_weight": config.TRAIN_END_TOKEN_WEIGHT,
-                "max_tokens": config.TRAIN_MAX_TOKENS,
+                "max_tokens": max_tokens or config.TRAIN_MAX_TOKENS,
                 "window_seconds": 30.0,
                 "ema_decay": 0.99,
                 "eval_every": 25,
@@ -1403,9 +1403,19 @@ async def run_lora_train(run_id: str) -> None:
         # Whatever analysis or renders left loaded would share the card with the trainer,
         # and preparing long songs already takes most of a 16 GB card.
         await ENGINE.free()
+        # How much of each song, and how large a context, from the card as it is now (the
+        # engine has just let go of what it held, and that is counted as free).
+        sizing = trainsize.for_corpus(
+            [r["duration"] for r in rows("SELECT duration FROM identity_songs WHERE identity_id = ? AND include = 1",
+                                         (identity["id"],))], ENGINE.gpu())
+        log.info("Training on %s. %s", sizing["reason"],
+                 "" if not config.TRAIN_MINUTES_AUTO else "Set TRAIN_MAX_MINUTES to change it.")
+        if sizing["tight"]:
+            log.warning("This card is short of memory for training: preparing the songs may run out at %s",
+                        trainsize.clock(sizing["minutes"]))
         graph = train_graph(f"lora-{run_id}", f"dataset_{run_id}",
                             run["lora_name"], steps, rank_planner, rank_decoder,
-                            config.TRAIN_MAX_MINUTES)
+                            sizing["minutes"], sizing["tokens"])
         await _run_graph("train", run_id, graph)
         produced = await finish_training(run, identity)
         _run_state(run_id, state="done", stage=None, progress=1.0, finished_at=time.time(),

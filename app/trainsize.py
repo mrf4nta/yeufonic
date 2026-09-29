@@ -9,13 +9,19 @@ encodes each song whole on the GPU, and the memory it needs grows with the song.
     tokens  = 25 x seconds + the style and lyrics, rounded up to whole 512s
     minutes = (memory the engine could have - the builder's base - a margin) / per minute
 
+The card is read when a corpus is exported and again when its training starts, counting
+what the engine holds as available, since it lets go of that first.  TRAIN_MAX_MINUTES and
+TRAIN_MAX_TOKENS win when set to numbers, so a card that runs out of memory can be given less.
+
 `BUILDER_*` are provisional: one measurement (a build of songs up to 5:54 used about
 13.9 GB of a 16 GB card, the engine at rest holding 8.6 GB) fitted to a straight line.
-Two builds at different cuts would replace them.  Nothing here starts a build.
+Two builds at different cuts would replace them.
 """
 from __future__ import annotations
 
 import math
+
+from . import config
 
 TOKENS_PER_SECOND = 25
 PREFIX_TOKENS = 1536         # style and lyrics: at most 3,840 characters in the sets seen
@@ -63,28 +69,52 @@ def available_gb(gpu: dict | None) -> float | None:
     return ((gpu.get("vram_free") or 0) + (gpu.get("engine_vram") or 0)) / GB
 
 
-def choose(gpu: dict | None, durations: list[float]) -> dict:
-    """The cut and the context for songs of these lengths (seconds) on this card.
-
-    Never below the default cut, so it cannot do worse than not asking; never above
-    what the builder can encode whole, nor above the longest song; and a context that
-    holds the longest sequence that results."""
+def card_limit(gpu: dict | None) -> dict:
+    """What the card allows: minutes of a song, and how it got there."""
     free = available_gb(gpu)
-    longest = max((d for d in durations if d), default=0.0) / 60
     if free is None:
-        raw, note = None, "the card's memory could not be read"
-    else:
-        raw = minutes_from_memory(free)
-        note = (f"{free:.1f} GB available; the builder needs about {BUILDER_BASE_GB:g} GB "
-                f"and {BUILDER_GB_PER_MINUTE:g} GB a minute, with {MARGIN_GB:g} GB spare")
-    memory_limit = FLOOR_MINUTES if raw is None else _half_minutes_down(min(raw, CEILING_MINUTES))
-    minutes = max(FLOOR_MINUTES, memory_limit)
+        return {"minutes": FLOOR_MINUTES, "tight": False, "free_gb": None,
+                "note": "the card's memory could not be read"}
+    raw = minutes_from_memory(free)
+    return {"minutes": max(FLOOR_MINUTES, _half_minutes_down(min(raw, CEILING_MINUTES))),
+            "tight": raw < FLOOR_MINUTES, "free_gb": free,
+            "note": f"{free:.1f} GB available; the builder needs about {BUILDER_BASE_GB:g} GB "
+                    f"and {BUILDER_GB_PER_MINUTE:g} GB a minute, with {MARGIN_GB:g} GB spare"}
+
+
+def size(limit: float, durations: list[float]) -> dict:
+    """The cut and the context for songs of these lengths (seconds), given the most the
+    card allows.  Never below the default cut, never above the longest song, and a
+    context that holds the longest sequence that results."""
+    longest = max((d for d in durations if d), default=0.0) / 60
     # Not more than the songs have; and with none yet, the default.
-    minutes = min(minutes, max(FLOOR_MINUTES, _half_minutes_up(longest))) if longest else FLOOR_MINUTES
+    minutes = min(limit, max(FLOOR_MINUTES, _half_minutes_up(longest))) if longest else FLOOR_MINUTES
     tokens = min(MAX_TOKENS, max(MIN_TOKENS, tokens_for(min(longest, minutes) * 60)))
-    whole = sum(1 for d in durations if d and d <= minutes * 60 + 1)
-    return {
-        "minutes": minutes, "tokens": tokens, "whole": whole, "songs": len([d for d in durations if d]),
-        "tight": raw is not None and raw < FLOOR_MINUTES,
-        "reason": f"up to {clock(minutes)} of each song, {tokens:,} tokens: {note}",
-    }
+    return {"minutes": minutes, "tokens": tokens,
+            "whole": sum(1 for d in durations if d and d <= minutes * 60 + 1),
+            "songs": len([d for d in durations if d])}
+
+
+def choose(gpu: dict | None, durations: list[float]) -> dict:
+    """`size` for a card as it is now, with the reason in words."""
+    card = card_limit(gpu)
+    result = {**size(card["minutes"], durations), "tight": card["tight"]}
+    result["reason"] = f"up to {clock(result['minutes'])} of each song, {result['tokens']:,} tokens: {card['note']}"
+    return result
+
+
+def for_corpus(durations: list[float], gpu: dict | None) -> dict:
+    """What a corpus's export and training use: the settings when they are numbers, the
+    card's answer, read as it is now, when they are auto.  Read when the export or the
+    training runs, so it is what the card has then; a card that cannot be read gets the
+    default."""
+    if config.TRAIN_MINUTES_AUTO:
+        card = card_limit(gpu)
+        result = {**size(card["minutes"], durations), "tight": card["tight"], "note": card["note"]}
+    else:
+        result = {**size(config.TRAIN_MAX_MINUTES, durations), "tight": False, "note": "set by TRAIN_MAX_MINUTES"}
+        result["minutes"] = config.TRAIN_MAX_MINUTES
+    if not config.TRAIN_TOKENS_AUTO:
+        result["tokens"] = config.TRAIN_MAX_TOKENS
+    result["reason"] = f"up to {clock(result['minutes'])} of each song, {result['tokens']:,} tokens: {result['note']}"
+    return result
