@@ -1667,11 +1667,11 @@ async function notationSoundsState() {
   return NOTATION.sounds;
 }
 
-async function notationGetSounds(thenPlay) {
+async function notationGetSounds(thenPlay, thenAt) {
   if (NOTATION.busy) { return; }
   var missing = notationMissing();
   if (!missing.length) {
-    if (thenPlay && NOTATION.playable && NOTATION.synth) { NOTATION.synth.play(); }
+    if (thenPlay) { notationResume(thenAt || 0, true); }
     return;
   }
   NOTATION.busy = true;
@@ -1687,7 +1687,7 @@ async function notationGetSounds(thenPlay) {
     NOTATION.message = '';      // whatever went wrong before, it is here now
     await notationSoundsState();
     notationSetTune();          // they are here now: hand the score over
-    if (thenPlay && NOTATION.playable) { NOTATION.synth.play(); }
+    if (thenPlay) { notationResume(thenAt || 0, true); }
   } catch (err) {
     notationNote('Could not fetch the sounds: ' + err.message);
   } finally {
@@ -1696,9 +1696,39 @@ async function notationGetSounds(thenPlay) {
   }
 }
 
+/* Carry on from where the preview was.  Handing the score over stops it — that is how
+   abcjs changes a tune — so playing resumes, and the place in the song comes back with
+   it; one that was paused keeps its place instead. */
+function notationResume(at, playing) {
+  var synth = NOTATION.synth;
+  if (!synth || !NOTATION.playable) { return; }
+  if (playing) {
+    var started = synth.play();
+    if (started && typeof started.then === 'function') {
+      started.then(function () { if (at) { synth.seek(at); } });
+    }
+  } else if (at) {
+    synth.setProgress(at, 1);
+    synth.seek(at);
+  }
+}
+
+/* A tick-box changed: look at the score again, for the lines it plays and the samples
+   it needs, and let it carry on rather than fall silent under the pointer. */
+function notationRepaint() {
+  var synth = NOTATION.synth;
+  var playing = Boolean(synth && synth.isStarted);
+  var at = synth ? (synth.percent || 0) : 0;
+  renderNotationView();
+  notationPaintBar();
+  if (!playing && !at) { return; }
+  if (!notationSoundsReady()) { notationGetSounds(playing, at); return; }
+  notationResume(at, playing);
+}
+
 /* The score as a MIDI file: the two written voices, and, unless Chords is unticked,
-   the piano part abcjs writes from the chord symbols, which is the only way the
-   harmony reaches a DAW as notes. */
+   the part abcjs writes from the chord symbols, which is the only way the harmony
+   reaches a DAW as notes. */
 function notationMidiBytes(abc) {
   var result = ABCJS.synth.getMidiFile(abc, { midiOutputType: 'binary' });
   var first = Array.isArray(result) ? result[0] : result;      // abcjs hands back [Uint8Array]
@@ -1758,12 +1788,12 @@ function notationInit() {
   var midi = $('notation-midi');
   if (midi) { midi.addEventListener('click', notationDownloadMidi); }
   var sounds = $('notation-sounds');
-  if (sounds) { sounds.addEventListener('click', notationGetSounds); }
+  if (sounds) { sounds.addEventListener('click', function () { notationGetSounds(true, 0); }); }
   var chords = $('notation-chords');
-  // Both of these change what is played and which samples it needs.
-  if (chords) { chords.addEventListener('change', function () { notationSetTune(); notationPaintBar(); }); }
   var instruments = $('notation-instruments');
-  if (instruments) { instruments.addEventListener('change', function () { renderNotationView(); notationPaintBar(); }); }
+  // Both of these change what plays, and which samples it needs, without stopping it.
+  if (chords) { chords.addEventListener('change', notationRepaint); }
+  if (instruments) { instruments.addEventListener('change', notationRepaint); }
   notationSoundsState();
   return NOTATION.synth;
 }
