@@ -1855,10 +1855,22 @@ button.ghost.run-all { margin-left: 10px; }
   background: var(--card-2) !important; border: 1px solid var(--line);
   border-radius: 10px; height: 34px; padding: 0 8px;
 }
-/* Bigger than abcjs's own, so the icons read at a glance, and a tempo box wide
-   enough for three digits beside the number spinners. */
+/* Bigger than abcjs's own, so the icons read at a glance. */
 .abcjs-inline-audio .abcjs-btn { width: 34px; height: 34px; padding: 8px 5px; }
-.abcjs-inline-audio .abcjs-midi-tempo { width: 54px; }
+/* The tempo is an <input type="number">, so the app's own field styling lands on it: a
+   dark box with its own padding, which reads as a panel of its own beside the "%"
+   rather than one control, and stands taller than the bar it sits in.  Here it is
+   plain text on the widget's own background, the digits against the sign. */
+#notation-audio .abcjs-midi-tempo {
+  width: 40px; height: auto; padding: 0 1px 0 0; text-align: right;
+  background: none; border: 0; border-radius: 0; box-shadow: none;
+  color: var(--muted); font: inherit;
+}
+#notation-audio .abcjs-midi-tempo:focus {
+  outline: 1px solid rgb(var(--accent-a-rgb) / 0.55); outline-offset: 1px;
+}
+#notation-audio .abcjs-tempo-wrapper,
+#notation-audio .abcjs-tempo-wrapper label { background: none; border: 0; }
 /* abcjs's own disabled state is a colour and nothing more, so a greyed transport
    would still take a click and then fail on samples that are not there. */
 .abcjs-inline-audio.abcjs-disabled { opacity: 0.45; pointer-events: none; }
