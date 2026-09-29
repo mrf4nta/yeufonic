@@ -38,6 +38,11 @@ cannot creep back in.
 
 ### Changed
 
+- A take's title stays on one line, ending in an ellipsis when it is long, in the wide layout as
+  in the compact one; the tooltip shows the whole title. In the wide layout the details and the
+  prompt each keep two lines, and the status line keeps a place of its own, so the parts of a card
+  sit at the same height on every card in a row.
+- The Try more button has its own icon, a die drawn in three dimensions.
 - The guide's advice on LoRA strengths says how to find a good take: the Sound strength changes the
   voice little between 0.3 and 0.6, and the Planner strength works like another seed.
 

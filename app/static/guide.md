@@ -633,7 +633,7 @@ box starts empty each time the page opens, and offers your last few searches tha
 click one, or pick it with the arrow keys and Enter.
 
 **Starred** shows only starred takes. **Compact** switches between three narrow cards across and
-wider ones with the full title. Hover over a card's settings or style to read all of it.
+wider ones with more of the prompt. A title always stays on one line, ending in … when it is long. Hover over a card's title, settings or style to read all of it.
 
 ### Comparing takes
 

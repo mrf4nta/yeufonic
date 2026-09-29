@@ -284,7 +284,7 @@ function applyLayout(mode) {
   var button = $('layout-toggle');
   button.textContent = wide ? 'Comfy' : 'Compact';
   button.title = wide
-    ? 'Wide cards, full titles and prompts. Click for compact.'
+    ? 'Wide cards with more of the prompt. Click for compact.'
     : 'Compact cards, three across. Click for wide.';
   try { localStorage.setItem(LAYOUT_KEY, State.layout); } catch (err) { /* private mode */ }
 }
@@ -5820,7 +5820,7 @@ var ICONS = {
   voice: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/>',
   variations: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.2l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
   stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="1.6"/>',
-  dice: '<rect x="4" y="4" width="16" height="16" rx="3.2"/><circle cx="9" cy="9" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.15" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.15" fill="currentColor" stroke="none"/>',
+  dice: '<path d="M12 2.8l7.8 4.5v9.4L12 21.2l-7.8-4.5V7.3z"/><path d="M4.2 7.3L12 12l7.8-4.7M12 12v9.2"/><circle cx="12" cy="7.55" r="1.05" fill="currentColor" stroke="none"/><circle cx="7.4" cy="12.9" r="1.05" fill="currentColor" stroke="none"/><circle cx="9.5" cy="16.3" r="1.05" fill="currentColor" stroke="none"/><circle cx="14.6" cy="13" r="1.05" fill="currentColor" stroke="none"/><circle cx="16.6" cy="15.4" r="1.05" fill="currentColor" stroke="none"/>',
   level: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/>'
 };
 
@@ -6329,7 +6329,7 @@ function paintTakes() {
           '</label>' +
         '</div>' +
         '<div class="take-headtext">' +
-          '<div class="take-title" data-act="rename" data-id="' + take.id + '" title="Double-click to rename this take">' + esc(take.title) + '</div>' +
+          '<div class="take-title" data-act="rename" data-id="' + take.id + '" title="' + esc(take.title) + ' \u2014 double-click to rename">' + esc(take.title) + '</div>' +
           '<div class="take-meta" title="' + esc(meta.join(' \u00b7 ')) + '">' + esc(meta.join(' \u00b7 ')) + '</div>' +
         '</div>' +
         // Occasional, so small corner buttons rather than tiles in an already full row.
@@ -6352,7 +6352,7 @@ function paintTakes() {
         '</div>' +
       '</div>' +
       '<div class="take-style" title="' + esc(take.style) + '">' + esc(take.style) + '</div>' +
-      live +
+      '<div class="take-live">' + live + '</div>' +
       '<div class="take-actions">' + actions + '</div>' +
       stemsBlock(take) +
     '</article>';
