@@ -599,6 +599,12 @@ its strengths, the seed and its age — so a card reads as the recipe that made 
 **Save** asks which format to download the take in, FLAC, WAV or MP3, starting with the output
 audio format set in Settings.
 
+**Search takes** finds the takes with every word you type somewhere in the title, style, lyrics or
+LoRA name, in any case. It looks through the space on show; **All spaces**, beside it once you type,
+looks through every space, and a card from another space says which one. × or Escape clears it. The
+box starts empty each time the page opens, and offers your last few searches that found something:
+click one, or pick it with the arrow keys and Enter.
+
 **Starred** shows only starred takes. **Compact** switches between three narrow cards across and
 wider ones with the full title. Hover over a card's settings or style to read all of it.
 

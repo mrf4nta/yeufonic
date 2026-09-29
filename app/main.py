@@ -1271,17 +1271,27 @@ def ran_to_cap(take: dict) -> bool:
     return bool(planned and planned["seconds"] < cap - 10)
 
 
+# What a search of the library looks through.
+SEARCHED = ("title", "style", "lyrics", "style_lora", "voice_lora")
+
+
 @app.get("/api/takes")
 def list_takes(
     request: Request,
     source_id: str | None = None,
     space_id: str | None = None,
     favourite: bool = False,
+    q: str = Query("", max_length=200),
     limit: int = Query(300, ge=1, le=5000),
 ) -> Response:
     """The library, newest first.  Carries an ETag, so a poll that finds nothing
-    new costs a 304 instead of the whole list."""
+    new costs a 304 instead of the whole list.  `q` keeps the takes where every
+    word of it appears in the title, style, lyrics or a LoRA's name."""
     where, args = [], []
+    for word in q.split():
+        like = "%" + word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        where.append("(" + " OR ".join(f"{col} LIKE ? ESCAPE '\\'" for col in SEARCHED) + ")")
+        args.extend([like] * len(SEARCHED))
     if source_id:
         where.append("source_id = ?")
         args.append(source_id)

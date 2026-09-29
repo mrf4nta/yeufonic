@@ -25,6 +25,13 @@ cannot creep back in.
 
 ## Unreleased
 
+### Added
+
+- **Search the takes.** A search box beside the library's filters finds takes with every word typed
+  in the title, style, lyrics or LoRA name. It looks through the space on show, or every space with
+  the All spaces chip, where a card from another space names it. The last few searches that found something
+  are offered under the box. Fixes #26.
+
 ### Changed
 
 - **Progress in the editor.** Transcribing a recording shows its progress under the recording's

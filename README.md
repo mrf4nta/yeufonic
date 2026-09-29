@@ -107,7 +107,8 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
 - **Spaces.** Keep takes apart by project: a space per song, per album, or for sketches. Create,
   rename and delete spaces, and move a take from one to another.
 - **A library.** Every take keeps its score, style, lyrics, seed and settings, so it can be
-  reproduced, reworked, starred or deleted. Tick several cards and one button clears them all.
+  reproduced, reworked, starred or deleted. Search by title, style, lyrics or LoRA, in one space or
+  all of them. Tick several cards and one button clears them all.
 - **A player for reviewing takes.** A real waveform you can click to seek, previous and next through
   the library, ten second skips, repeat, speed and volume, with keyboard shortcuts.
 

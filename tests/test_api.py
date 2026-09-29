@@ -156,6 +156,24 @@ def test_takes_list_etag_filter_and_limit(client, data_dir):
     assert len(client.get("/api/takes?limit=1").json()) == 1
 
 
+def test_search_finds_every_word_in_title_style_lyrics_or_lora(client):
+    make_take(title="Harbour Lights", style="folk, fiddle", lyrics="[Verse]\nboats come in")
+    make_take(title="Night Drive", style="synthwave", lyrics="[Chorus]\nneon on the harbour wall")
+    lora = make_take(title="Plain", style="pop")
+    execute("UPDATE takes SET style_lora = 'Brass_Band_v2.safetensors' WHERE id = ?", (lora["id"],))
+
+    def found(q):
+        response = client.get("/api/takes", params={"q": q})
+        return sorted(t["title"] for t in response.json()), response.headers["x-total-count"]
+
+    assert found("HARBOUR") == (["Harbour Lights", "Night Drive"], "2")
+    assert found("harbour neon") == (["Night Drive"], "1")
+    assert found("fiddle boats") == (["Harbour Lights"], "1")
+    assert found("brass_band") == (["Plain"], "1")
+    assert found("brass%band") == ([], "0")      # typed characters are literal
+    assert found("   ")[1] == "3"
+
+
 def test_delete_source(client, data_dir):
     source = client.post("/api/sources", files={"file": ("gone.wav", b"xyz")}).json()
     assert client.delete(f"/api/sources/{source['id']}").status_code == 200

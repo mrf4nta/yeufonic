@@ -855,7 +855,48 @@ label .lora-value:disabled { opacity: 0.6; }
 .move-list button:disabled { opacity: 0.5; cursor: default; }
 .move-list .muted { font-size: 12px; }
 .move-new .source-row input { flex: 1; min-width: 0; }
-.filters { display: flex; gap: 7px; }
+.filters { display: flex; align-items: center; gap: 7px; }
+/* On a narrow screen the filters wrap under the heading, rather than running off the side. */
+@media (max-width: 760px) {
+  .libhead { flex-wrap: wrap; gap: 10px; }
+  .filters { flex-wrap: wrap; }
+}
+/* The take search: a pill the height of the chips beside it. With a search in,
+   it keeps the accent, like an active chip, so a filtered list is plain to see. */
+.take-search { position: relative; display: inline-flex; align-items: center; }
+.take-search > svg { position: absolute; left: 10px; width: 13px; height: 13px; color: var(--muted); pointer-events: none; }
+.take-search input {
+  font: inherit; font-size: 12.5px; padding: 5px 26px 5px 29px; border-radius: 999px; width: 190px;
+  border: 1px solid var(--line); background: transparent; color: var(--text); outline: none;
+  transition: width .15s, border-color .15s;
+}
+.take-search input::-webkit-search-cancel-button { display: none; }
+.take-search input::placeholder { color: var(--muted); }
+.take-search input:hover { border-color: rgb(var(--accent-a-rgb) / 0.5); }
+.take-search input:focus { border-color: rgb(var(--accent-a-rgb) / 0.7); width: 240px; }
+.take-search.has-text input { border-color: rgb(var(--accent-a-rgb) / 0.7); background: rgb(var(--accent-a-rgb) / 0.08); padding-right: 76px; }
+.take-search .count { position: absolute; right: 26px; font-size: 11.5px; color: var(--good); pointer-events: none; }
+.take-search .clear {
+  position: absolute; right: 7px; display: none; border: 0; background: none; color: var(--muted);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px;
+}
+.take-search .clear:hover { color: var(--text-strong); }
+.take-search.has-text .clear { display: block; }
+.search-recent {
+  position: absolute; top: calc(100% + 6px); left: 0; min-width: 100%; max-width: 320px; z-index: 20;
+  display: flex; flex-direction: column; padding: 5px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
+}
+.search-recent.hidden { display: none; }
+.search-recent-head { font-size: 11px; color: var(--muted); padding: 4px 9px 5px; }
+.search-recent button {
+  font: inherit; font-size: 12.5px; text-align: left; border: 0; background: none; color: var(--text);
+  padding: 6px 9px; border-radius: 8px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.search-recent-item:hover, .search-recent-item.on { background: rgb(var(--accent-a-rgb) / 0.14); color: var(--text-strong); }
+.search-recent .search-recent-clear { font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 3px; }
+.search-recent .search-recent-clear:hover { color: var(--text-strong); }
 .takes { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
 /* Comfy: fewer, wider cards. Titles wrap; the details get two lines. Tooltips hold the rest. */
 .takes.comfy { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); }

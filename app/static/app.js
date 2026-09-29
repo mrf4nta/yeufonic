@@ -101,7 +101,7 @@ var State = { normalising: {}, sources: [], takes: [], options: {}, filter: 'all
   layout: 'compact',
   takesRaw: '', takesTotal: 0, takeLimit: 300, takesAt: 0, paintedAt: 0, draft: null, audition: null,
   picked: {},
-  formEdited: false, spaces: [], spaceId: 'default', moveTakeId: null };
+  formEdited: false, spaces: [], spaceId: 'default', moveTakeId: null, search: '', searchAll: false };
 var LAYOUT_KEY = 'yue2.layout';
 var SHEET_KEY = 'yue2.sheet';   // the take panel folded away, or not
 // Set here, before the page is wired, which happens partway through this file.
@@ -110,6 +110,7 @@ var Editor = { page: 'song', step: 0 };   // the editor window's page and step
 var WIDTH_KEY = 'yue2.width';
 var SPACE_KEY = 'yue2.space';
 var FILTER_KEY = 'yue2.filter';
+var SEARCHES_KEY = 'yue2.searches';
 
 /* All or Starred, kept across a reload like the layout. */
 function applyFilter(filter) {
@@ -118,6 +119,161 @@ function applyFilter(filter) {
     chip.classList.toggle('active', chip.dataset.filter === State.filter);
   });
   try { localStorage.setItem(FILTER_KEY, State.filter); } catch (err) { /* private mode */ }
+}
+
+/* Search: every word typed must appear in a take's title, style, lyrics or LoRA
+   name. It looks through this space, or every space with the All spaces chip.
+   The search starts empty on a reload; the last few are kept to pick from. */
+function searchingEverywhere() {
+  return !!(State.search && State.searchAll);
+}
+
+function spaceName(id) {
+  var space = State.spaces.filter(function (s) { return s.id === id; })[0];
+  return space ? space.name : 'another space';
+}
+
+function recentSearches() {
+  try {
+    var got = JSON.parse(localStorage.getItem(SEARCHES_KEY) || '[]');
+    return Array.isArray(got) ? got.filter(function (s) { return typeof s === 'string'; }) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+/* Kept once it has found something, so a typo is not offered again. */
+function rememberSearch(text) {
+  text = (text || '').trim().replace(/\s+/g, ' ');
+  if (!text) { return; }
+  var kept = recentSearches().filter(function (s) { return s.toLowerCase() !== text.toLowerCase(); });
+  kept.unshift(text);
+  try { localStorage.setItem(SEARCHES_KEY, JSON.stringify(kept.slice(0, 8))); } catch (err) { /* private mode */ }
+}
+
+function paintSearchCount() {
+  var wrap = $('take-search-wrap');
+  if (!wrap) { return; }
+  var on = !!State.search;
+  wrap.classList.toggle('has-text', on || !!$('take-search').value);
+  $('take-search-count').textContent = on ? State.takesTotal + ' found' : '';
+  paintTakesHeading();
+  var all = $('search-all');
+  if (all) {
+    all.classList.toggle('hidden', !on);
+    all.classList.toggle('active', State.searchAll);
+  }
+}
+
+/* The recent searches, under the box while it has focus. Those that contain what
+   is typed so far, and not the search already showing. */
+function paintRecent() {
+  var list = $('take-search-recent');
+  var box = $('take-search');
+  var typed = box.value.trim().toLowerCase();
+  var items = recentSearches().filter(function (s) {
+    var low = s.toLowerCase();
+    return low !== typed && (!typed || low.indexOf(typed) !== -1);
+  });
+  State.recentPick = -1;
+  if (document.activeElement !== box || !items.length) {
+    list.classList.add('hidden');
+    return;
+  }
+  list.innerHTML = '<div class="search-recent-head">Recent searches</div>' +
+    items.map(function (s, i) {
+      return '<button type="button" class="search-recent-item" data-search="' + esc(s) + '" data-i="' + i + '">' + esc(s) + '</button>';
+    }).join('') +
+    '<button type="button" class="search-recent-clear" data-clear-recent="1">Clear recent searches</button>';
+  list.classList.remove('hidden');
+}
+
+function runSearch(text) {
+  var search = (text || '').trim().replace(/\s+/g, ' ');
+  if (search === State.search) { paintSearchCount(); return; }
+  State.search = search;
+  State.takesRaw = '';
+  State.takeLimit = 300;
+  clearPicked();
+  paintSearchCount();
+  loadTakes();
+}
+
+function wireSearch() {
+  var box = $('take-search');
+  if (!box) { return; }   // a page from before the search, on a new script
+  var list = $('take-search-recent');
+  var timer = null;
+  var pick = function (text) {
+    box.value = text;
+    clearTimeout(timer);
+    var search = text.trim().replace(/\s+/g, ' ');
+    if (search === State.search) {
+      if (State.takesTotal) { rememberSearch(search); }
+    } else {
+      State.rememberWhenFound = search;   // kept when its answer arrives, if it found any
+    }
+    runSearch(text);
+    paintRecent();
+  };
+  box.addEventListener('input', function () {
+    $('take-search-wrap').classList.toggle('has-text', !!box.value);
+    clearTimeout(timer);
+    timer = setTimeout(function () { runSearch(box.value); }, 250);
+    paintRecent();
+  });
+  box.addEventListener('focus', paintRecent);
+  box.addEventListener('blur', function () {
+    if (State.search && State.takesTotal) { rememberSearch(State.search); }
+    list.classList.add('hidden');
+  });
+  box.addEventListener('keydown', function (event) {
+    var items = list.classList.contains('hidden') ? [] : list.querySelectorAll('.search-recent-item');
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (!items.length) { return; }
+      event.preventDefault();
+      // Down from the box goes to the first; past either end, back to the box.
+      var next = State.recentPick + (event.key === 'ArrowDown' ? 1 : -1);
+      State.recentPick = next < -1 ? items.length - 1 : (next >= items.length ? -1 : next);
+      Array.prototype.forEach.call(items, function (item, i) { item.classList.toggle('on', i === State.recentPick); });
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      pick(State.recentPick >= 0 && items[State.recentPick] ? items[State.recentPick].dataset.search : box.value);
+    } else if (event.key === 'Escape') {
+      if (!list.classList.contains('hidden')) {
+        list.classList.add('hidden');
+      } else {
+        box.value = '';
+        clearTimeout(timer);
+        runSearch('');
+      }
+    }
+  });
+  // Held on mousedown, so the box keeps its focus and the list is still there for the click.
+  list.addEventListener('mousedown', function (event) { event.preventDefault(); });
+  list.addEventListener('click', function (event) {
+    var item = event.target.closest('[data-search]');
+    if (item) { pick(item.dataset.search); return; }
+    if (event.target.closest('[data-clear-recent]')) {
+      try { localStorage.removeItem(SEARCHES_KEY); } catch (err) { /* private mode */ }
+      paintRecent();
+    }
+  });
+  $('take-search-clear').addEventListener('click', function () {
+    box.value = '';
+    clearTimeout(timer);
+    runSearch('');
+    box.focus();
+  });
+  if ($('search-all')) {
+    $('search-all').addEventListener('click', function () {
+      State.searchAll = !State.searchAll;
+      State.takesRaw = '';
+      clearPicked();
+      paintSearchCount();
+      loadTakes();
+    });
+  }
 }
 
 function applyLayout(mode) {
@@ -3432,17 +3588,24 @@ async function doReroll() {
 
 /* ------------------------------------------------------------------ takes */
 async function loadTakes() {
-  var space = State.spaceId;
-  var url = '/api/takes?limit=' + State.takeLimit + '&space_id=' + encodeURIComponent(space) +
+  var space = State.spaceId, search = State.search, everywhere = searchingEverywhere();
+  var url = '/api/takes?limit=' + State.takeLimit +
+    (everywhere ? '' : '&space_id=' + encodeURIComponent(space)) +
+    (search ? '&q=' + encodeURIComponent(search) : '') +
     (State.filter === 'favourite' ? '&favourite=true' : '');
   var response = await fetch(url, { cache: 'no-cache' });   // revalidates: unchanged is a 304
   if (!response.ok) { return; }
   var text = await response.text();
-  // The space changed while this was on its way: the answer belongs to the old one.
-  if (space !== State.spaceId) { return; }
+  // The space or the search changed while this was on its way: the answer is out of date.
+  if (space !== State.spaceId || search !== State.search || everywhere !== searchingEverywhere()) { return; }
   if (text !== State.takesRaw) { loadSpaces(); }   // the counts in the menu may have moved
   State.takesAt = Date.now();
   State.takesTotal = parseInt(response.headers.get('X-Total-Count') || '0', 10) || 0;
+  paintSearchCount();
+  if (State.rememberWhenFound === search) {
+    if (State.takesTotal) { rememberSearch(search); }
+    State.rememberWhenFound = '';
+  }
   // Nothing new: leave the cards alone, so hover, focus and the play pulse survive.
   // Repaint once a minute anyway, so "2 min ago" keeps moving.
   if (text === State.takesRaw && Date.now() - State.paintedAt < 60000) { return; }
@@ -3524,8 +3687,12 @@ function paintSpaces() {
   }
   select.value = State.spaceId;
   $('space-delete').disabled = State.spaceId === 'default';
+  paintTakesHeading();
+}
+
+function paintTakesHeading() {
   var space = currentSpace();
-  $('takes-heading').textContent = space ? space.name : 'Your takes';
+  $('takes-heading').textContent = searchingEverywhere() ? 'All spaces' : (space ? space.name : 'Your takes');
 }
 
 function showSpace(id) {
@@ -5634,7 +5801,8 @@ function paintBulk() {
     selAll.classList.toggle('active', allPicked);
     selAll.title = allPicked
       ? 'Deselect all takes in this space'
-      : (visible.length === 0 ? 'No takes to select' : 'Select all ' + visible.length + ' takes in this space');
+      : (visible.length === 0 ? 'No takes to select'
+        : 'Select all ' + visible.length + (State.search ? ' takes found' : ' takes in this space'));
   }
 }
 
@@ -5710,7 +5878,10 @@ function paintTakes() {
   State.paintedAt = Date.now();
   $('empty').style.display = list.length ? 'none' : 'block';
   var others = State.spaces.some(function (space) { return space.id !== State.spaceId && space.takes; });
-  $('empty').textContent = State.filter === 'favourite' ? 'No starred takes in this space.'
+  $('empty').textContent = State.search
+    ? 'No ' + (State.filter === 'favourite' ? 'starred ' : '') + 'takes match \u201c' + State.search + '\u201d' +
+      (searchingEverywhere() ? ' in any space.' : ' in this space.')
+    : State.filter === 'favourite' ? 'No starred takes in this space.'
     : others ? 'This space is empty. Create a take while it is on show, or move takes here with Move.'
     : 'Nothing yet. Load a recording, write some lyrics, and press create.';
   var more = State.takesTotal - State.takes.length;
@@ -5719,6 +5890,7 @@ function paintTakes() {
   $('takes').innerHTML = list.map(function (take) {
     var status = take.status;
     var meta = [];
+    if (take.space_id && take.space_id !== State.spaceId) { meta.push('In ' + spaceName(take.space_id)); }
     meta.push(take.kind === 'song' ? 'from a prompt' : (take.kind === 'instrumental' ? 'instrumental' : 'cover'));
     if (take.duration) { meta.push(secs(take.duration)); }
     // The settings that shaped it come first, named, so a card can be read back
@@ -7104,6 +7276,7 @@ function wire() {
   if ($('select-all')) {
     $('select-all').addEventListener('click', toggleSelectAll);
   }
+  wireSearch();
   $('takes-more').addEventListener('click', function () {
     State.takeLimit += 300;
     loadTakes();
