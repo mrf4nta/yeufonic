@@ -424,6 +424,18 @@ def lyrics_text(blocks: list[tuple[str, list[str]]]) -> str:
     return "\n\n".join(f"[{tag}]" + ("\n" + "\n".join(sung) if sung else "") for tag, sung in blocks)
 
 
+def merged_spans(bounds: list[tuple[str, float, float]]) -> list[tuple[str, float, float]]:
+    """The sections as the lyrics are written: a section beside another of the same
+    name is one, except a chorus, which comes round again."""
+    merged: list[tuple[str, float, float]] = []
+    for tag, start, end in bounds:
+        if merged and merged[-1][0] == tag and tag != "Chorus":
+            merged[-1] = (tag, merged[-1][1], end)      # an interlude beside a bridge is one bridge
+        else:
+            merged.append((tag, start, end))
+    return merged
+
+
 def tag_lyrics(lines: list[dict], sections: list[tuple[str, float]], duration: float) -> str:
     """Each sung line under the section playing when it starts, by SheetSage's
     sections (see section_spans).  Without sections, the lines go under one verse."""
@@ -431,18 +443,43 @@ def tag_lyrics(lines: list[dict], sections: list[tuple[str, float]], duration: f
         return ""
     if not sections or not duration:
         return "[Verse]\n" + "\n".join(l["text"] for l in lines)
-    bounds = section_spans(lines, sections, duration)
-    blocks: list[tuple[str, list[str]]] = []
-    for tag, start, end in bounds:
-        sung = [l["text"] for l in lines if start <= (l["start"] + l["end"]) / 2 < end]
-        if blocks and blocks[-1][0] == tag and tag != "Chorus":
-            blocks[-1][1].extend(sung)          # an interlude beside a bridge is one bridge
-        else:
-            blocks.append((tag, sung))
+    spans = merged_spans(section_spans(lines, sections, duration))
+    blocks = [(tag, [l["text"] for l in lines if start <= (l["start"] + l["end"]) / 2 < end])
+              for tag, start, end in spans]
     # Lines past the last boundary (a rounding matter) join the last section.
-    tail = [l["text"] for l in lines if (l["start"] + l["end"]) / 2 >= bounds[-1][2]]
-    blocks[-1][1].extend(tail)
+    blocks[-1][1].extend(l["text"] for l in lines if (l["start"] + l["end"]) / 2 >= spans[-1][2])
     return lyrics_text(blocks)
+
+
+# The trainer learns a song whole, so a song longer than its limit is cut for it (#7).
+TRAIN_FADE = 3.0      # seconds a cut song fades out over, so it ends rather than stops
+CUT_FLOOR = 0.6       # a section end earlier than this share of the limit keeps too little
+LYRIC_HEAD = re.compile(r"(?m)^(?=\[[^\]\n]+\][ \t]*$)")
+
+
+def training_cut(lines: list[dict], sections: list[tuple[str, float]], duration: float, limit: float,
+                 lyrics: str = "") -> dict | None:
+    """Where a song longer than `limit` seconds is cut for training, and what is sung
+    up to there.  None when it fits.
+
+    The cut is the end of the last section before the limit, so the song ends where a
+    part of it does, and the words of the sections that are no longer heard go.
+    Without a section end near enough, it is cut at the limit, as the trainer would."""
+    if not duration or not limit or duration <= limit + 1:
+        return None
+    spans = merged_spans(section_spans(lines, sections, duration)) if sections else []
+    ends = [end for _, _, end in spans if CUT_FLOOR * limit <= end <= limit]
+    cut = max(ends) if ends else limit
+    blocks = [b for b in LYRIC_HEAD.split(lyrics or "") if b.strip()]
+    if len(blocks) < 2 or not lyrics.lstrip().startswith("["):
+        return {"seconds": round(cut, 2), "lyrics": lyrics, "at_section": bool(ends)}
+    # Each block of words starts where its section does; a draft the user has since
+    # reshaped no longer matches, and its blocks are spread evenly over the song.
+    starts = [start for _, start, _ in spans] if len(spans) == len(blocks) \
+        else [duration * i / len(blocks) for i in range(len(blocks))]
+    kept = [block for block, start in zip(blocks, starts) if start < cut - 0.05] or blocks[:1]
+    return {"seconds": round(cut, 2), "lyrics": "".join(kept).rstrip() if len(kept) < len(blocks) else lyrics,
+            "at_section": bool(ends)}
 
 
 DESCRIBE = ("Describe this music for a music generator as one line of comma-separated tags: "

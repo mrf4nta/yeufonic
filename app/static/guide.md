@@ -382,7 +382,10 @@ engine built with `WITH_TRAINER=0`, takes it out.
 4. **Review.** Open a song to check its lyrics and tick **checked**, and to describe its sound
    where it differs from the rest. The style caption shows what the trainer will read.
 5. **Export training set.** Writes the audio, lyrics and caption for each song. A line under the
-   buttons shows how far it has got.
+   buttons shows how far it has got. The trainer takes only so much of a song (3½ minutes, unless
+   the `TRAIN_MAX_MINUTES` setting is raised), so a longer song is cut at the end of its last
+   section within that, faded out, and keeps only the words still sung. Its row says "first 3:12
+   trained".
 6. **Train a LoRA.** This takes a long time, and the GPU is not available to the app until it
    finishes. Progress shows under the buttons and on the main screen, where you can stop it,
    and the corpus's badge at the top of the page pulses while it trains. Training again keeps

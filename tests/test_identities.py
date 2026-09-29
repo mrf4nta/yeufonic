@@ -137,6 +137,56 @@ def test_a_boundary_moves_to_the_pause_before_a_line_sung_on_a_pickup():
     assert identities._snap(18.0, far, 0.0, 60.0) == 18.0
 
 
+TAGGED = "[Intro]\n\n[Verse]\nfirst verse\n\n[Chorus]\nthe chorus\n\n[Outro]\nlast words"
+CUT_LINES = [{"start": 24, "end": 28, "text": "first verse"}, {"start": 55, "end": 60, "text": "the chorus"},
+             {"start": 90, "end": 95, "text": "last words"}]
+CUT_SECTIONS = [("intro", 0.2), ("verse", 0.3), ("chorus", 0.3), ("outro", 0.2)]   # 0-20, 20-50, 50-80, 80-100 of 100 s
+
+
+def test_a_song_over_the_training_limit_is_cut_at_a_section_end():
+    """The trainer learns each song whole, so a long song was cut mid-bar with the whole
+    song's words. The cut is the last section end within the limit, and the words of the
+    sections cut away go (#7)."""
+    assert identities.training_cut(CUT_LINES, CUT_SECTIONS, 100, 100, TAGGED) is None       # fits
+    assert identities.training_cut(CUT_LINES, CUT_SECTIONS, 100, 99.5, TAGGED) is None      # within a second
+    cut = identities.training_cut(CUT_LINES, CUT_SECTIONS, 100, 60, TAGGED)
+    assert cut == {"seconds": 50.0, "lyrics": "[Intro]\n\n[Verse]\nfirst verse", "at_section": True}
+    # A section end too early to keep much of the song is not taken: cut at the limit.
+    cut = identities.training_cut(CUT_LINES, CUT_SECTIONS, 100, 40, TAGGED)     # the intro's end, at 20 s, is under 60% of 40
+    assert cut == {"seconds": 40.0, "lyrics": "[Intro]\n\n[Verse]\nfirst verse", "at_section": False}
+
+
+def test_a_cut_song_without_sections_or_tags_keeps_what_it_has():
+    cut = identities.training_cut([], [], 100, 60, TAGGED)
+    assert cut["seconds"] == 60.0 and not cut["at_section"]
+    assert cut["lyrics"] == "[Intro]\n\n[Verse]\nfirst verse\n\n[Chorus]\nthe chorus"     # spread evenly: 0, 25, 50, 75
+    plain = identities.training_cut(CUT_LINES, CUT_SECTIONS, 100, 60, "just some words")
+    assert plain["lyrics"] == "just some words" and plain["seconds"] == 50.0
+
+
+def test_the_export_cuts_a_long_song_with_a_fade_and_the_words_still_sung(client, tmp_path, monkeypatch):
+    import json as _json
+    _, folder = make_folder(tmp_path, monkeypatch)
+    made = client.post("/api/identities", json={"name": "Me", "trigger_word": "me", "voice": "male", "folder": str(folder), "consent": True}).json()
+    song = next(s for s in made["songs"] if s["file"] == "01 Modern Girl.wav")
+    jobs.set_song(song["id"], stored_path=str(folder / "01 Modern Girl.wav"), lyrics=TAGGED)
+    (folder / "whisper.json").write_text(_json.dumps(CUT_LINES))
+    (folder / "score.abc").write_text(
+        "X:1\nM:4/4\nL:1/4\nQ:1/4=120\nV: Vocal\nK:C\n% intro\n" + "z4|" * 2 + "\n% verse\n" + "c4|" * 3 +
+        "\n% chorus\n" + "c4|" * 3 + "\n% outro\n" + "z4|" * 2 + "\n")
+    monkeypatch.setattr(config, "TRAIN_MAX_MINUTES", 1.0)                 # 60 s
+    view = client.get(f"/api/identities/{made['id']}").json()
+    assert next(s for s in view["songs"] if s["id"] == song["id"])["trained_to"] == 50.0
+    assert next(s for s in view["songs"] if s["file"] == "02 Falling.wav")["trained_to"] is None    # under the limit
+    out = client.post(f"/api/identities/{made['id']}/export").json()
+    assert out["cut"] == [{"title": "Modern Girl", "seconds": 50.0, "at_section": True}]
+    dataset = config.DATA_DIR / "identities" / made["id"] / "dataset"
+    audio = next(dataset.glob("*.flac"))
+    assert abs(identities.probe(audio)["duration"] - 50.0) < 0.5
+    assert next(dataset.glob("*.lyrics.txt")).read_text().strip() == "[Intro]\n\n[Verse]\nfirst verse"
+    assert _json.loads((dataset / "manifest.json").read_text())["cut_for_training"][0]["title"] == "Modern Girl"
+
+
 def test_api_needs_consent_scans_and_queues(client, tmp_path, monkeypatch):
     async def hold(song_id):   # the worker is running: keep it from separating test tones
         return None

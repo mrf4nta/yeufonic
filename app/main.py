@@ -1912,9 +1912,28 @@ def _identity(identity_id: str) -> dict:
 _persona = _identity
 
 
+def _training_cut(song: dict) -> dict | None:
+    """Where the trainer's length limit cuts this song, and the words that stay (#7)."""
+    limit = config.TRAIN_MAX_MINUTES * 60
+    if not song.get("stored_path") or not song.get("duration") or song["duration"] <= limit + 1:
+        return None
+    folder = Path(song["stored_path"]).parent
+    try:
+        lines = json.loads((folder / "whisper.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        lines = []
+    try:
+        abc = (folder / "score.abc").read_text(encoding="utf-8")
+    except OSError:
+        abc = ""
+    return identities.training_cut(lines, identities.score_sections(abc), song["duration"], limit, song["lyrics"] or "")
+
+
 def _identity_view(identity: dict) -> dict:
     songs = rows("SELECT * FROM identity_songs WHERE identity_id = ? ORDER BY position", (identity["id"],))
     for song in songs:
+        cut = _training_cut(song) if song["include"] else None
+        song["trained_to"] = cut["seconds"] if cut else None
         song["caption"] = identities.caption(identity["trigger_word"], song["description"] or identity["description"],
                                              identity["voice"], song["key"], song["tempo"],
                                              style_hint=song.get("style_hint") or "")
@@ -2617,7 +2636,7 @@ async def _export(identity: dict, view: dict, chosen: list[dict]) -> dict:
     dest = config.DATA_DIR / "identities" / identity_id / "dataset"
     await asyncio.to_thread(remove_tree, dest)
     dest.mkdir(parents=True, exist_ok=True)
-    written, skipped, unchecked = [], [], []
+    written, skipped, unchecked, cut_short = [], [], [], []
     for number, song in enumerate(chosen):
         EXPORTING[identity_id].update(done=number, song=song["title"])
         if not song["stored_path"] or not Path(song["stored_path"]).is_file():
@@ -2625,19 +2644,30 @@ async def _export(identity: dict, view: dict, chosen: list[dict]) -> dict:
             continue
         lyrics_content = (song["lyrics"] or "").strip() or "[instrumental]"
         name = identities.export_name(song)
-        await asyncio.to_thread(subprocess.run, ["ffmpeg", "-v", "error", "-y", "-i", song["stored_path"], str(dest / f"{name}.flac")],
-                                check=True, timeout=600)
+        # A song longer than the trainer's limit is cut at the end of a section, faded out,
+        # and keeps only the words still sung (#7).
+        cut = await asyncio.to_thread(_training_cut, song)
+        command = ["ffmpeg", "-v", "error", "-y", "-i", song["stored_path"]]
+        if cut:
+            fade_from = max(0.0, cut["seconds"] - identities.TRAIN_FADE)
+            command += ["-t", f"{cut['seconds']:.2f}", "-af", f"afade=t=out:st={fade_from:.2f}:d={identities.TRAIN_FADE}"]
+            lyrics_content = cut["lyrics"].strip() or lyrics_content
+            cut_short.append({"title": song["title"], "seconds": cut["seconds"], "at_section": cut["at_section"]})
+            log.info("Corpus song '%s' is cut for training at %.0fs%s", song["title"], cut["seconds"],
+                     " (the end of a section)" if cut["at_section"] else "")
+        await asyncio.to_thread(subprocess.run, [*command, str(dest / f"{name}.flac")], check=True, timeout=600)
         (dest / f"{name}.lyrics.txt").write_text(lyrics_content + "\n", encoding="utf-8")
         (dest / f"{name}.txt").write_text(song["caption"] + "\n", encoding="utf-8")
         written.append(song["title"])
         if not song["lyrics_checked"]:
             unchecked.append(song["title"])
     manifest = {"identity": identity["name"], "trigger_word": identity["trigger_word"], "consent": True,
-                "songs": written, "unchecked_lyrics": unchecked, "exported_at": time.time(), "app": config.VERSION}
+                "songs": written, "unchecked_lyrics": unchecked, "cut_for_training": cut_short, "exported_at": time.time(), "app": config.VERSION}
     (dest / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     execute("UPDATE identities SET exported_at = ?, export_dir = ? WHERE id = ?", (time.time(), str(dest), identity_id))
     log.info("Exported training dataset for corpus '%s' (%d songs) -> %s", identity["name"], len(written), dest)
-    return {"folder": _host_path(dest), "written": written, "skipped": skipped, "unchecked": unchecked}
+    return {"folder": _host_path(dest), "written": written, "skipped": skipped, "unchecked": unchecked,
+            "cut": cut_short}
 
 
 export_persona = export_identity

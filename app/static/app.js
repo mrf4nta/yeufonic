@@ -4673,7 +4673,9 @@ function songRow(song) {
       (song.cue ? ' <button class="link" data-split="' + song.id + '" title="' + esc(song.cue.file) +
         ' says where each track starts. Each becomes a song in this corpus; the folder is not changed">Split into ' +
         song.cue.tracks + ' tracks</button>' : '') + '</td>' +
-    '<td>' + secs(song.duration) + '</td>' +
+    '<td>' + secs(song.duration) + (song.trained_to
+      ? '<div class="muted" title="Songs longer than the training limit are cut for training, at the end of a section where one is near, and faded out. Its words stop there too.">first ' +
+        secs(song.trained_to) + ' trained</div>' : '') + '</td>' +
     '<td data-steps="' + song.id + '">' + stepChips(song) + '<div class="muted" data-keytempo="' + song.id + '">' +
       esc([song.key, song.tempo ? song.tempo + ' BPM' : ''].filter(Boolean).join(', ')) + '</div></td>' +
     '<td><button class="link" data-open="' + song.id + '">' + (IDENTITY.open[song.id] ? 'Close' : 'Review') + '</button></td>' +
@@ -5322,6 +5324,8 @@ async function identityClick(event) {
           // Drafts are a fair choice, not a fault: said, not flagged.
           (out.unchecked.length ? '<br><span class="muted">' + out.unchecked.length + ' song' + (out.unchecked.length === 1 ? ' uses its' : 's use their') +
             ' lyric draft as drafted.</span>' : '') +
+          (out.cut && out.cut.length ? '<br><span class="muted">' + out.cut.length + ' song' + (out.cut.length === 1 ? ' is' : 's are') +
+            ' longer than the training limit, and cut to fit.</span>' : '') +
           (out.skipped.length ? '<br><span class="muted">Skipped, not analysed or no lyrics: ' + esc(out.skipped.join(', ')) + '</span>' : '');
       }
     } catch (err) {

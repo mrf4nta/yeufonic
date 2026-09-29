@@ -34,6 +34,12 @@ cannot creep back in.
 
 ### Changed
 
+- **Training cuts a long song at a section end.** A song longer than the training limit was cut
+  where the limit fell, mid-bar, with the whole song's words, so the planner learned that songs
+  stop abruptly and were sung words they never reached. The export now cuts it at the end of the
+  last section within the limit, fades it out, and keeps only the words of the sections that are
+  still heard; with no section end near enough it cuts at the limit as before. The corpus window
+  says how much of each long song is trained. Fixes #7.
 - **Progress in the editor.** Transcribing a recording shows its progress under the recording's
   buttons, writing a score plan shows it on the Score page, and a take opened while it renders
   shows its render in the editor's bottom bar, as the job card behind the editor does. Each says
