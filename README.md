@@ -191,7 +191,9 @@ installation.
 
 - Windows 10 22H2 or Windows 11, 64-bit.
 - An NVIDIA graphics card, RTX 30-series or newer, with a recent driver. 12 GB of video memory is
-  recommended, and 8 GB works. AMD and Intel graphics are not supported.
+  recommended, and 8 GB works for making songs. Training a LoRA needs more: about 12.5 GB free
+  while it prepares the songs, so 16 GB is the practical minimum, and an 8 GB card can't train
+  (it can still use LoRAs trained elsewhere). AMD and Intel graphics are not supported.
 - 16 GB of RAM and about 40 GB of free disk.
 - An internet connection for about 24 GB of downloads, most of it the models.
 
@@ -261,7 +263,9 @@ are not downloaded again. Deleting that folder removes it.
 
 - An NVIDIA GPU with 12 GB of VRAM or more is recommended, with 16 GB of system RAM. An 8 GB card
   is worth trying: ComfyUI moves what does not fit into system RAM, so it still works, though
-  smaller cards are usually slower chips and renders take longer.
+  smaller cards are usually slower chips and renders take longer. Training a LoRA locally needs
+  more: about 12.5 GB of VRAM free while it prepares the songs, so 16 GB is the practical minimum.
+  An 8 GB card can't train, though it can still use LoRAs trained elsewhere.
 - Docker with the NVIDIA container toolkit, so containers can see the GPU.
 - About 35 GB of disk: 15 GB of images, 17 GB of models, and room for your songs.
 - Linux, or Windows with WSL2 or Docker Desktop. WSL2 is what this was built on; Windows with

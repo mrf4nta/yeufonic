@@ -391,8 +391,10 @@ engine built with `WITH_TRAINER=0`, takes it out.
    and the corpus's badge at the top of the page pulses while it trains. Training again keeps
    the LoRA from the last run under a dated name, in **Previous runs**, or deletes it, as you
    choose.
-   Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs. The
-   Train window warns when less than that is free, so close anything else using the GPU first.
+   Training needs about 12.5 GB of GPU memory, most of it while it prepares the songs, so a
+   16 GB card is the practical minimum; a smaller one, such as 8 GB, can't train, though it can
+   still use LoRAs trained elsewhere (**Install a LoRA**). The Train window warns when less than
+   that is free, so close anything else using the GPU first.
 
 ### A run that ends early
 
