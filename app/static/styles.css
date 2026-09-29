@@ -1222,6 +1222,18 @@ label .lora-value:disabled { opacity: 0.6; }
 .identity-card, .persona-card { border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 14px; cursor: pointer; }
 .identity-card:hover, .persona-card:hover { border-color: rgb(var(--accent-a-rgb) / 0.55); }
 .identity-card strong, .persona-card strong { display: block; font-size: 15px; }
+/* A corpus being prepared says so on its own card, as the badge in the top bar says it: the
+   same dot, the same pulse, the same word, both reading from the one poll.  The dot and the
+   word are always in the markup and shown by the class, so marking a card never redraws the
+   list under a click. */
+.identity-card .corpus-dot, .identity-card .corpus-preparing { display: none; }
+.identity-card.busy { border-color: rgb(var(--good-rgb) / 0.35); }
+.identity-card.busy .corpus-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good);
+  margin-right: 7px; vertical-align: 1px; animation: corpora-pulse 1.5s ease-in-out infinite;
+}
+.identity-card.busy .corpus-preparing { display: block; color: var(--good); font-size: 12.5px; margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .identity-card.busy .corpus-dot { animation: none; } }
 .identity-card .muted, .persona-card .muted { font-size: 12.5px; }
 .identity-form, .persona-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; max-width: 900px; }
 .identity-form .wide, .persona-form .wide { grid-column: 1 / -1; }

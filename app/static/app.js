@@ -3127,6 +3127,7 @@ async function pollCorpora() {
   State.corpusProgress = progress;
   PERSONAS_LIST = IDENTITIES_LIST;
   paintCorporaBadge();
+  paintCorpusCards();
   if (typeof paintStyleLoras === 'function') { paintStyleLoras(); }
   clearTimeout(State.corpusTimer);
   State.corpusTimer = setTimeout(pollCorpora, busy ? CORPUS_POLL_BUSY : CORPUS_POLL_IDLE);
@@ -5511,10 +5512,33 @@ async function showIdentityList() {
     'to check. Then export the set and train it' + (trainingAvailable() ? ' — here, or anywhere else' : ' with the trainer of your choice') + '.</p>' +
     '<button id="identity-new" class="ghost">New corpus</button>' +
     '<div class="identity-cards persona-cards">' + list.map(function (item) {
-      return '<div class="identity-card persona-card" data-identity="' + esc(item.id) + '" data-persona="' + esc(item.id) + '"><strong>' + esc(item.name) + '</strong>' +
+      // The dot and the word are always here and shown by the card's class: the poll marks
+      // a card rather than redrawing the list, which would move it out from under a click.
+      return '<div class="identity-card persona-card" data-identity="' + esc(item.id) + '" data-persona="' + esc(item.id) + '">' +
+        '<strong><span class="corpus-dot" aria-hidden="true"></span>' + esc(item.name) + '</strong>' +
         '<span class="muted">trigger <code>' + esc(item.trigger_word) + '</code> · ' + (item.included || 0) + ' of ' +
-        (item.songs || 0) + ' songs' + (item.exported_at ? ' · exported' : '') + '</span></div>';
+        (item.songs || 0) + ' songs' + (item.exported_at ? ' · exported' : '') + '</span>' +
+        '<span class="corpus-preparing">preparing…</span></div>';
     }).join('') + '</div>';
+  paintCorpusCards();
+}
+
+/* Which corpora are being prepared, said on their own cards.  The top bar's badge knows it
+   already, but it shows one corpus and this screen may hold a dozen: whoever is looking at
+   the cards is looking here.  Marking rather than redrawing keeps clicks and the scroll
+   where they were, and the progress comes from the poll that is already running. */
+function paintCorpusCards() {
+  var cards = document.querySelectorAll('.identity-card[data-identity]');
+  Array.prototype.forEach.call(cards, function (card) {
+    var item = (State.corpusProgress || {})[card.getAttribute('data-identity')];
+    var busy = Boolean(item && item.busy);
+    card.classList.toggle('busy', busy);
+    if (busy) {
+      card.title = esc(item.name) + ': ' + item.done + ' of ' + item.total + ' songs settled, still working.';
+    } else if (card.title) {
+      card.removeAttribute('title');
+    }
+  });
 }
 var showPersonaList = showIdentityList;
 
