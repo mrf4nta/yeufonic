@@ -1714,7 +1714,11 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
 .ed-score #score-box > summary { list-style: none; cursor: default; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .ed-score #score-box > summary::-webkit-details-marker { display: none; }
 /* The score on the left at full height; the chord chart and the tools beside it. */
-.ed-score #abc { float: left; width: calc(62% - 12px); margin-right: 24px; min-height: 460px; height: 62vh; font-size: 12.5px; }
+/* Its height follows the window.  A fixed 62vh with a 460px floor is taller than the
+   window has room for on a laptop, so the box filled the modal and its own heading and
+   hint scrolled off the top; below about 200px it stops being worth showing at all. */
+.ed-score #abc { float: left; width: calc(62% - 12px); margin-right: 24px; font-size: 12.5px;
+                 height: clamp(200px, calc(100vh - 330px), 62vh); }
 .ed-score #score-box > .row, .ed-score #score-tools, .ed-score #plan-actions { flex-wrap: wrap; }
 .ed-score #chart { overflow: auto; }
 .ed-score #score-box::after { content: ''; display: block; clear: both; }
