@@ -36,6 +36,16 @@ cannot creep back in.
   shared position: switching keeps the place in the song. Levels can be matched, the names hidden
   for a blind listen, and the one you prefer starred. Fixes #28.
 
+### Fixed
+
+- **Some renders clipped.** A loud render could overshoot full scale by a few dB, and saving it as
+  16-bit flattened every peak past it: about one take in six had flat tops, a few of them many.
+  The engine now has a peak guard between the decode and the save: it turns the audio down around
+  a peak that would clip, in floating point, for a few milliseconds either side, and leaves the
+  rest alone, so a render's level changes by hundredths of a dB and no sample is flat-topped. The
+  app uses it when the engine has it, so rebuild the engine (`docker compose build engine`) to get
+  it; an older engine keeps saving renders as before. `PEAK_GUARD=0` turns it off. Fixes #4.
+
 ### Changed
 
 - A take's title stays on one line, ending in an ellipsis when it is long, in the wide layout as

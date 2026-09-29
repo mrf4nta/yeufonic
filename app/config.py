@@ -147,6 +147,11 @@ TRAIN_MINUTES_AUTO = _MINUTES in ("", "auto")
 TRAIN_TOKENS_AUTO = _TOKENS in ("", "auto")
 TRAIN_MAX_MINUTES = 3.5 if TRAIN_MINUTES_AUTO else float(_MINUTES)
 TRAIN_MAX_TOKENS = 8192 if TRAIN_TOKENS_AUTO else int(_TOKENS)
+# A render can overshoot full scale, and saving it as 16-bit then flattens the peaks.  When the
+# engine has the peak guard (an engine built since it was added), it turns the audio down around
+# those peaks, in floating point, before the save.  PEAK_GUARD=0 leaves it out.
+PEAK_GUARD = os.environ.get("PEAK_GUARD", "1").strip().lower() not in ("0", "false", "no", "off")
+PEAK_CEILING_DB = float(os.environ.get("PEAK_CEILING_DB", "-0.5"))
 TRAIN_END_TOKEN_WEIGHT = float(os.environ.get("TRAIN_END_TOKEN_WEIGHT", "1.0"))
 TRAIN_CLIP_SECONDS = float(os.environ.get("TRAIN_CLIP_SECONDS", "30.0"))
 REGULARIZER_PACK = os.environ.get("REGULARIZER_PACK", "minted_regularizer_pack_v2.pt")

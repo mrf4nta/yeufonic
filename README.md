@@ -606,6 +606,8 @@ built from, and the ports itself: change those in its `settings.ini` instead (se
 | `STEMS_THREADS` | half the CPUs | torch threads for the separation |
 | `STEMS_JOBS` | 4, or a quarter of the CPUs | demucs segments applied at once. One uses about 1.8 GB and 2.5x realtime, four uses 3.7 GB and 3.6x. The split setup's 2 GB cap needs this at 1, or the cap raised |
 | `WEAK_RENDER_DB` | `-24` | the average level, in dB, below which a take is marked *Weak render* |
+| `PEAK_GUARD` | `1` | with an engine that has the peak guard, a render whose peaks would clip is turned down around them before it is saved. `0` leaves it out |
+| `PEAK_CEILING_DB` | `-0.5` | the highest a peak may reach with the guard on, in dB below full scale |
 | `TRAINING_ENABLED` | `1` | corpora and LoRA training; `0` takes them out of the app. Training also needs `WITH_TRAINER` on the engine. See Training a LoRA |
 | `DATA_DIR` | `/data` | the library. Only needed when running without the containers |
 

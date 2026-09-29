@@ -274,6 +274,47 @@ class YuE2GenerateABCHarmony:
         return (clip.decode(ids),)
 
 
+class Yue2PeakGuard:
+    """Keeps a render from clipping when it is saved.
+
+    The decoder can overshoot full scale, and the save then turns the floating point audio
+    into 16-bit, which flattens every peak past it.  Here the audio is still floating point,
+    so a limiter turns it down around the peaks that would clip, and only there; anything
+    that stays under the ceiling passes through untouched.  The second output says what the
+    peak was."""
+
+    CATEGORY = "audio"
+    RETURN_TYPES = ("AUDIO", "STRING")
+    RETURN_NAMES = ("audio", "info")
+    FUNCTION = "execute"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "audio": ("AUDIO",),
+            "ceiling_db": ("FLOAT", {"default": -0.5, "min": -12.0, "max": 0.0, "step": 0.1,
+                                     "tooltip": "The highest a peak may reach, in dB below full scale."}),
+            "window_ms": ("FLOAT", {"default": 8.0, "min": 1.0, "max": 50.0, "step": 1.0,
+                                    "tooltip": "How far either side of a peak the gain dips."}),
+        }}
+
+    def execute(self, audio, ceiling_db, window_ms=8.0):
+        import math
+
+        from . import peak as limiter
+
+        wave = audio["waveform"]
+        top = float(wave.abs().max()) if wave.numel() else 0.0
+        ceiling = 10 ** (ceiling_db / 20)
+        seen = f"peak {20 * math.log10(top):.2f} dBFS" if top > 0 else "silent"
+        if top <= ceiling:
+            return (audio, seen)
+        window = int(audio["sample_rate"] * window_ms / 1000)
+        limited = limiter.limit(wave, ceiling, window)
+        return ({**audio, "waveform": limited},
+                f"{seen}, limited to {ceiling_db:.1f} dBFS ({window_ms:g} ms window)")
+
+
 # What the engine tells the app about itself: see watch.py. Never at the cost of the node.
 try:
     from . import watch
@@ -281,5 +322,6 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
-NODE_CLASS_MAPPINGS = {"YuE2GenerateABCHarmony": YuE2GenerateABCHarmony}
-NODE_DISPLAY_NAME_MAPPINGS = {"YuE2GenerateABCHarmony": "YuE2 Generate ABC (harmony)"}
+NODE_CLASS_MAPPINGS = {"YuE2GenerateABCHarmony": YuE2GenerateABCHarmony, "Yue2PeakGuard": Yue2PeakGuard}
+NODE_DISPLAY_NAME_MAPPINGS = {"YuE2GenerateABCHarmony": "YuE2 Generate ABC (harmony)",
+                              "Yue2PeakGuard": "Yeufonic peak guard"}

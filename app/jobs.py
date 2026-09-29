@@ -244,6 +244,17 @@ def with_identity_lora(graph: dict, lora: str, loader: str = "10", strength: flo
 with_persona_lora = with_identity_lora
 
 
+def with_peak_guard(graph: dict, ceiling_db: float | None = None) -> dict:
+    """The engine's peak guard between the decode and the save.  It works on the floating
+    point audio, turns it down around any peak that would clip and leaves the rest alone,
+    where the 16-bit save would flatten those peaks."""
+    graph["30"] = {"class_type": "Yue2PeakGuard", "inputs": {
+        "audio": ["15", 0], "ceiling_db": config.PEAK_CEILING_DB if ceiling_db is None else ceiling_db,
+        "window_ms": 8.0}}
+    graph["16"]["inputs"]["audio"] = ["30", 0]
+    return graph
+
+
 def build_render_graph(take: dict) -> dict:
     graph = load_template("render.json")
     graph["10"]["inputs"]["ckpt_name"] = config.CHECKPOINT
@@ -284,6 +295,8 @@ def build_render_graph(take: dict) -> dict:
         with_style_lora(graph, style_lora, loader="10",
                         strength_model=float(take.get("style_lora_model") or 0.0),
                         strength_clip=float(take.get("style_lora_clip") or 0.0))
+    if config.PEAK_GUARD and (getattr(ENGINE, "options", None) or {}).get("peak_guard"):
+        with_peak_guard(graph)
     return graph
 
 

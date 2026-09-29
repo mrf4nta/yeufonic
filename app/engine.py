@@ -42,6 +42,7 @@ STAGE_LABELS = {
     "ConditioningZeroOut": "Preparing the render",
     "KSampler": "Rendering audio",
     "VAEDecodeAudio": "Decoding audio",
+    "Yue2PeakGuard": "Levelling",
     "SaveAudioAdvanced": "Saving",
     "CLIPLoader": "Loading the lyric writer",
     "TextGenerate": "Writing lyrics",
@@ -352,6 +353,8 @@ class Engine:
         loras = combo_options(info, "LoraLoader", "lora_name")
         self.options = {"checkpoints": checkpoints, "audio_encoders": encoders,
                         "harmony": "YuE2GenerateABCHarmony" in info,
+                        # Optional too: an engine from before it saves renders as they were.
+                        "peak_guard": "Yue2PeakGuard" in info,
                         # Lyrics are optional: without Gemma or the node, the button is greyed out.
                         "lyrics": "TextGenerate" in info and config.LYRICS_MODEL in text_models,
                         "instrumental": config.INSTRUMENTAL_LORA in loras,
