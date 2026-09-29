@@ -1309,7 +1309,7 @@ function sectionChords(section) {
    /soundfonts/, plays the score, and writes the same score out as a MIDI file.
    Nothing here goes near the engine: it is the ABC in the box, as you edited it. */
 var NOTATION = { synth: null, tune: null, tuned: null, tunedChords: null, transpose: 0, notes: 0,
-                 playable: false, hasScore: false, text: '', marked: [], sounds: null, message: '',
+                 playable: false, hasScore: false, empty: true, text: '', marked: [], sounds: null, message: '',
                  busy: false, at: -1, shift: 0, lead: 0, inserts: [], choice: null, fetching: 0,
                  tunedRange: null };
 // The note samples are one file per key of a piano, A0 to C8.
@@ -1603,9 +1603,13 @@ function notationSoundsReady() { return Boolean(NOTATION.sounds) && notationMiss
 function notationTransposeWords(shift) {
   var octaves = Math.abs(shift) / 12;
   var how = octaves === 1 ? 'an octave' : octaves + ' octaves';
-  return 'Played ' + how + (shift < 0 ? ' lower' : ' higher') + ', to fit the piano\u2019s range.';
+  return 'Played ' + how + (shift < 0 ? ' lower' : ' higher') + ', to fit what these instruments can play.';
 }
 
+/* What the line beside the player says.  Everything here is worked out from the state
+   as it is now: a message kept from an earlier look at the score would outlive it, and
+   the line would go on saying a score has no notes while it plays.  NOTATION.message
+   holds a failure only — a fetch that did not work, a file that would not write. */
 function notationPaintNote() {
   var note = $('notation-note');
   if (!note) { return; }
@@ -1615,6 +1619,13 @@ function notationPaintNote() {
     note.textContent = many > 1
       ? 'Getting the note samples (' + NOTATION.fetching + ' of ' + many + ')…'
       : 'Getting the note samples…';
+    return;
+  }
+  if (NOTATION.empty) { note.textContent = ''; return; }        // the staves say "No score yet."
+  if (!NOTATION.hasScore) { note.textContent = 'This score has no notes in it yet.'; return; }
+  if (!NOTATION.playable) {
+    note.textContent = 'This score has notes outside what its instruments can play, so it cannot be ' +
+      'heard here. The staves and the MIDI file are still yours.';
     return;
   }
   if (!notationSoundsReady()) {
@@ -1673,6 +1684,7 @@ async function notationGetSounds(thenPlay) {
       notationPaintBar();
       await api('/api/soundfonts/' + encodeURIComponent(missing[i]) + '/download', { method: 'POST' });
     }
+    NOTATION.message = '';      // whatever went wrong before, it is here now
     await notationSoundsState();
     notationSetTune();          // they are here now: hand the score over
     if (thenPlay && NOTATION.playable) { NOTATION.synth.play(); }
@@ -1782,12 +1794,9 @@ function notationSetTune() {
     NOTATION.hasScore = playable.notes > 0;
   }
   if (!NOTATION.hasScore || !NOTATION.playable) {
+    // Nothing these instruments can reach.  What the line says about it is worked out
+    // in notationPaintNote from the state as it stands, not kept from an earlier look.
     NOTATION.synth.disable(true);
-    NOTATION.message = NOTATION.hasScore
-      // Nothing can reach these: the samples for them do not exist.
-      ? 'This score has notes outside the piano\u2019s range (A0 to C8), so it cannot be played here. ' +
-        'The staves and the MIDI file are still yours.'
-      : 'This score has no notes in it yet.';
     notationPaintNote();
     return;
   }
@@ -1825,20 +1834,27 @@ function notationStop() {
 function renderNotationView() {
   var host = $('notation-big');
   if (!host) { return; }
+  var box = (($('score-big') && $('score-big').value) || '').trim();
   var score = notationAbc();
   var abc = score.text.trim();
-  if (!abc || typeof ABCJS === 'undefined') {
+  if (!box || !abc || typeof ABCJS === 'undefined') {
     host.innerHTML = '<p class="hint">No score yet.</p>';
     // Nothing to hand over, and nothing to leave behind from the last one either.
     NOTATION.tune = null;
     NOTATION.tuned = null;
     NOTATION.hasScore = false;
     NOTATION.playable = false;
+    NOTATION.empty = true;
+    NOTATION.message = '';
     notationUnmark();
     if (NOTATION.synth) { NOTATION.synth.disable(true); }
     notationPaintBar();
     return;
   }
+  // A score other than the one looked at last: a failure kept from that one is not this
+  // one's, and the line is worked out again from what is here now.
+  if (NOTATION.text !== abc) { NOTATION.message = ''; }
+  NOTATION.empty = false;
   NOTATION.at = score.at;
   NOTATION.shift = score.shift;
   NOTATION.lead = score.lead;
