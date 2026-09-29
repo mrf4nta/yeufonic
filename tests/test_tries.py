@@ -45,7 +45,7 @@ def test_the_numbering_carries_on_and_a_try_is_named_for_its_original(client):
 def test_planner_strengths_keep_the_seed_and_skip_the_takes_own(client, monkeypatch):
     monkeypatch.setattr(loras, "describe", lambda name, root: {"name": name, "kind": "both"})
     take = a_take()
-    execute("UPDATE takes SET style_lora = 'dylan_lora.safetensors', style_lora_model = 0.6, style_lora_clip = 0.8 WHERE id = ?", (take["id"],))
+    execute("UPDATE takes SET style_lora = 'folk_band_lora.safetensors', style_lora_model = 0.6, style_lora_clip = 0.8 WHERE id = ?", (take["id"],))
     reply = client.post(f"/api/takes/{take['id']}/tries", json={"mode": "planner", "planner": [0.6, 0.8, 1.0, 1.0]})
     assert reply.status_code == 200
     made = reply.json()["created"]
@@ -53,7 +53,7 @@ def test_planner_strengths_keep_the_seed_and_skip_the_takes_own(client, monkeypa
     assert [m["style_lora_clip"] for m in made] == [0.6, 1.0]
     for m in made:
         row = one("SELECT * FROM takes WHERE id = ?", (m["id"],))
-        assert row["seed"] == 111 and row["style_lora"] == "dylan_lora.safetensors" and row["style_lora_model"] == 0.6
+        assert row["seed"] == 111 and row["style_lora"] == "folk_band_lora.safetensors" and row["style_lora_model"] == 0.6
     # And a planner try, tried again, is still named for the original.
     again = client.post(f"/api/takes/{made[0]['id']}/tries", json={"mode": "seeds", "count": 1}).json()["created"]
     assert again[0]["title"] == "Night drive · try 1"
