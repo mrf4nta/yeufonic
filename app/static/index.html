@@ -112,6 +112,7 @@
         <button class="chip" data-filter="favourite">Starred</button>
         <button id="layout-toggle" class="chip layout" title="Switch card size">Compact</button>
         <button id="width-toggle" class="chip layout" title="Fill the window, or centre the column">Wide</button>
+        <button id="compare-picked" class="chip hidden" title="Play the ticked takes against each other, from the same place in the song">Compare</button>
         <button id="bulk-delete" class="chip danger hidden" title="Delete every selected take, with its audio and stems">Delete</button>
       </div>
     </div>
@@ -639,6 +640,60 @@
       <span id="variations-estimate" class="muted"></span>
     </div>
     <div id="variations-status" class="status"></div>
+  </div>
+</div>
+
+<div id="compare-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Compare takes">
+  <div class="modal-box compare">
+    <div class="modal-head">
+      <strong>Compare</strong>
+      <button id="compare-close" class="ghost">Close</button>
+    </div>
+    <div class="compare-options">
+      <label><input type="checkbox" id="compare-level" checked> Match loudness</label>
+      <label><input type="checkbox" id="compare-blind"> Hide names</label>
+    </div>
+    <div id="compare-list" class="compare-list"></div>
+    <div class="compare-transport">
+      <button id="compare-play" class="chip">Play</button>
+      <input type="range" id="compare-seek" min="0" max="1000" value="0" aria-label="Position">
+      <span id="compare-time" class="muted">0:00 / 0:00</span>
+    </div>
+    <p class="hint">Switching keeps your place in the song. Keys: 1 to 6 switch, Space plays and pauses, the arrows move 5 seconds.</p>
+  </div>
+</div>
+
+<div id="tries-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Try more">
+  <div class="modal-box narrow">
+    <div class="modal-head">
+      <strong id="tries-heading">Try more</strong>
+      <button id="tries-close" class="ghost">Cancel</button>
+    </div>
+    <div id="tries-of" class="muted"></div>
+    <p class="hint">The same score and words, rendered again as new takes beside this one. Which roll suits a song is heard, not predicted, so make a few and listen.</p>
+    <div class="variations-list" id="tries-modes">
+      <label><input type="radio" name="tries-mode" value="seeds" checked><strong>New seeds</strong>
+        <span class="muted">a fresh roll each; everything else stays</span></label>
+      <label id="tries-planner-row"><input type="radio" name="tries-mode" value="planner"><strong>Planner strengths</strong>
+        <span class="muted" id="tries-planner-hint">this seed, at other Planner strengths</span></label>
+    </div>
+    <div class="field" id="tries-count-field">
+      <label for="tries-count">How many</label>
+      <input id="tries-count" type="number" step="1" min="1" max="8" value="4">
+    </div>
+    <div class="field hidden" id="tries-planner-field">
+      <label>Planner strengths <span class="muted">(this take&rsquo;s own is left out)</span></label>
+      <div class="tries-values" id="tries-values"></div>
+    </div>
+    <div class="field">
+      <label for="tries-cap">Length cap <span class="muted">(seconds, for these takes only)</span></label>
+      <input id="tries-cap" type="number" step="10" min="10" max="900">
+    </div>
+    <div class="row">
+      <button id="tries-go" class="primary">Render</button>
+      <span id="tries-estimate" class="muted"></span>
+    </div>
+    <div id="tries-status" class="status"></div>
   </div>
 </div>
 

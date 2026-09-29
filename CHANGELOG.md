@@ -23,6 +23,24 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Added
+
+- **Try more.** The dice button on a take card renders the same score and words again as several
+  new takes: with new seeds, or, for a take with a style LoRA that has a planner half, the same seed
+  at other Planner strengths. With a LoRA the result depends on the roll as much as on the
+  strengths, and this makes a set to choose from in one go. The new takes are ticked with the
+  original. Fixes #27.
+- **Compare.** Tick two to six takes and press Compare to play them against each other on one
+  shared position: switching keeps the place in the song. Levels can be matched, the names hidden
+  for a blind listen, and the one you prefer starred. Fixes #28.
+
+### Changed
+
+- The guide's advice on LoRA strengths says how to find a good take: the Sound strength changes the
+  voice little between 0.3 and 0.6, and the Planner strength works like another seed.
+
 ## 0.0.7 (2026-09-29)
 
 ### Added

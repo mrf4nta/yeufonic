@@ -1144,6 +1144,30 @@ label .lora-value:disabled { opacity: 0.6; }
   border-radius: 11px; background: var(--card); cursor: pointer; font-size: 13.5px; }
 .variations-list input { accent-color: var(--accent-a); }
 .variations-list .muted { font-size: 12.5px; }
+/* Compare: the takes as a row of buttons on one shared position. */
+.modal-box.compare { width: min(760px, 94vw); height: auto; max-height: 90vh; overflow: auto; }
+.compare-options { display: flex; gap: 18px; margin: 4px 0 12px; font-size: 13.5px; color: var(--muted); flex-wrap: wrap; }
+.compare-options label { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+.compare-options input { accent-color: var(--accent-a); }
+.compare-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.compare-item { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--card); color: var(--text); cursor: pointer; font: inherit; }
+.compare-item:hover { border-color: rgb(var(--accent-a-rgb) / 0.5); }
+.compare-item.active { border-color: rgb(var(--accent-a-rgb) / 0.8); background: rgb(var(--accent-a-rgb) / 0.14); }
+.compare-item kbd { font: 12px ui-monospace, monospace; padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
+.compare-item .ci-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-item .ci-meta { color: var(--muted); font-size: 12.5px; }
+.compare-item .ci-star { padding: 2px 6px; border-radius: 8px; color: var(--muted); }
+.compare-item .ci-star.on { color: var(--star, #f3c14b); }
+.compare-transport { display: flex; gap: 12px; align-items: center; }
+.compare-transport input[type=range] { flex: 1; accent-color: var(--accent-a); }
+/* Try more: the planner strengths to choose from. */
+.tries-values { display: flex; gap: 8px; flex-wrap: wrap; }
+.tries-values label { display: flex; gap: 6px; align-items: center; padding: 6px 12px; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--card); cursor: pointer; font-size: 13px; }
+.tries-values label.own { opacity: 0.45; cursor: default; }
+.tries-values input { accent-color: var(--accent-a); }
+#tries-modes label.off { opacity: 0.45; cursor: default; }
 .take-corner { display: flex; gap: 2px; align-self: flex-start; margin: -4px -4px 0 0; }
 .take-corner .take-move { margin: 0; }
 #write-brief { min-height: 90px; }

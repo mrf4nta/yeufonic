@@ -106,6 +106,9 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   Download them singly or as a zip.
 - **Spaces.** Keep takes apart by project: a space per song, per album, or for sketches. Create,
   rename and delete spaces, and move a take from one to another.
+- **Try more, and Compare.** Render a take again as a set of new seeds, or at other LoRA planner
+  strengths, then play the ones you tick against each other from the same point in the song, with
+  matched loudness and an optional blind listen.
 - **A library.** Every take keeps its score, style, lyrics, seed and settings, so it can be
   reproduced, reworked, starred or deleted. Search by title, style, lyrics or LoRA, in one space or
   all of them. Tick several cards and one button clears them all.

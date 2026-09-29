@@ -186,6 +186,21 @@ interpretation — not a different roll of the dice. Each lands as its own take,
 *Night drive · Loose*. The window has its own length cap, which starts at the editor's and applies
 only to these takes.
 
+### Try more
+
+The dice button on a card renders **the same score and words again as several new takes**, to
+listen to together. Variations changes only the interpretation and keeps the seed; this changes the
+roll:
+
+- **New seeds:** a fresh seed for each, everything else kept.
+- **Planner strengths:** for a take with a style LoRA that has a planner half, the same seed at
+  other Planner strengths (its own is left out). Planner changes the performance itself, not only
+  the voice, so it works like another seed.
+
+The new takes are titled *Night drive · try 1* or *Night drive · planner 0.60*, and are ticked
+with the original, so **Compare** opens as soon as they have finished. The window has its own
+length cap, which starts at the take's own.
+
 ### Seed, and reproducing a take
 
 Every take records its seed and every setting that shaped it. The card names them, clicking a card
@@ -479,6 +494,11 @@ such rather than failing quietly inside a render.
 - **Diverse corpora:** If the training corpus spans multiple genres, production styles, or eras (e.g. acoustic folk, rock, and synth-pop), high Sound weights can cause acoustic clashing. Up to about **Planner 0.70 / Sound 0.70** keeps the audio clean while retaining the artist's melodic phrasing and vocal character.
 - **Covers:** your recording sets the melody, so there is less for the LoRA to shape and the Sound half is pushed harder. Keep Sound near **0.50**.
 - **Plan variety:** with a LoRA trained from a corpus, **Calm** or **Normal** gives the most recognisable result.
+- **Finding a good take:** the LoRA's character depends on the roll as much as on the strengths.
+  Between about 0.3 and 0.6, **Sound** changes the voice little, so there is no need to push it.
+  **Planner** changes the performance itself, not only the voice, so a value that suits one song
+  can be the weakest for another. Treat it like the seed: try a few (say 0.6, 0.8 and 1.0) and a
+  few seeds with **Sing again**, and keep the take you like.
 - **Save strengths:** when you find the right pair for a LoRA, press **Save strengths** under the
   picker. Choosing that LoRA then starts at them, and they travel with it when you share it.
 
@@ -614,6 +634,15 @@ click one, or pick it with the arrow keys and Enter.
 
 **Starred** shows only starred takes. **Compact** switches between three narrow cards across and
 wider ones with the full title. Hover over a card's settings or style to read all of it.
+
+### Comparing takes
+
+Tick two to six takes and press **Compare** (it appears beside Select all once two are ticked, and
+waits for takes still rendering). The takes stack in one window on a shared position: press **1** to
+**6** or click one to switch, and it carries on from the same moment in the song, playing or
+paused. **Space** plays and pauses, the arrows move 5 seconds, and the star marks the one you
+prefer. **Match loudness** turns the louder takes down to the quietest, since a louder take tends
+to sound better; **Hide names** shuffles the takes and calls them Take A, B, C for a blind listen.
 
 ### The player
 

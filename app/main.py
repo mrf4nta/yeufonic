@@ -1755,10 +1755,14 @@ async def replan_take(take_id: str, body: ReplanIn | None = None) -> dict:
     return {"queued": True, "seed": seed}
 
 
+TRY_TAIL = re.compile(r"try \d+|planner \d+\.\d\d")
+
+
 def _base_title(title: str) -> str:
     """'Night drive · Tight' -> 'Night drive', so a variation of a variation is not 'X · Tight · Loose'."""
     head, sep, tail = title.rpartition(" \u00b7 ")
-    return head if sep and (tail in INTERPRETATION_NAMES.values() or tail in ("new voice", "sung again", "new words")) else title
+    known = tail in INTERPRETATION_NAMES.values() or tail in ("new voice", "sung again", "new words")
+    return head if sep and (known or TRY_TAIL.fullmatch(tail)) else title
 
 
 # What Sing again leaves behind: the copy is a new take with its own audio and state.
@@ -1894,6 +1898,73 @@ async def variations(take_id: str, body: VariationsIn) -> dict:
         await QUEUE.put({"kind": "render", "id": record["id"]})
         created.append({"id": record["id"], "title": record["title"], "interpretation": name})
     log.info("Queued %d variations for take '%s' (%s)", len(created), take.get("title") or take_id, take_id)
+    return {"created": created}
+
+
+class TriesIn(BaseModel):
+    mode: Literal["seeds", "planner"] = "seeds"
+    count: int = Field(4, ge=1, le=8)                                   # new seeds
+    planner: list[float] = Field(default_factory=list, max_length=8)   # planner strengths to try
+    max_duration: float | None = Field(None, ge=10, le=900)
+
+
+def _next_try(base: str, space_id: str) -> int:
+    """The number after the highest 'try N' this take's title has in its space."""
+    pattern = re.compile(re.escape(base) + r" \u00b7 try (\d+)")
+    seen = [int(m.group(1)) for r in rows("SELECT title FROM takes WHERE space_id = ? AND title LIKE ?",
+                                          (space_id, base.replace("%", "").replace("_", "") + "%"))
+            if (m := pattern.fullmatch(r["title"]))]
+    return max(seen, default=0) + 1
+
+
+@app.post("/api/takes/{take_id}/tries")
+async def tries(take_id: str, body: TriesIn) -> dict:
+    """The same score and words rendered again as several new takes: with new seeds, or,
+    for a take with a style LoRA that has a planner half, at other planner strengths with
+    its own seed.  Which roll suits a song is heard, not predicted (a seed does not carry
+    from one set of words to another, and the best planner strength differs per seed), so
+    the takes are made together to be listened to together."""
+    _gpu_free_for_rendering()
+    take = one("SELECT * FROM takes WHERE id = ?", (take_id,))
+    if not take:
+        raise HTTPException(404, "no such take")
+    if not (take["abc"] or "").strip():
+        raise HTTPException(400, "this take has no score to render again. Write a plan first.")
+    _check_score(take["abc"], take["kind"])
+    _checkpoint()
+    base = _base_title(take["title"])
+    specs: list[dict] = []
+    if body.mode == "planner":
+        if not take.get("style_lora"):
+            raise HTTPException(400, "this take has no style LoRA, so it has no planner strength to try.")
+        if loras.describe(take["style_lora"], loras.folder())["kind"] in ("decoder", "other"):
+            raise HTTPException(400, "this LoRA has no planner half, so there is no planner strength to try.")
+        own = float(take.get("style_lora_clip") if take.get("style_lora_clip") is not None else 1.0)
+        for value in dict.fromkeys(round(float(v), 2) for v in body.planner):
+            if not 0.0 <= value <= 3.0:
+                raise HTTPException(400, "a planner strength is between 0 and 3.")
+            if abs(value - own) >= 0.005:      # the take's own would repeat it exactly
+                specs.append({"title": f"{base} \u00b7 planner {value:.2f}", "seed": take["seed"],
+                              "sound_seed": take.get("sound_seed"), "style_lora_clip": value})
+        if not specs:
+            raise HTTPException(400, "pick at least one planner strength other than this take's own.")
+    else:
+        first = _next_try(base, take["space_id"])
+        for n in range(body.count):
+            specs.append({"title": f"{base} \u00b7 try {first + n}", "seed": int.from_bytes(os.urandom(4), "big"),
+                          "sound_seed": None})
+    now = time.time()
+    created = []
+    for offset, spec in enumerate(specs):
+        record = {key: value for key, value in take.items() if key not in _REVOICE_FRESH}
+        record.update(id=uuid.uuid4().hex[:12], status="queued", created_at=now + offset * 0.001,
+                      checkpoint=config.CHECKPOINT, max_duration=body.max_duration or take["max_duration"], **spec)
+        columns = list(record)
+        execute(f"INSERT INTO takes({', '.join(columns)}) VALUES({', '.join(':' + c for c in columns)})", record)
+        await QUEUE.put({"kind": "render", "id": record["id"]})
+        created.append({"id": record["id"], "title": record["title"], "seed": record["seed"],
+                        "style_lora_clip": record.get("style_lora_clip")})
+    log.info("Queued %d tries (%s) for take '%s' (%s)", len(created), body.mode, take.get("title") or take_id, take_id)
     return {"created": created}
 
 

@@ -111,6 +111,7 @@ var WIDTH_KEY = 'yue2.width';
 var SPACE_KEY = 'yue2.space';
 var FILTER_KEY = 'yue2.filter';
 var SEARCHES_KEY = 'yue2.searches';
+var COMPARE_MOST = 6;   // takes the compare window holds
 
 /* All or Starred, kept across a reload like the layout. */
 function applyFilter(filter) {
@@ -1498,7 +1499,7 @@ function lockGpuControls() {
   });
   Array.prototype.forEach.call(document.querySelectorAll('.takes [data-act]'), function (button) {
     var act = button.dataset.act || '';
-    if (['render', 'again', 'variations', 'revoice', 'replan', 'reroll'].indexOf(act) >= 0) {
+    if (['render', 'again', 'variations', 'tries', 'revoice', 'replan', 'reroll'].indexOf(act) >= 0) {
       button.disabled = training;
     }
   });
@@ -4296,6 +4297,307 @@ async function doVariations() {
   }
 }
 
+/* ------------------------------------------------------------- compare
+   Two to six takes on one shared position: switching keeps the place in the song, so
+   the same moment is heard in each.  Each take has an audio element of its own, loaded
+   up front, and only the chosen one plays.  Levels can be matched (quieter takes always
+   sound better to the ear, so the louder ones are turned down to the quietest), and the
+   names hidden, for a blind listen. */
+var COMPARE = { items: [], active: 0, timer: null };
+
+function compareOpen() {
+  return !!$('compare-modal') && !$('compare-modal').classList.contains('hidden');
+}
+
+/* The picked takes that have audio to play. */
+function comparable() {
+  return pickedIds().map(takeById).filter(function (take) {
+    return take && take.status === 'done' && take.has_audio;
+  });
+}
+
+function paintCompareButton() {
+  var button = $('compare-picked');
+  if (!button) { return; }
+  var picked = pickedIds().length, ready = comparable().length;
+  button.classList.toggle('hidden', picked < 2);
+  button.textContent = 'Compare ' + ready;
+  button.disabled = ready < 2 || ready > COMPARE_MOST;
+  button.title = ready > COMPARE_MOST ? 'Compare holds up to ' + COMPARE_MOST + ' takes: untick some'
+    : ready < 2 ? 'Waiting for two ticked takes to finish rendering'
+    : 'Play the ticked takes against each other, from the same place in the song';
+}
+
+/* The level a take plays at, in dB, or null when the app has not read it. */
+function compareLevel(take) {
+  var level = take.normalised ? take.normalised_to : take.loudness;
+  return typeof level === 'number' && isFinite(level) ? level : null;
+}
+
+function compareGain(take, quietest) {
+  var level = compareLevel(take);
+  if (!$('compare-level').checked || level === null || quietest === null) { return 1; }
+  return Math.max(0.05, Math.min(1, Math.pow(10, (quietest - level) / 20)));
+}
+
+function applyCompareLevels() {
+  var levels = COMPARE.items.map(function (item) { return compareLevel(item.take); });
+  var quietest = levels.every(function (level) { return level !== null; }) ? Math.min.apply(null, levels) : null;
+  COMPARE.items.forEach(function (item) { item.audio.volume = compareGain(item.take, quietest); });
+}
+
+function openCompare() {
+  var takes = comparable();
+  if (takes.length < 2 || takes.length > COMPARE_MOST) { return; }
+  // The main player would talk over it.
+  var main = $('audio');
+  if (main && !main.paused) { main.pause(); }
+  if ($('compare-blind').checked) { shuffleInPlace(takes); }
+  COMPARE.items = takes.map(function (take) {
+    var audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = '/api/takes/' + take.id + '/audio' + (take.normalised ? '?level=normalised' : '');
+    audio.addEventListener('ended', paintCompareTransport);
+    audio.addEventListener('pause', paintCompareTransport);
+    audio.addEventListener('play', paintCompareTransport);
+    return { take: take, audio: audio };
+  });
+  COMPARE.active = 0;
+  applyCompareLevels();
+  paintCompare();
+  $('compare-modal').classList.remove('hidden');
+  COMPARE.timer = setInterval(paintCompareTransport, 120);
+}
+
+function closeCompare() {
+  clearInterval(COMPARE.timer);
+  COMPARE.items.forEach(function (item) { item.audio.pause(); item.audio.removeAttribute('src'); item.audio.load(); });
+  COMPARE.items = [];
+  $('compare-modal').classList.add('hidden');
+}
+
+function shuffleInPlace(list) {
+  for (var i = list.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1)), swap = list[i];
+    list[i] = list[j];
+    list[j] = swap;
+  }
+}
+
+function compareMeta(take) {
+  var bits = ['seed ' + take.seed];
+  if (take.style_lora) { bits.push('Planner ' + Number(take.style_lora_clip != null ? take.style_lora_clip : 1).toFixed(2)); }
+  return bits.join(' \u00b7 ');
+}
+
+function paintCompare() {
+  var blind = $('compare-blind').checked;
+  $('compare-list').innerHTML = COMPARE.items.map(function (item, i) {
+    var take = item.take;
+    return '<div class="compare-item' + (i === COMPARE.active ? ' active' : '') + '" role="button" tabindex="0" data-i="' + i + '">' +
+      '<kbd>' + (i + 1) + '</kbd>' +
+      '<span class="ci-name">' + (blind ? 'Take ' + String.fromCharCode(65 + i) : esc(take.title)) + '</span>' +
+      (blind ? '' : '<span class="ci-meta">' + esc(compareMeta(take)) + '</span>') +
+      '<span class="ci-star' + (take.favourite ? ' on' : '') + '" role="button" data-star="' + i + '" title="' +
+        (take.favourite ? 'Starred. Click to remove the star' : 'Star this take') + '">' + (take.favourite ? '\u2605' : '\u2606') + '</span>' +
+    '</div>';
+  }).join('');
+  paintCompareTransport();
+}
+
+function paintCompareTransport() {
+  if (!COMPARE.items.length) { return; }
+  var audio = COMPARE.items[COMPARE.active].audio;
+  var length = isFinite(audio.duration) ? audio.duration : 0;
+  $('compare-play').textContent = audio.paused ? 'Play' : 'Pause';
+  if (document.activeElement !== $('compare-seek')) {
+    $('compare-seek').value = length ? Math.round(1000 * audio.currentTime / length) : 0;
+  }
+  $('compare-time').textContent = secs(audio.currentTime) + ' / ' + secs(length);
+}
+
+function compareSwitch(i) {
+  if (i === COMPARE.active || !COMPARE.items[i]) { return; }
+  var from = COMPARE.items[COMPARE.active].audio, to = COMPARE.items[i].audio;
+  var at = from.currentTime, playing = !from.paused;
+  from.pause();
+  COMPARE.active = i;
+  var go = function () {
+    try { to.currentTime = at; } catch (err) { /* not seekable yet */ }
+    if (playing) { to.play().catch(function () {}); }
+    paintCompare();
+  };
+  if (to.readyState >= 1) { go(); } else { to.addEventListener('loadedmetadata', go, { once: true }); paintCompare(); }
+}
+
+function compareToggle() {
+  var audio = COMPARE.items[COMPARE.active].audio;
+  if (audio.paused) { if (audio.ended) { audio.currentTime = 0; } audio.play().catch(function () {}); } else { audio.pause(); }
+}
+
+function compareNudge(seconds) {
+  var audio = COMPARE.items[COMPARE.active].audio;
+  audio.currentTime = Math.max(0, Math.min(isFinite(audio.duration) ? audio.duration : 0, audio.currentTime + seconds));
+  paintCompareTransport();
+}
+
+async function compareStar(i) {
+  var item = COMPARE.items[i];
+  if (!item) { return; }
+  var take = item.take, want = !take.favourite;
+  try {
+    await api('/api/takes/' + take.id + '/favourite?value=' + (want ? 'true' : 'false'), { method: 'POST' });
+    take.favourite = want ? 1 : 0;
+    var listed = takeById(take.id);
+    if (listed) { listed.favourite = take.favourite; }
+    paintCompare();
+    loadTakes();
+  } catch (err) {
+    statusLine('Could not star that take: ' + err.message, 'bad');
+  }
+}
+
+function compareKey(event) {
+  var digit = /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : -1;
+  var tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (event.key === 'Escape') { closeCompare(); return true; }
+  if (tag === 'INPUT' && document.activeElement.type !== 'range' && document.activeElement.type !== 'checkbox') { return false; }
+  if (digit >= 0 && digit < COMPARE.items.length) { compareSwitch(digit); return true; }
+  if (event.code === 'Space') { compareToggle(); return true; }
+  if (event.key === 'ArrowLeft') { compareNudge(-5); return true; }
+  if (event.key === 'ArrowRight') { compareNudge(5); return true; }
+  return false;
+}
+
+function wireCompare() {
+  if (!$('compare-modal')) { return; }   // a page from before Compare, on a new script
+  $('compare-picked').addEventListener('click', openCompare);
+  $('compare-close').addEventListener('click', closeCompare);
+  $('compare-modal').addEventListener('click', function (event) {
+    if (backdropClick(event, $('compare-modal'))) { closeCompare(); return; }
+    var star = event.target.closest('[data-star]');
+    if (star) { compareStar(Number(star.dataset.star)); return; }
+    var item = event.target.closest('[data-i]');
+    if (item) { compareSwitch(Number(item.dataset.i)); }
+  });
+  $('compare-play').addEventListener('click', compareToggle);
+  $('compare-level').addEventListener('change', applyCompareLevels);
+  $('compare-blind').addEventListener('change', function () {
+    // Hiding the names shuffles the takes, so their order gives nothing away; the take
+    // playing keeps playing, wherever it lands.
+    if ($('compare-blind').checked && COMPARE.items.length) {
+      var playing = COMPARE.items[COMPARE.active];
+      shuffleInPlace(COMPARE.items);
+      COMPARE.active = COMPARE.items.indexOf(playing);
+    }
+    paintCompare();
+  });
+  $('compare-seek').addEventListener('input', function () {
+    var audio = COMPARE.items[COMPARE.active].audio;
+    if (isFinite(audio.duration)) { audio.currentTime = audio.duration * Number($('compare-seek').value) / 1000; }
+    paintCompareTransport();
+  });
+}
+
+/* ------------------------------------------------------------- try more
+   The same score and words again as a set of new takes: with fresh seeds, or at other
+   Planner strengths on this take's seed.  Which roll suits a song is heard, not
+   predicted, so the set is made together, and picked ready to compare. */
+var TRIES = { take: null };
+var TRY_PLANNER = [0.6, 0.8, 1.0];
+
+function triesMode() {
+  var chosen = document.querySelector('#tries-modes input:checked');
+  return chosen ? chosen.value : 'seeds';
+}
+
+function triesPlannerValues() {
+  return Array.prototype.map.call(document.querySelectorAll('#tries-values input:checked'), function (box) {
+    return parseFloat(box.value);
+  });
+}
+
+function openTries(take) {
+  if (!$('tries-of')) { statusLine('Try more needs the app restarted: this page is from before it.', 'bad'); return; }
+  TRIES.take = take;
+  $('tries-of').textContent = '\u201c' + take.title + '\u201d';
+  // Planner strengths only make sense for a style LoRA with a planner half.
+  var kind = take.style_lora ? loraKind(take.style_lora) : '';
+  var canPlan = !!take.style_lora && kind !== 'decoder' && kind !== 'other';
+  var own = take.style_lora_clip != null ? Number(take.style_lora_clip) : 1;
+  $('tries-planner-row').classList.toggle('off', !canPlan);
+  $('tries-planner-row').querySelector('input').disabled = !canPlan;
+  $('tries-planner-hint').textContent = canPlan
+    ? 'this seed, at other Planner strengths (this take: ' + own.toFixed(2) + ')'
+    : (take.style_lora ? 'this LoRA has no planner half' : 'needs a style LoRA');
+  $('tries-values').innerHTML = TRY_PLANNER.map(function (value) {
+    var same = Math.abs(value - own) < 0.005;
+    return '<label' + (same ? ' class="own"' : '') + '><input type="checkbox" value="' + value.toFixed(2) + '"' +
+      (same ? ' disabled' : ' checked') + '>' + value.toFixed(2) + '</label>';
+  }).join('');
+  document.querySelector('#tries-modes input[value="seeds"]').checked = true;
+  $('tries-count').value = 4;
+  $('tries-cap').value = Math.round(take.max_duration || parseFloat($('max-duration').value) || 360);
+  $('tries-status').textContent = '';
+  paintTries();
+  $('tries-modal').classList.remove('hidden');
+}
+
+function closeTries() {
+  TRIES.take = null;
+  $('tries-modal').classList.add('hidden');
+}
+
+function triesCount() {
+  if (triesMode() === 'planner') { return triesPlannerValues().length; }
+  var n = parseInt($('tries-count').value, 10);
+  return n >= 1 ? Math.min(n, 8) : 0;
+}
+
+function paintTries() {
+  var planner = triesMode() === 'planner';
+  $('tries-count-field').classList.toggle('hidden', planner);
+  $('tries-planner-field').classList.toggle('hidden', !planner);
+  var count = triesCount();
+  var average = State.options.avg_render_seconds || 0;
+  $('tries-go').disabled = !count;
+  $('tries-go').textContent = count === 1 ? 'Render 1 take' : 'Render ' + count + ' takes';
+  $('tries-estimate').textContent = count && average ? 'about ' + Math.max(1, Math.round(count * average / 60)) + ' min of rendering' : '';
+}
+
+async function doTries() {
+  var take = TRIES.take;
+  if (!take || !triesCount()) { return; }
+  var cap = parseFloat($('tries-cap').value);
+  if (!(cap >= 10 && cap <= 900)) {
+    $('tries-status').textContent = 'The length cap must be between 10 and 900 seconds.';
+    $('tries-status').className = 'status bad';
+    return;
+  }
+  var planner = triesMode() === 'planner';
+  var body = { mode: planner ? 'planner' : 'seeds', max_duration: cap };
+  if (planner) { body.planner = triesPlannerValues(); } else { body.count = triesCount(); }
+  try {
+    var reply = await api('/api/takes/' + take.id + '/tries', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    closeTries();
+    // Ticked, with the original, so they are ready to compare once they have finished.
+    var ids = [take.id].concat(reply.created.map(function (made) { return made.id; }));
+    if (ids.length <= COMPARE_MOST) {
+      State.picked = {};
+      ids.forEach(function (made) { State.picked[made] = true; });
+    }
+    statusLine('Queued ' + reply.created.length + ' take' + (reply.created.length === 1 ? '' : 's') + ' of ' + take.title +
+      '.' + (ids.length <= COMPARE_MOST ? ' They are ticked with the original: Compare opens when they have finished.' : ''), 'good');
+    loadTakes();
+    paintBulk();
+  } catch (err) {
+    $('tries-status').textContent = 'Could not queue: ' + err.message;
+    $('tries-status').className = 'status bad';
+  }
+}
+
 /* ------------------------------------------------------------- checkpoints
    What this panel would make, once on each checkpoint a training run kept for the
    chosen LoRA, all with one seed, so the LoRA is what differs between them. */
@@ -5518,6 +5820,7 @@ var ICONS = {
   voice: '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/>',
   variations: '<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 15.2l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
   stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="1.6"/>',
+  dice: '<rect x="4" y="4" width="16" height="16" rx="3.2"/><circle cx="9" cy="9" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.15" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.15" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.15" fill="currentColor" stroke="none"/>',
   level: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/>'
 };
 
@@ -5787,6 +6090,7 @@ function visibleTakes() {
 }
 
 function paintBulk() {
+  paintCompareButton();
   var count = pickedIds().length;
   var button = $('bulk-delete');
   if (button) {
@@ -6034,7 +6338,9 @@ function paintTakes() {
             ? '<button class="take-move" data-act="revoice"' + id + ' title="Sing again: the same score with a new seed. The backing and phrasing come out new; with a style LoRA the voice usually stays close"' +
               ' aria-label="Sing again">' + icon('voice') + '</button>' +
               '<button class="take-move" data-act="variations"' + id + ' title="Variations: render this score in other interpretations"' +
-              ' aria-label="Variations">' + icon('variations') + '</button>'
+              ' aria-label="Variations">' + icon('variations') + '</button>' +
+              '<button class="take-move" data-act="tries"' + id + ' title="Try more: the same score and words again with new seeds, or at other Planner strengths"' +
+              ' aria-label="Try more">' + icon('dice') + '</button>'
             : '') +
           // Once normalised it has nothing left to offer, so it goes.
           (status === 'done' && take.has_audio && !take.normalised && !State.normalising[take.id]
@@ -7494,6 +7800,16 @@ function wire() {
   $('variations-modal').addEventListener('click', function (event) {
     if (backdropClick(event, $('variations-modal'))) { closeVariations(); }
   });
+  wireCompare();
+  if ($('tries-modal')) {
+    $('tries-close').addEventListener('click', closeTries);
+    $('tries-go').addEventListener('click', doTries);
+    $('tries-modal').addEventListener('input', paintTries);
+    $('tries-modal').addEventListener('change', paintTries);
+    $('tries-modal').addEventListener('click', function (event) {
+      if (backdropClick(event, $('tries-modal'))) { closeTries(); }
+    });
+  }
   $('space').addEventListener('change', function () { showSpace($('space').value); });
   $('space-new').addEventListener('click', newSpace);
   $('space-rename').addEventListener('click', renameSpace);
@@ -7671,6 +7987,10 @@ function wire() {
     if (act === 'variations') {
       var source = takeById(id);
       if (source) { openVariations(source); }
+    }
+    if (act === 'tries') {
+      var origin = takeById(id);
+      if (origin) { openTries(origin); }
     }
     if (act === 'move') {
       var moving = takeById(id);
@@ -7956,6 +8276,7 @@ function wire() {
     if (event.key === 'Escape' && idModal && !idModal.classList.contains('hidden')) { closeIdentities(); return; }
     if (event.key === 'Escape' && !$('write-modal').classList.contains('hidden')) { closeWrite(); return; }
     if (event.key === 'Escape' && !$('variations-modal').classList.contains('hidden')) { closeVariations(); return; }
+    if (event.key === 'Escape' && $('tries-modal') && !$('tries-modal').classList.contains('hidden')) { closeTries(); return; }
     if (event.key === 'Escape' && !$('steps-modal').classList.contains('hidden')) { closeLoraSteps(); return; }
     if (event.key === 'Escape' && !$('lyrics-modal').classList.contains('hidden')) { closeLyricsEditor(); return; }
     if (event.key === 'Escape' && !$('stems-modal').classList.contains('hidden')) { closeStemsModal(); return; }
@@ -7964,6 +8285,8 @@ function wire() {
     if (event.key === 'Escape' && $('logs-panel') && !$('logs-panel').classList.contains('hidden')) { closeLogsModal(); return; }
     if (event.key === 'Escape' && !$('score-modal').classList.contains('hidden')) { closeScoreEditor(); return; }
     if (event.key === 'Escape' && typeof editorOpen === 'function' && editorOpen()) { closeEditor(); return; }
+
+    if (compareOpen()) { if (compareKey(event)) { event.preventDefault(); } return; }
 
     // Undo and redo of the score, from either box.
     var focus = document.activeElement;
