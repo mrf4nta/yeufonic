@@ -3176,8 +3176,9 @@ function updateMenuItem() {
   if (!item.dataset.wired) {
     item.dataset.wired = '1';
     item.addEventListener('click', function () {
-      // Once it has an answer with something to get, the same click gets it.
-      if (State.updateAnswer && (State.update || {}).newer) { actOnUpdate(); return; }
+      // A version to get is the action: the same click gets it, as the pill does.  Asking
+      // is for when there is nothing to act on yet.
+      if ((State.update || {}).newer) { actOnUpdate(); return; }
       checkForUpdates();
     });
   }
@@ -3238,7 +3239,7 @@ async function checkForUpdates() {
 function updateAnswerOf(info) {
   if (!info || !info.latest) { return 'Could not check for updates.'; }
   if (!info.newer) { return 'Up to date (v' + info.current + ').'; }
-  return 'Version ' + info.latest + ' is out — get it.';
+  return info.latest + ' is out — get it.';
 }
 
 function paintUpdateMenuItem() {
@@ -3246,9 +3247,8 @@ function paintUpdateMenuItem() {
   if (!label || State.updateChecking) { return; }
   var info = State.update || {};
   if (State.updateAnswer) { label.textContent = State.updateAnswer; return; }
-  label.textContent = (info.newer && info.latest)
-    ? 'Check for updates · ' + info.latest + ' is out'
-    : 'Check for updates';
+  // Something to get is an action, so it says so, in one line; otherwise the item asks.
+  label.textContent = (info.newer && info.latest) ? 'Get ' + info.latest : 'Check for updates';
   var item = $('menu-update');
   if (item) {
     if (info.newer && info.latest) {
