@@ -36,6 +36,25 @@ def data_dir(tmp_path, monkeypatch):
     yield tmp_path
 
 
+@pytest.fixture(autouse=True)
+def no_update_traffic(monkeypatch):
+    """The app starts a task that asks yeufonic.com for the current release.  Left alone it
+    makes this suite talk to the internet and — worse — changes the answer underneath a test
+    that is checking it, which is how four of them came to fail the day the manifest went
+    live.  The task waits instead, and the one place that fetches is closed, so a test that
+    forgets to stub it fails loudly rather than quietly asking the real site."""
+    from app import update
+
+    async def idle(enabled):
+        return None
+
+    def offline(url):
+        raise OSError("the update check is closed in tests")
+
+    monkeypatch.setattr(update, "watcher", idle)
+    monkeypatch.setattr(update, "_fetch_json", offline)
+
+
 @pytest.fixture
 def client(data_dir, monkeypatch):
     """The app, with its GPU job worker held back.  A test reads the queue to see what

@@ -62,6 +62,7 @@ def _initial() -> dict:
         "error": None,
         "checking": False,
         "source": None,
+        "source_url": None,
     }
 
 
@@ -142,6 +143,7 @@ def _ask() -> dict:
         try:
             answer = read(_fetch_json(url))
             answer["source"] = source
+            answer["source_url"] = url
             return answer
         except Exception as exc:                       # noqa: BLE001 - any failure is the same here
             log.info("Update check: %s did not answer (%s)", url, exc)
@@ -182,19 +184,19 @@ async def check(force: bool = False, enabled: bool = True) -> dict:
         STATE["checked"] = time.time()
         db.set_setting(KEY_CHECKED, str(int(STATE["checked"])))
         db.set_setting(KEY_ANSWER, json.dumps({key: STATE[key] for key in
-                                               ("latest", "notes", "installer", "sha256", "line", "source")}))
+                                               ("latest", "notes", "installer", "sha256", "line",
+                                                "source", "source_url")}))
         STATE["seen"] = (db.get_setting(KEY_SEEN) or "") == (STATE["latest"] or "")
-        if STATE["newer"]:
-            log.info("Version %s is out, this build is %s (from %s)",
-                     STATE["latest"], config.VERSION, STATE["source"])
-        else:
-            log.info("Version check: %s is the latest, this build is %s (from %s)",
-                     STATE["latest"] or "unknown", config.VERSION, STATE["source"])
+        # One line per check, saying where it asked and what it heard: the Logs window is
+        # where anyone asks "is it even looking?".
+        log.info("Update check: %s says %s; this build is %s \u2014 %s",
+                 STATE["source_url"] or STATE["source"] or "?", STATE["latest"], config.VERSION,
+                 "a newer version is available" if STATE["newer"] else "up to date")
     except Exception as exc:                           # noqa: BLE001 - offline is normal
         STATE["error"] = str(exc) or exc.__class__.__name__
         STATE["checked"] = time.time()
         db.set_setting(KEY_CHECKED, str(int(STATE["checked"])))
-        log.info("Version check did not get an answer: %s", STATE["error"])
+        log.info("Update check: nothing answered (%s); it will try again later", STATE["error"])
     finally:
         STATE["checking"] = False
     return state()
@@ -218,7 +220,7 @@ def restore() -> None:
         remembered = json.loads(db.get_setting(KEY_ANSWER) or "{}")
     except ValueError:
         remembered = {}
-    for key in ("latest", "notes", "installer", "sha256", "line", "source"):
+    for key in ("latest", "notes", "installer", "sha256", "line", "source", "source_url"):
         if key in remembered:
             STATE[key] = remembered[key]
     STATE["latest"] = (STATE["latest"] or "").lstrip("v") or None

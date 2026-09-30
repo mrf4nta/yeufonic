@@ -29,6 +29,11 @@ RELEASE = {
 
 @pytest.fixture(autouse=True)
 def fresh(monkeypatch):
+    """A known build, and the state that goes with it.  Pinning the version keeps these
+    tests from depending on what VERSION happens to say today: the fixtures name 0.0.12,
+    and the day the app really became 0.0.12, four of them started failing for the right
+    reason — 0.0.12 is not newer than 0.0.12."""
+    monkeypatch.setattr(config, "VERSION", "0.0.10")
     monkeypatch.setattr(update, "STATE", update._initial())
 
 
@@ -65,6 +70,7 @@ async def test_a_newer_manifest_is_news(monkeypatch):
     assert state["error"] is None
     assert state["checked"] > 0
     assert state["source"] == "yeufonic.com"
+    assert state["source_url"] == update.MANIFEST_URL
 
 
 @pytest.mark.anyio
@@ -77,6 +83,7 @@ async def test_the_release_notes_are_the_fallback_when_the_site_is_silent(monkey
     assert state["sha256"] == "sha256:deadbeef"
     assert state["notes"] == RELEASE["html_url"]
     assert state["source"] == "github"
+    assert state["source_url"] == update.RELEASE_API
 
 
 @pytest.mark.anyio
