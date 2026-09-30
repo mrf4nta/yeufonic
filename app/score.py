@@ -94,6 +94,8 @@ def stopped_early(duration: float | None, abc: str | None, cap: float | None) ->
 RUNAWAY_SPAN = 36       # semitones: three octaves
 RUNAWAY_METERS = 4      # changes of metre in the melody
 RUNAWAY_DOUBLES = 12    # chord symbols with a double sharp or flat
+RUNAWAY_SECONDS = 480   # a written plan longer than this is not a song (the usual cap is 360)...
+RUNAWAY_CAP_SHARE = 1.3  # ...nor is one this much past a longer cap
 NOTE = re.compile(r"([_^=]*)([A-Ga-g])([,']*)")
 NOT_NOTES = re.compile(r'"[^"]*"|![^!]*!|\+[^+]*\+|\[[A-Za-z]:[^\]]*\]|%.*$')
 DOUBLE_CHORD = re.compile(r'"[A-G](?:##|bb)')
@@ -144,11 +146,23 @@ def meter_changes(abc: str, voice_name: str = "Vocal") -> int:
     return changes
 
 
-def runaway(abc: str, instrumental: bool = False) -> list[str]:
-    """What makes a written plan unsingable though it reads as a score.  Only for plans
-    the model has just written: a transcription can change metre as often as its song."""
+def sung_bars(abc: str) -> list[str]:
+    """The Vocal voice's bars that hold at least one note, not only rests and chords."""
+    return [bar for bar in vocal_bars(abc) if NOTE.search(NOT_NOTES.sub(" ", bar))]
+
+
+def runaway(abc: str, instrumental: bool = False, cap: float | None = None, vocal: bool = True) -> list[str]:
+    """What makes a written plan unsingable, or not a song, though it reads as a score.  Only
+    for plans the model has just written: a transcription can change metre as often as its
+    song, and can be as long as its recording.  `cap` is the length cap the render will run
+    to, and `vocal` says the words have a vocal to sing them."""
     melody = "Ins" if instrumental else "Vocal"
     found = []
+    planned = estimate(abc)
+    if planned and planned["seconds"] > max(RUNAWAY_SECONDS, RUNAWAY_CAP_SHARE * (cap or 0)):
+        found.append(f"a plan {planned['seconds'] / 60:.0f} minutes long")
+    if vocal and not instrumental and vocal_bars(abc) and not sung_bars(abc):
+        found.append("no sung notes in the vocal line")
     span = pitch_span(abc, melody)
     if span > RUNAWAY_SPAN:
         found.append(f"a {'melody' if instrumental else 'vocal line'} {span / 12:.0f} octaves wide")

@@ -531,7 +531,9 @@ such rather than failing quietly inside a render.
 - **Cohesive corpora:** A LoRA trained on a single album or unified acoustic sound (e.g. 1960s folk rock) can run higher strengths, typically around **Planner ~0.85 / Sound ~0.80**.
 - **Diverse corpora:** If the training corpus spans multiple genres, production styles, or eras (e.g. acoustic folk, rock, and synth-pop), high Sound weights can cause acoustic clashing. Up to about **Planner 0.70 / Sound 0.70** keeps the audio clean while retaining the artist's melodic phrasing and vocal character.
 - **Covers:** your recording sets the melody, so there is less for the LoRA to shape and the Sound half is pushed harder. Keep Sound near **0.50**.
-- **Plan variety:** with a LoRA trained from a corpus, **Calm** or **Normal** gives the most recognisable result.
+- **Plan variety:** with a LoRA trained from a corpus, **Calm** or **Normal** gives the most recognisable result. **Calm** can loop with a style LoRA and a short style, and the plan then runs for
+  minutes with long repeated intros, or with nothing sung. Describe the style in more detail (genre, instruments and feel), or use **Normal**. A plan like that, or one far longer than a song, is written once more
+  with a new seed, and the take fails with advice if the second comes out the same.
 - **Finding a good take:** the LoRA's character depends on the roll as much as on the strengths.
   Between about 0.3 and 0.6, **Sound** changes the voice little, so there is no need to push it.
   **Planner** changes the performance itself, not only the voice, so a value that suits one song

@@ -474,8 +474,8 @@ server-side change only.
   - **Too much breaks the score:** the voice headers are tokens too. An older *wild* (temperature
     1.25, penalty 1.18) broke 6 of 6 test plans.
 
-  A plan that does come out unreadable (no vocal part, or a line spanning several octaves and a
-  metre that keeps changing) is written once more with a new seed. If that fails too, it is marked
+  A plan that does come out unreadable (no vocal part, a line spanning several octaves, a
+  metre that keeps changing, a song with nothing sung, or a plan that runs on for minutes) is written once more with a new seed. If that fails too, it is marked
   failed, with a reason, instead of being stored and rendered.
 - **The models have their own licences**, separate from this code. See License below.
 

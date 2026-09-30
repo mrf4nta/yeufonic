@@ -588,7 +588,10 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
             fail(kind, ref_id, "the engine returned no score plan")
             return
         is_inst = record.get("kind") == "instrumental"
-        issues = score.problems(abc, instrumental=is_inst) or score.runaway(abc, instrumental=is_inst)
+        # Words to sing: lines that are not section tags.  A song of tags alone has no vocal to miss.
+        has_words = any(line.strip() and not line.strip().startswith("[") for line in (record.get("lyrics") or "").splitlines())
+        issues = score.problems(abc, instrumental=is_inst) or score.runaway(
+            abc, instrumental=is_inst, cap=float(record.get("max_duration") or 0), vocal=has_words)
         # A plan that lost its thread is written once more with a new seed before anyone
         # is told; a second in a row fails, with advice on the settings (#5).
         if issues and ref_id not in RETRIED_PLANS:
@@ -611,6 +614,10 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
                 advice_parts.append("set Harmony to Familiar")
             if variety_val in ("bold", "quirky", "wild"):
                 advice_parts.append("choose a calmer Plan variety")
+            if len([tag for tag in (record.get("style") or "").split(",") if tag.strip()]) <= 3:
+                advice_parts.append("describe the style in more detail: genre, instruments and feel")
+            if variety_val == "calm" and record.get("style_lora"):
+                advice_parts.append("choose Normal Plan variety, which loops less with a style LoRA")
             advice = f". Try to {', or '.join(advice_parts)}" if advice_parts else ""
             fail(kind, ref_id, f"the plan came out unreadable twice ({', '.join(issues)}). Write a new plan{advice}.")
             return
