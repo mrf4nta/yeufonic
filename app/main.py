@@ -40,7 +40,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, score, soundfonts, stems, trainsize
+from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, score, soundfonts, stems, trainsize, update
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -114,6 +114,20 @@ SETTINGS_SPEC: list[dict] = [
             {"value": "steps", "label": "Steps, one part at a time"},
         ],
         "help": "How the window for making and changing takes is laid out.",
+    },
+    {
+        "key": "app.update_check",
+        "label": "Check for a new version",
+        "type": "select",
+        "default": "on",
+        "options": [
+            {"value": "on", "label": "Once a day"},
+            {"value": "off", "label": "Do not check"},
+        ],
+        # One request a day, to our own site, and nothing else: worth saying plainly in a
+        # tool whose selling point is that it runs on your own machine.
+        "help": "One request a day to yeufonic.com, to see whether a newer release is out. "
+                "Nothing else leaves the computer, and Check for updates in the menu works either way.",
     },
     {
         "key": "stems.model",
@@ -328,6 +342,9 @@ async def lifespan(app: FastAPI):
         execute(f"UPDATE identity_songs SET {field} = 'none' WHERE {field} IN ('queued', 'running')")
     tasks = [asyncio.create_task(jobs.worker()), asyncio.create_task(jobs.stems_worker()), asyncio.create_task(jobs.keeper()),
              asyncio.create_task(jobs.identity_worker()),
+             # One request a day to our own site, on this loop rather than in a job lane:
+             # it must never stand in front of a render, a training run or a corpus.
+             asyncio.create_task(update.watcher(lambda: setting_value("app.update_check") == "on")),
              # A fifth of a second a take, so off the start path.
              asyncio.create_task(asyncio.to_thread(fill_loudness))]
     log.info("Yeufonic %s up. engine=%s (%s) data=%s", config.VERSION, config.ENGINE_URL,
@@ -876,6 +893,23 @@ def _catalogue_with_styles() -> list[dict]:
     return items
 
 
+class UpdateSeenIn(BaseModel):
+    version: str | None = None
+
+
+@app.post("/api/update/check")
+async def update_check() -> dict:
+    """Ask now, whatever the daily setting says: this is the menu's Check for updates.
+    The answer is in the reply, so the page can say it where the click happened."""
+    return await update.check(force=True)
+
+
+@app.post("/api/update/seen")
+def update_seen(body: UpdateSeenIn) -> dict:
+    """The notice has been read, so it is not shown again for this release."""
+    return update.mark_seen(body.version)
+
+
 @app.get("/api/state")
 def state() -> dict:
     """Served from what the keeper last saw, so a page poll never waits on the engine."""
@@ -893,6 +927,9 @@ def state() -> dict:
 
     return {
         "version": config.VERSION,
+        # Whether a newer release is out, and what to do about it: a background task keeps
+        # this current, and this route only ever reads it.
+        "update": update.state(),
         "settings": settings_payload(),
         "engine": {
             "url": config.ENGINE_URL,

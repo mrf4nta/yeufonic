@@ -100,6 +100,14 @@ app's part is serving it the note samples — `app/soundfonts.py`, kept in
 `data/models/soundfonts` — which are fetched from their upstream publisher the first time an
 instrument is played, one set per instrument, each about 7 MB.
 
+**The update check** (`app/update.py`) asks a manifest on yeufonic.com once a day whether a newer
+release exists, falling back to GitHub's release for the same repository, and its answer rides in
+`/api/state` — no new polling, and nothing a page request waits on. It runs on the app's own task
+list, not in a job lane: it is one request, it must never stand in front of a render or a corpus,
+and a tool that phones home loudly is worse than one that never checks. It is the only request the
+app makes without being asked, so it has a setting, and the manifest is written when a release is
+published, after the release itself exists.
+
 ## How the app talks to the engine
 
 The app uses ComfyUI's own HTTP API, the same one ComfyUI's web interface uses.
@@ -365,6 +373,7 @@ assume `http://localhost:8090`.
 | Lyrics drafts | `POST /api/lyrics`, `GET /api/lyrics/{id}` |
 | Settings | `GET/PUT /api/settings`, `POST /api/settings/test-llm`, `POST /api/settings/llm-models` |
 | Score preview | `GET /api/soundfonts` (which sample sets are here, and how far each can play), `POST /api/soundfonts/{instrument}/download`, `GET /soundfonts/{instrument}-mp3/{note}.mp3` |
+| Updates | `POST /api/update/check` (ask now, whatever the setting says), `POST /api/update/seen` (the notice has been read, so not again for this release) |
 
 Write a song, with the plan rendered as soon as it is ready:
 

@@ -402,6 +402,7 @@ async function pollState() {
     State.stemsOptions = data.stems || State.stemsOptions || {};
     if (data.settings) { adoptSettings(data.settings); }
     if (data.version) { $('app-version').textContent = 'v' + data.version; }
+    paintUpdate(data.update);
     paintOptions();
     paintJob(data.current, data.queue || [], data.options);
     watchPlan();
@@ -3131,6 +3132,152 @@ async function pollCorpora() {
   if (typeof paintStyleLoras === 'function') { paintStyleLoras(); }
   clearTimeout(State.corpusTimer);
   State.corpusTimer = setTimeout(pollCorpora, busy ? CORPUS_POLL_BUSY : CORPUS_POLL_IDLE);
+}
+
+/* Whether a newer release is out.  The app asks once a day on its own — the answer rides
+   in the state it already polls — and the menu's Check for updates asks now, whatever the
+   daily setting says.  The item answers where it was clicked: a notice that sends you
+   somewhere else to read it is a notice nobody reads. */
+State.updateChecking = false;
+State.updateAnswer = null;
+
+function updatePill() {
+  var pill = $('update-pill');
+  if (pill) { return pill; }
+  var right = document.querySelector('.topbar-right');
+  if (!right) { return null; }
+  pill = document.createElement('button');
+  pill.id = 'update-pill';
+  pill.className = 'pill update hidden';
+  pill.innerHTML = '<span class="update-dot" aria-hidden="true"></span><span id="update-text"></span>';
+  var version = $('app-version');
+  if (version && version.parentNode === right) { right.insertBefore(pill, version.nextSibling); }
+  else { right.insertBefore(pill, right.firstChild); }
+  pill.addEventListener('click', function () { actOnUpdate(); });
+  return pill;
+}
+
+/* Built here as well as in the markup, so the script and the page can be deployed apart:
+   the page's HTML is read at start-up, the script on every load. */
+function updateMenuItem() {
+  var item = $('menu-update');
+  if (!item) {
+    var menu = $('brand-menu');
+    if (!menu) { return null; }
+    item = document.createElement('button');
+    item.id = 'menu-update';
+    item.className = 'menu-item';
+    item.setAttribute('role', 'menuitem');
+    item.innerHTML = '<svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><polyline points="21 3 21 9 15 9"/></svg>' +
+      '<span id="menu-update-text">Check for updates</span>';
+    menu.appendChild(item);
+  }
+  if (!item.dataset.wired) {
+    item.dataset.wired = '1';
+    item.addEventListener('click', function () {
+      // Once it has an answer with something to get, the same click gets it.
+      if (State.updateAnswer && (State.update || {}).newer) { actOnUpdate(); return; }
+      checkForUpdates();
+    });
+  }
+  return item;
+}
+
+function updateLink() {
+  var info = State.update || {};
+  return info.installer || info.notes || '';
+}
+
+function updateAdvice(info) {
+  if (info.install === 'windows') { return 'Download the installer and run it over this one; your library and models are kept.'; }
+  return 'Then ' + (info.line || 'git pull && docker compose up -d --build') + '.';
+}
+
+/* The installer is not signed, so its hash is the one thing that says a download arrived
+   whole.  Nobody memorises a SHA-256, but showing it costs nothing and it is checkable. */
+function updateHash(info) {
+  return info.sha256 ? ' SHA-256 ' + String(info.sha256).replace(/^sha256:/, '') : '';
+}
+
+/* Somewhere to go: the installer first, since that is the update for the install this is
+   most likely running in, then the release notes. */
+function actOnUpdate() {
+  var url = updateLink();
+  if (!url) { return; }
+  window.open(url, '_blank', 'noopener');
+  seenUpdate();
+}
+
+function seenUpdate() {
+  var info = State.update || {};
+  if (!info.newer || info.seen) { return; }
+  info.seen = true;
+  paintUpdate(info);
+  api('/api/update/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ version: info.latest }) }).catch(function () {});
+}
+
+async function checkForUpdates() {
+  if (State.updateChecking) { return; }
+  State.updateChecking = true;
+  var label = $('menu-update-text');
+  if (label) { label.textContent = 'Checking…'; }
+  try {
+    var info = await api('/api/update/check', { method: 'POST' });
+    State.updateAnswer = updateAnswerOf(info);
+    paintUpdate(info);
+  } catch (err) {
+    State.updateAnswer = 'Could not check for updates.';
+  } finally {
+    State.updateChecking = false;
+    paintUpdateMenuItem();
+  }
+}
+
+function updateAnswerOf(info) {
+  if (!info || !info.latest) { return 'Could not check for updates.'; }
+  if (!info.newer) { return 'Up to date (v' + info.current + ').'; }
+  return 'Version ' + info.latest + ' is out — get it.';
+}
+
+function paintUpdateMenuItem() {
+  var label = $('menu-update-text');
+  if (!label || State.updateChecking) { return; }
+  var info = State.update || {};
+  if (State.updateAnswer) { label.textContent = State.updateAnswer; return; }
+  label.textContent = (info.newer && info.latest)
+    ? 'Check for updates · ' + info.latest + ' is out'
+    : 'Check for updates';
+  var item = $('menu-update');
+  if (item) {
+    if (info.newer && info.latest) {
+      item.title = 'Version ' + info.latest + ' is out.' + updateHash(info);
+    } else {
+      item.removeAttribute('title');
+    }
+  }
+}
+
+function paintUpdate(info) {
+  if (info) { State.update = info; }
+  var known = State.update || {};
+  var pill = updatePill();
+  var show = Boolean(known.newer && known.latest && !known.seen);
+  if (pill) {
+    pill.classList.toggle('hidden', !show);
+    pill.classList.toggle('shown', show);
+    var text = $('update-text');
+    if (text && show) { text.textContent = known.latest + ' available'; }
+    if (show) {
+      pill.title = 'Version ' + known.latest + ' is out; this build is v' + known.current + '. ' +
+        updateAdvice(known) + updateHash(known);
+    } else {
+      pill.removeAttribute('title');
+    }
+  }
+  updateMenuItem();
+  paintUpdateMenuItem();
 }
 
 function identityName(id) {

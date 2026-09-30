@@ -704,6 +704,13 @@ browser and survive a rebuild: the output audio format for stems and a take's Sa
 separation model, where stems are written, whether training checkpoints are kept, and how
 instrumentals are checked for singing.
 
+**Check for a new version** is the one thing here that uses the internet on its own account: once
+a day the app asks yeufonic.com whether a later release is out, and says so with a pill beside the
+version in the top right. That pill hands you the installer, or, for a Docker copy, the two commands
+that update it. It is one request and nothing else leaves the computer; **Do not check** turns it
+off. The menu's **Check for updates** asks then and there whether this is on or off, and answers in
+the menu: which version you are on, and whether it is the latest.
+
 **Theme** sets how the app looks: **Dark**, **Light**, **Match the computer**, which follows your
 system's light or dark and changes with it, **Studio**, a warm dark with amber, or **High
 contrast**, black and white with strong outlines. It changes at once, and each browser remembers it
