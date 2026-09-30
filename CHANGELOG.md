@@ -30,10 +30,10 @@ cannot creep back in.
 - **The app says when a newer version is out.** Once a day it asks its own site for the current
   release — one request, to a file on yeufonic.com, with GitHub's release as a fallback, and nothing
   else leaves the computer. A newer version shows as a quiet pill beside the version in the top bar,
-  which hands over the installer for a Windows install or the two commands that update a Docker
-  copy, and **Check for updates** in the menu asks on demand and answers in place — which is also
-  where you can see which version you are running. It can be switched off in Settings; the menu
-  item works either way.
+  and the menu offers **Get x.y.z** — the installer on a Windows install, the two commands on the
+  clipboard for a Docker copy — beside **What is new**, which opens the release notes. **Check for
+  updates** asks on demand and answers in place, which is also where you can see which version you
+  are running. It can be switched off in Settings; the menu works either way.
 
 - **Hear a score plan, and take it to a DAW.** The Score window's **Notation** tab plays the plan
   with abcjs, as the box has it: **Play**, the progress, restart and a tempo control sit above the

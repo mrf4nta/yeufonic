@@ -3185,6 +3185,36 @@ function updateMenuItem() {
   return item;
 }
 
+/* What changed, beside getting it.  Acting and reading are different errands: one is a
+   copy or an installer, the other is the release notes, and a press that did the first
+   while you wanted the second is how this line came to exist. */
+function whatsNewItem() {
+  var item = $('menu-whatsnew');
+  if (!item) {
+    var menu = $('brand-menu');
+    if (!menu) { return null; }
+    item = document.createElement('button');
+    item.id = 'menu-whatsnew';
+    item.className = 'menu-item hidden';
+    item.setAttribute('role', 'menuitem');
+    item.innerHTML = '<svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
+      '<polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/>' +
+      '<line x1="8" y1="17" x2="13" y2="17"/></svg>' +
+      '<span id="menu-whatsnew-text">What is new</span>';   // the version is on the line above
+    menu.appendChild(item);
+  }
+  if (!item.dataset.wired) {
+    item.dataset.wired = '1';
+    item.addEventListener('click', function () {
+      var url = (State.update || {}).notes;
+      if (url) { window.open(url, '_blank', 'noopener'); }
+      seenUpdate();
+    });
+  }
+  return item;
+}
+
 /* Somewhere to go.  A Windows install has an installer to run, which is the whole of its
    update; a Docker copy has to be pulled and rebuilt, so what it wants is the release page
    — its notes end with the two commands — and the installer beside it would be no use to it
@@ -3299,6 +3329,15 @@ function paintUpdateMenuItem() {
       item.removeAttribute('title');
     }
   }
+  // The reading line appears only when there is something to read about.
+  var news = whatsNewItem();
+  if (news) {
+    var show = Boolean(info.newer && info.latest);
+    news.classList.toggle('hidden', !show);
+    // "What is new" rather than "What is new in 0.0.12": the version is on the line above,
+    // and the menu is only as wide as its widest one-line item.
+    news.title = show ? 'What is new in ' + info.latest + ' — the release notes' : '';
+  }
 }
 
 function paintUpdate(info) {
@@ -3319,6 +3358,7 @@ function paintUpdate(info) {
     }
   }
   updateMenuItem();
+  whatsNewItem();
   paintUpdateMenuItem();
 }
 
