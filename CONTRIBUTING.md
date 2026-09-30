@@ -63,7 +63,8 @@ gh release create vX.Y.Z --title vX.Y.Z --notes-file notes.md
 
 A release is announced to running apps from the website: `public/updates.json` there names the
 version, the release's page and the installer with its SHA-256, and the app asks it every four hours
-after that. Update it in the same sitting as the tag, or the notice goes out late — and if the file
+after that. `scripts/updates.py` in that repository writes the file from the version and the
+installer. Update it in the same sitting as the tag, or the notice goes out late — and if the file
 is missing or stale the app falls back to GitHub's release API, which rate-limits anonymous callers.
 
 PDFs in the top-level folder are git ignored and never go to GitHub: a pre-push hook refuses a
