@@ -3206,9 +3206,46 @@ function updateHash(info) {
   return info.sha256 ? ' SHA-256 ' + String(info.sha256).replace(/^sha256:/, '') : '';
 }
 
-/* Somewhere to go: the installer first, since that is the update for the install this is
-   most likely running in, then the release notes. */
+/* Two lines for a terminal, on the clipboard.  A Docker copy is updated by hand, and
+   sending someone to a page to copy them out of it is a step for nothing.  The page is
+   still there to read what changed. */
+function copyForTerminal(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  // A copy served over plain http on a LAN address has no clipboard API at all, so the
+  // old way, with a box nobody sees.
+  var box = document.createElement('textarea');
+  box.value = text;
+  box.setAttribute('readonly', '');
+  box.style.position = 'fixed';
+  box.style.top = '-1000px';
+  document.body.appendChild(box);
+  box.select();
+  var copied = false;
+  try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+  document.body.removeChild(box);
+  return copied ? Promise.resolve() : Promise.reject(new Error('the browser refused the copy'));
+}
+
+/* Acting on it: a Windows install runs the installer, and a Docker copy gets the commands
+   to paste.  Neither updates itself, so this is as far as the app can take anyone. */
 function actOnUpdate() {
+  var info = State.update || {};
+  if (info.install !== 'windows' && info.line) {
+    copyForTerminal(info.line).then(function () {
+      State.updateAnswer = 'Copied \u2014 paste it in a terminal';
+      paintUpdateMenuItem();
+      seenUpdate();
+    }).catch(function () {
+      var url = updateLink();
+      if (url) { window.open(url, '_blank', 'noopener'); }
+      State.updateAnswer = 'Could not copy \u2014 here is the release page';
+      paintUpdateMenuItem();
+      seenUpdate();
+    });
+    return;
+  }
   var url = updateLink();
   if (!url) { return; }
   window.open(url, '_blank', 'noopener');
