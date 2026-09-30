@@ -3188,6 +3188,43 @@ function updateMenuItem() {
 /* What changed, beside getting it.  Acting and reading are different errands: one is a
    copy or an installer, the other is the release notes, and a press that did the first
    while you wanted the second is how this line came to exist. */
+/* A testing control rather than a feature: ask the engine to unload its models and give
+   back the memory its allocator kept.  The app already does this before a training run; by
+   hand it is for watching the margin a long render leaves behind.  The Logs window records
+   it, and the engine answers within a moment. */
+function freeEngineItem() {
+  var item = $('menu-free');
+  if (!item) {
+    var menu = $('brand-menu');
+    if (!menu) { return null; }
+    item = document.createElement('button');
+    item.id = 'menu-free';
+    item.className = 'menu-item';
+    item.setAttribute('role', 'menuitem');
+    item.title = 'Unload the models the engine holds, and give back the memory it kept.';
+    item.innerHTML = '<svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>' +
+      '</svg><span id="menu-free-text">Free engine</span>';
+    var updates = $('menu-update');
+    if (updates && updates.parentNode === menu) { menu.insertBefore(item, updates); }
+    else { menu.appendChild(item); }
+  }
+  if (!item.dataset.wired) {
+    item.dataset.wired = '1';
+    item.addEventListener('click', function () {
+      var label = $('menu-free-text');
+      if (label) { label.textContent = 'Freeing\u2026'; }
+      api('/api/engine/free', { method: 'POST' })
+        .then(function () { if (label) { label.textContent = 'Freed'; } })
+        .catch(function (err) { if (label) { label.textContent = (err.message || 'Could not free').slice(0, 40); } })
+        .then(function () {
+          setTimeout(function () { if (label) { label.textContent = 'Free engine'; } }, 3000);
+        });
+    });
+  }
+  return item;
+}
+
 function whatsNewItem() {
   var item = $('menu-whatsnew');
   if (!item) {
@@ -3358,6 +3395,7 @@ function paintUpdate(info) {
     }
   }
   updateMenuItem();
+  freeEngineItem();
   whatsNewItem();
   paintUpdateMenuItem();
 }

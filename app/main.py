@@ -2200,6 +2200,18 @@ def import_browse(path: str | None = None) -> dict:
         raise HTTPException(400, str(exc)) from exc
 
 
+@app.post("/api/engine/free")
+async def free_engine() -> dict:
+    """Ask the engine to let go of everything it holds: the models, and the memory its
+    allocator kept after the last render.  Training does this before it starts; this is the
+    same call by hand, for watching what a long render leaves behind and what the next one
+    then starts with.  The engine logs it — "asked the engine to unload its models"."""
+    if not ENGINE.online:
+        raise HTTPException(503, "the engine is offline")
+    await ENGINE.free()
+    return {"ok": True}
+
+
 @app.post("/api/engine/reload-options")
 async def reload_engine_options() -> dict:
     """Read the engine's lists again, for a model file that changed by hand."""
