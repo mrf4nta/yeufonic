@@ -3185,9 +3185,14 @@ function updateMenuItem() {
   return item;
 }
 
+/* Somewhere to go.  A Windows install has an installer to run, which is the whole of its
+   update; a Docker copy has to be pulled and rebuilt, so what it wants is the release page
+   — its notes end with the two commands — and the installer beside it would be no use to it
+   at all.  Neither install updates itself: the app only ever tells you. */
 function updateLink() {
   var info = State.update || {};
-  return info.installer || info.notes || '';
+  if (info.install === 'windows') { return info.installer || info.notes || ''; }
+  return info.notes || info.installer || '';
 }
 
 function updateAdvice(info) {
@@ -3252,7 +3257,7 @@ function paintUpdateMenuItem() {
   var item = $('menu-update');
   if (item) {
     if (info.newer && info.latest) {
-      item.title = 'Version ' + info.latest + ' is out.' + updateHash(info);
+      item.title = 'Version ' + info.latest + ' is out. ' + updateAdvice(info) + updateHash(info);
     } else {
       item.removeAttribute('title');
     }
