@@ -59,6 +59,7 @@ def _initial() -> dict:
         "seen": False,
         "error": None,
         "checking": False,
+        "source": None,
     }
 
 
@@ -130,11 +131,16 @@ def _fetch_json(url: str) -> dict:
 
 
 def _ask() -> dict:
-    """The manifest first, GitHub second.  Raises if neither answers."""
+    """The manifest first, GitHub second.  Raises if neither answers.  Which one answered
+    is kept, because "is the site's manifest doing its job?" cannot be told from the answer
+    alone: the fallback and the manifest can name the same version."""
     first_error: Exception | None = None
-    for url, read in ((MANIFEST_URL, _from_manifest), (RELEASE_API, _from_release)):
+    for url, read, source in ((MANIFEST_URL, _from_manifest, "yeufonic.com"),
+                              (RELEASE_API, _from_release, "github")):
         try:
-            return read(_fetch_json(url))
+            answer = read(_fetch_json(url))
+            answer["source"] = source
+            return answer
         except Exception as exc:                       # noqa: BLE001 - any failure is the same here
             log.info("Update check: %s did not answer (%s)", url, exc)
             first_error = first_error or exc
@@ -174,13 +180,14 @@ async def check(force: bool = False, enabled: bool = True) -> dict:
         STATE["checked"] = time.time()
         db.set_setting(KEY_CHECKED, str(int(STATE["checked"])))
         db.set_setting(KEY_ANSWER, json.dumps({key: STATE[key] for key in
-                                               ("latest", "notes", "installer", "sha256", "line")}))
+                                               ("latest", "notes", "installer", "sha256", "line", "source")}))
         STATE["seen"] = (db.get_setting(KEY_SEEN) or "") == (STATE["latest"] or "")
         if STATE["newer"]:
-            log.info("Version %s is out (this build is %s)", STATE["latest"], config.VERSION)
+            log.info("Version %s is out, this build is %s (from %s)",
+                     STATE["latest"], config.VERSION, STATE["source"])
         else:
-            log.info("Version check: %s is the latest, this build is %s",
-                     STATE["latest"] or "unknown", config.VERSION)
+            log.info("Version check: %s is the latest, this build is %s (from %s)",
+                     STATE["latest"] or "unknown", config.VERSION, STATE["source"])
     except Exception as exc:                           # noqa: BLE001 - offline is normal
         STATE["error"] = str(exc) or exc.__class__.__name__
         STATE["checked"] = time.time()
@@ -209,7 +216,7 @@ def restore() -> None:
         remembered = json.loads(db.get_setting(KEY_ANSWER) or "{}")
     except ValueError:
         remembered = {}
-    for key in ("latest", "notes", "installer", "sha256", "line"):
+    for key in ("latest", "notes", "installer", "sha256", "line", "source"):
         if key in remembered:
             STATE[key] = remembered[key]
     STATE["latest"] = (STATE["latest"] or "").lstrip("v") or None

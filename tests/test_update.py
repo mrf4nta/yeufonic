@@ -64,6 +64,7 @@ async def test_a_newer_manifest_is_news(monkeypatch):
     assert state["sha256"] == "abc123"
     assert state["error"] is None
     assert state["checked"] > 0
+    assert state["source"] == "yeufonic.com"
 
 
 @pytest.mark.anyio
@@ -75,6 +76,7 @@ async def test_the_release_notes_are_the_fallback_when_the_site_is_silent(monkey
     assert state["installer"] == "https://example.invalid/setup.exe"
     assert state["sha256"] == "sha256:deadbeef"
     assert state["notes"] == RELEASE["html_url"]
+    assert state["source"] == "github"
 
 
 @pytest.mark.anyio
