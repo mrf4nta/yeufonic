@@ -3,13 +3,17 @@
 Versions are git tags on `main`. The number lives in `VERSION`, which is copied into the
 app image and shown in the header, so a running container can be identified at a glance.
 
-**Every deploy bumps `VERSION`; only a release gets a tag.** The number in the header says
-which build is running, so it moves with each change deployed. A tag, an entry here and a push are
-for a milestone worth naming, and are cut only when asked for — not for every update.
+**`VERSION` moves for a change worth a number: a capability, or a change to how the app works.
+A fix, a layout change or a colour does not move it; only a release gets a tag.** The number in the
+header says which build is running, so it is worth keeping meaningful rather than counting deploys.
+A tag, an entry here and a push are for a milestone worth naming, and are cut only when asked for —
+not for every update.
 
 To deploy a change:
 
-1. Merge to `main`, bump `VERSION`, redeploy.
+1. Merge to `main` and redeploy. Bump `VERSION` only when the change is one of the above: a
+   deploy that does not move it may leave a browser holding the old scripts, so hard-refresh to
+   check one.
 
 To cut a release:
 
@@ -41,7 +45,6 @@ cannot creep back in.
   clipboard for a Docker copy — beside **What is new**, which opens the release notes. **Check for
   updates** asks on demand and answers in place, which is also where you can see which version you
   are running. It can be switched off in Settings; the menu works either way.
-
 - **Hear a score plan, and take it to a DAW.** The Score window's **Notation** tab plays the plan
   with abcjs, as the box has it: **Play**, the progress, restart and a tempo control sit above the
   staves, the note being played is picked out, and clicking a note puts the cursor on the ABC it
@@ -50,6 +53,10 @@ cannot creep back in.
   chord symbols written out as a part of their own — the only place the harmony is written as notes
   — and a plan that changes its metre part way is written in the metre it starts in, while the notes
   keep their own lengths.
+- **A corpus being prepared says so on its own card.** The badge in the top bar has said it since
+  0.0.8; the Corpora screen says it on the corpus itself now — a dot pulsing beside its name and the
+  word "preparing…" — kept current while the screen is open, so a corpus working through its songs
+  is not one that merely looks unfinished.
 - **Every voice plays the instrument the style names.** A score names none: YuE2 writes a melody, a
   second line and chord symbols. With **Instruments** ticked the preview reads the Style the take
   was made with and plays those lines with something that fits — a guitar, a piano, strings, a
@@ -61,6 +68,27 @@ cannot creep back in.
   instrument is fetched from its upstream publisher the first time it is used — about 7 MB each,
   kept in the library, offline afterwards — and a score that runs past what its instruments can
   play is shifted by whole octaves into range, with a line saying how far.
+
+### Changed
+
+- **The score preview's controls stay where they can be seen.** The editor's score box takes three
+  quarters of the panel it sits in rather than a share of the window, so its heading, its hint and
+  the buttons under it are in view on any screen. The chevron beside it has gone: the app holds the
+  block open, so it invited a click that could do nothing. The tempo reads as one control instead
+  of a dark box wedged against the "%", and the notation tab's caption — "Drawn from the ABC with
+  abcjs. It follows your edits." — has gone, because the view showed what it described.
+- **Play says when it is preparing.** A score is played from one buffer, prepared in advance, which
+  takes a moment on a long one. The line beside the player says "Getting the preview ready…" until
+  the first sound, rather than the control looking like it does not work.
+
+### Fixed
+
+- **Changing what a preview plays no longer stops it.** Unticking Instruments or Chords mid-song
+  handed the score over again — that is how abcjs changes a tune, and handing it over stops
+  playback — so the place in the song is taken before the hand-over and given back after it: still
+  playing, still in the same place, and a preview that was paused keeps its place.
+- **The line beside the player follows the score.** It was written once from an empty box and kept
+  saying "This score has no notes in it yet." while a score played.
 
 ## 0.0.8 (2026-09-29)
 
