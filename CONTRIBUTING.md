@@ -61,6 +61,11 @@ git push github main --tags     # only when a public release is wanted
 gh release create vX.Y.Z --title vX.Y.Z --notes-file notes.md
 ```
 
+A release is announced to running apps from the website: `public/updates.json` there names the
+version, the release's page and the installer with its SHA-256, and the app asks it every four hours
+after that. Update it in the same sitting as the tag, or the notice goes out late — and if the file
+is missing or stale the app falls back to GitHub's release API, which rate-limits anonymous callers.
+
 PDFs in the top-level folder are git ignored and never go to GitHub: a pre-push hook refuses a
 GitHub push carrying a commit with one. Enable the hook once per clone:
 

@@ -18,6 +18,12 @@ To cut a release:
 3. `git push origin main --tags`   (homer only, unless GitHub is wanted)
 4. For a public release: `git push github main --tags` and
    `gh release create vX.Y.Z --title vX.Y.Z --notes "..."`
+5. **Announce it.** `public/updates.json` in the website repository is what running apps read:
+   `latest` (the version, no `v`), `released`, `notes` (the new release's page) and `installer`
+   (the published asset's URL, its `sha256` and `bytes`). Commit and push — Cloudflare deploys in
+   about a minute. Every app asks it every four hours, so within that they show a newer version in
+   the header, with the installer or the two commands to update. Check it with
+   `curl -s https://yeufonic.com/updates.json`; the hash must be the one in the release notes.
 
 Release notes live in two places and neither is a file in this repository: this changelog holds the
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
