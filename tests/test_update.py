@@ -99,8 +99,14 @@ async def test_offline_is_quiet(monkeypatch):
     assert update.state()["advice"]                  # and the page still gets an answer
 
 
+def test_the_gap_between_checks_is_deliberate():
+    # Four hours: a release reaches an install the same working session, and six small
+    # requests a day to our own static file costs nobody anything.
+    assert update.EVERY == 4 * 60 * 60
+
+
 @pytest.mark.anyio
-async def test_the_check_is_daily_and_the_manual_one_is_not(monkeypatch):
+async def test_the_check_waits_between_times_and_the_manual_one_does_not(monkeypatch):
     asked = []
 
     def fetch(url):
@@ -109,7 +115,7 @@ async def test_the_check_is_daily_and_the_manual_one_is_not(monkeypatch):
     monkeypatch.setattr(update, "_fetch_json", fetch)
 
     await update.check(force=False)                  # the watcher's, first thing
-    await update.check(force=False)                  # within the day: no request
+    await update.check(force=False)                  # inside the gap: no request
     assert len(asked) == 1
     await update.check(force=True)                   # the menu's: asks again
     assert len(asked) == 2

@@ -27,7 +27,7 @@ cannot creep back in.
 
 ### Added
 
-- **The app says when a newer version is out.** Once a day it asks its own site for the current
+- **The app says when a newer version is out.** Every four hours it asks its own site for the current
   release — one request, to a file on yeufonic.com, with GitHub's release as a fallback, and nothing
   else leaves the computer. A newer version shows as a quiet pill beside the version in the top bar,
   and the menu offers **Get x.y.z** — the installer on a Windows install, the two commands on the

@@ -100,7 +100,7 @@ app's part is serving it the note samples — `app/soundfonts.py`, kept in
 `data/models/soundfonts` — which are fetched from their upstream publisher the first time an
 instrument is played, one set per instrument, each about 7 MB.
 
-**The update check** (`app/update.py`) asks a manifest on yeufonic.com once a day whether a newer
+**The update check** (`app/update.py`) asks a manifest on yeufonic.com every four hours whether a newer
 release exists, falling back to GitHub's release for the same repository, and its answer rides in
 `/api/state` — no new polling, and nothing a page request waits on. It runs on the app's own task
 list, not in a job lane: it is one request, it must never stand in front of a render or a corpus,

@@ -5,9 +5,11 @@ back to GitHub's release for the same repository, in case the site is down.  A r
 procedure that has to remember something is a release procedure that forgets, so this is
 deliberately the only place that knows about either.
 
-Nothing here may matter: one request a day, its own timeout, silence when it fails, and
-never anything a page request waits on.  A tool that phones home loudly is worse than one
-that does not check at all.
+Nothing here may matter: one request every four hours, its own timeout, silence when it
+fails, and never anything a page request waits on.  A tool that phones home loudly is worse
+than one that does not check at all.  Four hours rather than a day is the compromise: a
+release reaches an install the same working session, and six small requests a day to a
+static file is not a cost to anyone.
 """
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ RELEASE_API = "https://api.github.com/repos/yeufonic/yeufonic/releases/latest"
 RELEASES_PAGE = "https://github.com/yeufonic/yeufonic/releases/latest"
 
 TIMEOUT = 6.0
-EVERY = 24 * 60 * 60          # a day, which is also how often the watcher wakes
+EVERY = 4 * 60 * 60           # how often the watcher wakes and asks again
 USER_AGENT = "Yeufonic/" + config.VERSION + " (+https://yeufonic.com)"
 
 # Where the last answer is kept between restarts.  Not settings: nobody chooses these.

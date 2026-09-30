@@ -119,7 +119,7 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   all of them. Tick several cards and one button clears them all.
 - **A player for reviewing takes.** A real waveform you can click to seek, previous and next through
   the library, ten second skips, repeat, speed and volume, with keyboard shortcuts.
-- **Told when a newer version is out.** Once a day the app asks its own site whether a later release
+- **Told when a newer version is out.** Every four hours the app asks its own site whether a later release
   exists — one request, nothing else leaves the computer. When there is one, a quiet pill beside the
   version and **Check for updates** in the menu offer the installer (Windows) or the two commands
   that update a Docker copy. Either can be switched off in Settings.

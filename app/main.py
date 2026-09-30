@@ -121,12 +121,12 @@ SETTINGS_SPEC: list[dict] = [
         "type": "select",
         "default": "on",
         "options": [
-            {"value": "on", "label": "Once a day"},
+            {"value": "on", "label": "Every 4 hours"},
             {"value": "off", "label": "Do not check"},
         ],
-        # One request a day, to our own site, and nothing else: worth saying plainly in a
+        # One small request to our own site, and nothing else: worth saying plainly in a
         # tool whose selling point is that it runs on your own machine.
-        "help": "One request a day to yeufonic.com, to see whether a newer release is out. "
+        "help": "One request every four hours to yeufonic.com, to see whether a newer release is out. "
                 "Nothing else leaves the computer, and Check for updates in the menu works either way.",
     },
     {
