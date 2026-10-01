@@ -2102,6 +2102,103 @@ function backdropClick(event, backdrop) {
   return event.target === backdrop && PRESSED_ON === backdrop;
 }
 
+/* ----------------------------------------------------------- confirm modal */
+var CONFIRM_RESOLVE = null;
+var CONFIRM_PREV_FOCUS = null;
+var CONFIRM_IS_INPUT = false;
+
+function closeConfirmModal(result) {
+  var modal = $('confirm-modal');
+  var inputEl = $('confirm-input');
+  if (modal) { modal.classList.add('hidden'); }
+  if (inputEl) { inputEl.classList.add('hidden'); }
+  if (CONFIRM_RESOLVE) {
+    var resolve = CONFIRM_RESOLVE;
+    CONFIRM_RESOLVE = null;
+    if (CONFIRM_IS_INPUT) {
+      resolve(result ? (inputEl ? inputEl.value.trim() : '') : null);
+    } else {
+      resolve(Boolean(result));
+    }
+    CONFIRM_IS_INPUT = false;
+  }
+  if (CONFIRM_PREV_FOCUS && typeof CONFIRM_PREV_FOCUS.focus === 'function') {
+    try { CONFIRM_PREV_FOCUS.focus(); } catch (e) {}
+    CONFIRM_PREV_FOCUS = null;
+  }
+}
+
+function confirmModal(options) {
+  var modal = $('confirm-modal');
+  if (!modal) {
+    if (options && options.input) {
+      return Promise.resolve(window.prompt(options.message || options.title || '', options.defaultValue || ''));
+    }
+    var msg = typeof options === 'string' ? options : (options && options.message) || '';
+    return Promise.resolve(window.confirm(msg));
+  }
+  if (typeof options === 'string') {
+    options = { message: options };
+  }
+  options = options || {};
+  var title = options.title || 'Confirm';
+  var message = options.message || '';
+  var confirmText = options.confirmText || 'OK';
+  var cancelText = options.cancelText || 'Cancel';
+  var danger = Boolean(options.danger);
+  var isInput = Boolean(options.input);
+
+  $('confirm-title').textContent = title;
+  $('confirm-message').textContent = message;
+
+  var okBtn = $('confirm-ok');
+  var cancelBtn = $('confirm-cancel');
+  var inputEl = $('confirm-input');
+
+  okBtn.textContent = confirmText;
+  cancelBtn.textContent = cancelText;
+
+  if (danger) {
+    okBtn.className = 'primary danger';
+  } else {
+    okBtn.className = 'primary';
+  }
+
+  if (inputEl) {
+    if (isInput) {
+      inputEl.value = options.defaultValue || '';
+      inputEl.placeholder = options.placeholder || '';
+      inputEl.classList.remove('hidden');
+    } else {
+      inputEl.value = '';
+      inputEl.classList.add('hidden');
+    }
+  }
+
+  if (CONFIRM_RESOLVE) {
+    CONFIRM_RESOLVE(isInput ? null : false);
+  }
+
+  CONFIRM_IS_INPUT = isInput;
+  CONFIRM_PREV_FOCUS = document.activeElement;
+
+  return new Promise(function (resolve) {
+    CONFIRM_RESOLVE = resolve;
+    modal.classList.remove('hidden');
+
+    if (isInput && inputEl) {
+      setTimeout(function () {
+        inputEl.focus();
+        inputEl.select();
+      }, 20);
+    } else if (danger) {
+      cancelBtn.focus();
+    } else {
+      okBtn.focus();
+    }
+  });
+}
+
 function openLyricsEditor() {
   $('lyrics-big').value = $('lyrics').value;
   updateLyricsCount();
@@ -2572,7 +2669,12 @@ async function takeRecordingWords(sourceId) {
   if (!theirs) {
     if (!words) { return; }
     var name = source && source.title ? '\u201c' + source.title + '\u201d' : 'this recording';
-    if (!confirm('Replace the words in the box with the words of ' + name + '?')) { return; }
+    if (!await confirmModal({
+      title: 'Replace lyrics',
+      message: 'Replace the words in the box with the words of ' + name + '?',
+      confirmText: 'Replace',
+      danger: true
+    })) { return; }
   }
   box.value = words;
   recordingWords(words);
@@ -2674,7 +2776,12 @@ async function deleteSourceById(id) {
   var source = sourceById(id);
   if (!source) { return; }
   var covers = source.take_count ? ' Its ' + source.take_count + ' cover take(s) keep their audio and score, but cannot be rendered again from it.' : '';
-  if (!confirm('Delete the recording \u201c' + source.title + '\u201d and its stems?' + covers)) { return; }
+  if (!await confirmModal({
+    title: 'Delete recording',
+    message: 'Delete the recording \u201c' + source.title + '\u201d and its stems?' + covers,
+    confirmText: 'Delete',
+    danger: true
+  })) { return; }
   try {
     await api('/api/sources/' + id, { method: 'DELETE' });
   } catch (err) {
@@ -3840,11 +3947,16 @@ function showHearError(message) {
   paintAudition();
 }
 
-function useHeardLyrics(text) {
+async function useHeardLyrics(text) {
   var box = $('lyrics');
   // Another recording's words, as the app put them in, go without asking.
   if (box.value.trim() && !sameWords(box.value, text) && !sameWords(box.value, recordingWords())) {
-    if (!confirm('Replace the lyrics in the box with the words heard in the recording?')) { return; }
+    if (!await confirmModal({
+      title: 'Replace lyrics',
+      message: 'Replace the lyrics in the box with the words heard in the recording?',
+      confirmText: 'Replace',
+      danger: true
+    })) { return; }
   }
   box.value = text;
   recordingWords(text);
@@ -3864,7 +3976,7 @@ async function pollHear(id) {
   paintHearJob(state);
   if (state.state === 'done') {
     stopHearPoll();
-    if (state.lyrics) { useHeardLyrics(state.lyrics); }
+    if (state.lyrics) { await useHeardLyrics(state.lyrics); }
     statusLine('Wrote down what the recording sings' + (state.method ? ', heard by ' + state.method : '') +
       '. Read it before you plan.', 'good');
     loadSources();
@@ -3901,9 +4013,14 @@ async function hearLyrics() {
   var state = await api('/api/sources/' + source.id + '/lyrics');
   var busy = state.state === 'queued' || state.state === 'running';
   if (state.lyrics && !busy) {
-    useHeardLyrics(state.lyrics);
+    await useHeardLyrics(state.lyrics);
     var before = state.method ? ' (heard by ' + state.method + ')' : '';
-    if (!confirm('Lyrics already present' + before + '. Extract again with ' + hearMethodNow() + '?')) {
+    if (!await confirmModal({
+      title: 'Extract lyrics again',
+      message: 'Lyrics already present' + before + '. Extract again with ' + hearMethodNow() + '?',
+      confirmText: 'Extract again',
+      danger: false
+    })) {
       statusLine('These words were heard in the recording earlier.', 'good');
       return;
     }
@@ -4640,11 +4757,16 @@ function loadSpaceChoice() {
 }
 
 async function newSpace() {
-  var name = prompt('Name the new space');
+  var name = await confirmModal({
+    title: 'New space',
+    message: 'Name the new space:',
+    input: true,
+    confirmText: 'Create space'
+  });
   if (name === null || !name.trim()) { return; }
   try {
     var space = await api('/api/spaces', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
     });
     State.spaces.push(space);
     showSpace(space.id);
@@ -4658,11 +4780,17 @@ async function newSpace() {
 async function renameSpace() {
   var space = currentSpace();
   if (!space) { return; }
-  var name = prompt('Rename the space', space.name);
+  var name = await confirmModal({
+    title: 'Rename space',
+    message: 'Rename the space:',
+    input: true,
+    defaultValue: space.name,
+    confirmText: 'Rename'
+  });
   if (name === null || !name.trim() || name.trim() === space.name) { return; }
   try {
     await api('/api/spaces/' + space.id, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name })
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
     });
     await loadSpaces();
   } catch (err) {
@@ -4674,7 +4802,12 @@ async function deleteSpace() {
   var space = currentSpace();
   if (!space || space.id === 'default') { return; }
   var held = space.takes ? ' Its ' + space.takes + ' take' + (space.takes === 1 ? '' : 's') + ' move to Default.' : '';
-  if (!confirm('Delete the space \u201c' + space.name + '\u201d?' + held)) { return; }
+  if (!await confirmModal({
+    title: 'Delete space',
+    message: 'Delete the space \u201c' + space.name + '\u201d?' + held,
+    confirmText: 'Delete',
+    danger: true
+  })) { return; }
   try {
     await api('/api/spaces/' + space.id, { method: 'DELETE' });
     showSpace('default');
@@ -5666,7 +5799,12 @@ function writeStatus(text, tone) {
 async function doWrite() {
   var brief = $('write-brief').value.trim();
   if (!brief) { writeStatus('Say in a few words what the song is about.', 'bad'); $('write-brief').focus(); return; }
-  if ($('lyrics').value.trim() && !confirm('The draft will replace the lyrics in the box. Write it?')) { return; }
+  if ($('lyrics').value.trim() && !await confirmModal({
+    title: 'Replace lyrics',
+    message: 'The draft will replace the lyrics in the box. Write it?',
+    confirmText: 'Write lyrics',
+    danger: true
+  })) { return; }
   try {
     var draft = await api('/api/lyrics', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -6360,8 +6498,13 @@ async function deleteCorpusCheckpoints() {
   if (!picked.length) { return; }
   var bytes = picked.reduce(function (sum, box) { return sum + Number(box.dataset.bytes || 0); }, 0);
   var what = picked.length + ' checkpoint' + (picked.length === 1 ? '' : 's');
-  if (!confirm('Delete ' + what + ' of ' + (IDENTITY.data.name || 'this corpus') + ', ' + bytesLabel(bytes) + '?\n\n' +
-      'Takes made with them keep their audio but cannot be rendered with them again.')) { return; }
+  if (!await confirmModal({
+    title: 'Delete checkpoints',
+    message: 'Delete ' + what + ' of ' + (IDENTITY.data.name || 'this corpus') + ', ' + bytesLabel(bytes) + '?\n\n' +
+      'Takes made with them keep their audio but cannot be rendered with them again.',
+    confirmText: 'Delete',
+    danger: true
+  })) { return; }
   var button = $('pe-ck-delete');
   button.disabled = true;
   button.textContent = 'Deleting\u2026';
@@ -6452,7 +6595,12 @@ async function identityClick(event) {
     var said = document.querySelector('[data-saved="' + redraftId + '"]');
     var was = identitySong(redraftId);
     if (((was && was.lyrics_checked) || (box && box.dataset.edited)) &&
-        !confirm('Replace the lyrics in the box with a new draft?')) { return; }
+        !await confirmModal({
+          title: 'Replace lyrics',
+          message: 'Replace the lyrics in the box with a new draft?',
+          confirmText: 'Replace',
+          danger: true
+        })) { return; }
     redraft.disabled = true;
     try {
       await api('/api/identities/' + IDENTITY.id + '/songs/' + redraftId + '/lyrics/redraft', { method: 'POST' });
@@ -6634,8 +6782,13 @@ async function identityClick(event) {
       ? '\n\nNot deleted: ' + matching.length + ' LoRA file' + (matching.length === 1 ? '' : 's') +
         ' in models/loras that look like they came from this corpus —\n' + matching.slice(0, 6).join('\n')
       : '';
-    if (!confirm('Delete the corpus “' + IDENTITY.data.name + '” and the app’s copies of its songs?\n\n' +
-        'The original files are not touched.' + leftover)) { return; }
+    if (!await confirmModal({
+      title: 'Delete corpus',
+      message: 'Delete the corpus “' + IDENTITY.data.name + '” and the app’s copies of its songs?\n\n' +
+        'The original files are not touched.' + leftover,
+      confirmText: 'Delete',
+      danger: true
+    })) { return; }
     try {
       await api('/api/identities/' + IDENTITY.id, { method: 'DELETE' });
       showIdentityList();
@@ -6669,8 +6822,13 @@ async function deleteLora() {
   var item = loraChosen();
   if (!item) { return; }
   var label = item.title || loraLabel(item.name);
-  if (!confirm('Delete ' + label + '?\n\n' + item.name + ' and its note are removed from models/loras. ' +
-      'Takes made with it keep their audio but cannot be rendered with it again.')) { return; }
+  if (!await confirmModal({
+    title: 'Delete LoRA',
+    message: 'Delete ' + label + '?\n\n' + item.name + ' and its note are removed from models/loras. ' +
+      'Takes made with it keep their audio but cannot be rendered with it again.',
+    confirmText: 'Delete',
+    danger: true
+  })) { return; }
   var status = $('lora-install-status');
   try {
     await api('/api/loras/' + encodeURIComponent(item.name), { method: 'DELETE' });
@@ -6964,10 +7122,15 @@ function dismissDraft() {
    seed), so the next song can be in the same vein.  The loaded take lets go of the
    column, so Render and Replan cannot act on it by mistake.  A cover keeps its
    recording and goes back to that recording's own transcription. */
-function startFresh() {
+async function startFresh() {
   var noun = { cover: 'cover', song: 'song', inst: 'instrumental' }[State.mode] || 'song';
-  if (scoreIsDirty() && !confirm('The score has changes that are not saved. Start a new ' + noun + ' and discard them?')) {
-    return;
+  if (scoreIsDirty() && !await confirmModal({
+    title: 'Discard score changes',
+    message: 'The score has changes that are not saved. Start a new ' + noun + ' and discard them?',
+    confirmText: 'Discard changes',
+    danger: true
+  })) {
+    return false;
   }
   if (formIsDraft()) { stashDraft(); }
   var cover = State.mode === 'cover';
@@ -7018,6 +7181,7 @@ function startFresh() {
       : 'New instrumental. Choose a style and a structure, then Write score plan.')
     : 'New song. Write a title, style and lyrics, then Write score plan.', 'good');
   $('title').focus();
+  return true;
 }
 
 function takeById(id) {
@@ -7102,8 +7266,13 @@ async function bulkDelete() {
   });
   var shown = names.slice(0, 8).map(function (name) { return '• ' + name; }).join('\n');
   var more = names.length > 8 ? '\nand ' + (names.length - 8) + ' more' : '';
-  if (!confirm('Delete ' + ids.length + ' take' + (ids.length === 1 ? '' : 's') + '?\n\n' + shown + more
-      + '\n\nTheir audio and stems go with them. This cannot be undone.')) {
+  if (!await confirmModal({
+    title: 'Delete ' + ids.length + ' take' + (ids.length === 1 ? '' : 's'),
+    message: 'Delete ' + ids.length + ' take' + (ids.length === 1 ? '' : 's') + '?\n\n' + shown + more
+      + '\n\nTheir audio and stems go with them. This cannot be undone.',
+    confirmText: 'Delete',
+    danger: true
+  })) {
     return;
   }
   if (State.playing && ids.indexOf(State.playing) !== -1) {
@@ -8807,7 +8976,12 @@ function wire() {
       loadTakes();
     }
     if (act === 'del') {
-      if (confirm('Delete this take and its audio?')) {
+      if (await confirmModal({
+        title: 'Delete take',
+        message: 'Delete this take and its audio?',
+        confirmText: 'Delete',
+        danger: true
+      })) {
         await api('/api/takes/' + id, { method: 'DELETE' });
         delete State.picked[id];
         loadTakes();
@@ -8947,7 +9121,13 @@ function wire() {
     if (act === 'rename') {
       var targetTake = takeById(id);
       if (!targetTake) { return; }
-      var newTitle = prompt('Rename take:', targetTake.title);
+      var newTitle = await confirmModal({
+        title: 'Rename take',
+        message: 'Rename take:',
+        input: true,
+        defaultValue: targetTake.title,
+        confirmText: 'Rename'
+      });
       if (newTitle && newTitle.trim() && newTitle.trim() !== targetTake.title) {
         try {
           var updated = await api('/api/takes/' + id + '/rename', {
@@ -9109,7 +9289,7 @@ function wire() {
     }
     if (event.target.dataset && event.target.dataset.key) { saveSetting(event.target); }
   });
-  $('settings-list').addEventListener('click', function (event) {
+  $('settings-list').addEventListener('click', async function (event) {
     if (event.target && event.target.id === 'btn-fetch-models') {
       event.preventDefault();
       fetchLLMModels(false);
@@ -9117,7 +9297,12 @@ function wire() {
     }
     if (event.target && event.target.dataset && event.target.dataset.remove) {
       event.preventDefault();
-      if (!confirm('Remove the saved key?')) { return; }
+      if (!await confirmModal({
+        title: 'Remove API key',
+        message: 'Remove the saved key?',
+        confirmText: 'Remove',
+        danger: true
+      })) { return; }
       var removeKey = event.target.dataset.remove;
       api('/api/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -9213,7 +9398,42 @@ function wire() {
     var button = event.target.closest('[data-tag]');
     if (button) { insertTag(button.dataset.tag); }
   });
+  if ($('confirm-modal')) {
+    $('confirm-ok').addEventListener('click', function () { closeConfirmModal(true); });
+    $('confirm-cancel').addEventListener('click', function () { closeConfirmModal(false); });
+    if ($('confirm-close')) {
+      $('confirm-close').addEventListener('click', function () { closeConfirmModal(false); });
+    }
+    if ($('confirm-input')) {
+      $('confirm-input').addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          closeConfirmModal(true);
+        }
+      });
+    }
+    $('confirm-modal').addEventListener('click', function (event) {
+      if (backdropClick(event, $('confirm-modal'))) { closeConfirmModal(false); }
+    });
+  }
   document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && $('confirm-modal') && !$('confirm-modal').classList.contains('hidden')) { closeConfirmModal(false); return; }
+    if (event.key === 'Tab' && $('confirm-modal') && !$('confirm-modal').classList.contains('hidden')) {
+      var focusable = $('confirm-modal').querySelectorAll('button:not([disabled]), input:not([disabled]):not(.hidden)');
+      if (focusable.length) {
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+          return;
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+      }
+    }
     if (event.key === 'Escape' && $('source-picker-menu') && !$('source-picker-menu').classList.contains('hidden')) { closeSourcePicker(); return; }
     if (event.key === 'Escape' && $('lora-picker-menu') && !$('lora-picker-menu').classList.contains('hidden')) { closeLoraPicker(); return; }
     if (event.key === 'Escape' && $('brand-menu') && !$('brand-menu').classList.contains('hidden')) { closeBrandMenu(); return; }
@@ -9544,9 +9764,9 @@ function editorAfterPlan() {
   paintEditor();
 }
 
-function newTake(kind) {
+async function newTake(kind) {
   setMode(kind);
-  startFresh();
+  if (!await startFresh()) { return; }
   openEditor('song');
 }
 

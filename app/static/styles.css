@@ -483,6 +483,12 @@ a.menu-item { text-decoration: none; box-sizing: border-box; }
 
 /* ------------------------------------------------------------------- stems */
 .modal-box.narrow { width: min(560px, 100%); height: auto; max-height: 90vh; overflow: auto; }
+#confirm-modal { z-index: 70; }
+.modal-box.confirm-box { width: min(440px, 100%); height: auto; gap: 14px; }
+.confirm-message { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.confirm-input { width: 100%; margin-top: 2px; font-size: 14px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.confirm-actions button { width: auto; margin-top: 0; padding: 9px 18px; font-size: 13.5px; }
 .modal-box.settings { width: min(680px, 100%); }
 .stem-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .stem-choice {
@@ -1318,6 +1324,15 @@ button.ghost.danger:hover {
   border-color: rgb(var(--danger-rgb) / 0.75);
   background: rgb(var(--danger-rgb) / 0.15);
   color: var(--text-strong);
+}
+button.primary.danger {
+  background: rgb(var(--danger-rgb));
+  color: #fff;
+  border-color: rgb(var(--danger-rgb));
+}
+button.primary.danger:hover {
+  background: rgb(var(--danger-rgb) / 0.88);
+  border-color: rgb(var(--danger-rgb) / 0.88);
 }
 .identity-songs th, .persona-songs th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .identity-songs td, .persona-songs td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
