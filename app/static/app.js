@@ -9547,8 +9547,15 @@ function wire() {
     if (event.key === 'Escape' && !$('stems-modal').classList.contains('hidden')) { closeStemsModal(); return; }
     if (event.key === 'Escape' && !$('save-modal').classList.contains('hidden')) { closeSaveModal(); return; }
     if (event.key === 'Escape' && !$('settings-modal').classList.contains('hidden')) { closeSettings(); return; }
-    if (event.key === 'Escape' && $('logs-panel') && !$('logs-panel').classList.contains('hidden')) { closeLogsModal(); return; }
-    if (event.key === 'Escape' && !$('score-modal').classList.contains('hidden')) { closeScoreEditor(); return; }
+    if (event.key === 'Escape' && !$('score-modal').classList.contains('hidden')) {
+      if (scoreView() === 'roll' && window.PianoRoll && window.PianoRoll.hasSelection && window.PianoRoll.hasSelection()) {
+        event.preventDefault();
+        window.PianoRoll.clearSelection();
+        return;
+      }
+      closeScoreEditor();
+      return;
+    }
     if (event.key === 'Escape' && typeof editorOpen === 'function' && editorOpen()) { closeEditor(); return; }
 
     if (compareOpen()) { if (compareKey(event)) { event.preventDefault(); } return; }
@@ -9592,11 +9599,16 @@ function wire() {
           return;
         }
         if (event.key === 'Delete' || event.key === 'Backspace') {
-          if (window.PianoRoll && window.PianoRoll.selectedNoteId) {
+          if (window.PianoRoll && (window.PianoRoll.hasSelection ? window.PianoRoll.hasSelection() : window.PianoRoll.selectedNoteId)) {
             event.preventDefault();
-            window.PianoRoll.deleteSelectedNote();
+            window.PianoRoll.deleteSelectedNotes();
             return;
           }
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.selectAll(); }
+          return;
         }
       }
     }

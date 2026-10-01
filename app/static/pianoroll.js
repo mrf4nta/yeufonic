@@ -474,6 +474,7 @@
     tickWidth: TICK_WIDTH,
     rowHeight: ROW_HEIGHT,
     selectedNoteId: null,
+    selectedNoteIds: [],
     isPlaying: false,
     playheadTick: 0,
     playTimer: null,
@@ -599,6 +600,8 @@
 
     setVoice: function (voiceName) {
       this.currentVoice = voiceName;
+      this.selectedNoteIds = [];
+      this.selectedNoteId = null;
       var vocalBtn = document.getElementById('roll-voice-vocal');
       var insBtn = document.getElementById('roll-voice-ins');
       if (vocalBtn) { vocalBtn.classList.toggle('active', voiceName === 'Vocal'); }
@@ -608,6 +611,8 @@
 
     loadAbc: function (abcText) {
       this.model = parseAbc(abcText);
+      this.selectedNoteIds = [];
+      this.selectedNoteId = null;
       this.renderAll();
       var self = this;
       setTimeout(function () { self.scrollToNotes(); }, 50);
@@ -621,6 +626,7 @@
 
     renderAll: function () {
       if (!this.model) { return; }
+      if (typeof document === 'undefined') { return; }
       this.updateMetadata();
       this.renderKeys();
       this.renderTimeline();
@@ -854,6 +860,7 @@
     },
 
     renderNotes: function () {
+      if (typeof document === 'undefined') { return; }
       var notesLayer = document.getElementById('roll-notes-layer');
       if (!notesLayer || !this.model) { return; }
       var self = this;
@@ -868,7 +875,7 @@
         var top = (MAX_PITCH - note.pitch) * self.rowHeight;
         var width = Math.max(4, note.durationTicks * self.tickWidth - 2);
         var height = self.rowHeight - 2;
-        var isSelected = (note.id === self.selectedNoteId);
+        var isSelected = self.isNoteSelected(note.id);
         var noteName = midiToNoteName(note.pitch);
 
         var voiceClass = (note.voice === 'Ins') ? 'ins' : 'vocal';
@@ -888,6 +895,85 @@
       notesLayer.innerHTML = html.join('');
     },
 
+    /* ------------------------------------------------ Selection Helpers */
+    hasSelection: function () {
+      return Boolean(this.selectedNoteIds && this.selectedNoteIds.length > 0);
+    },
+
+    isNoteSelected: function (id) {
+      if (this.selectedNoteIds && this.selectedNoteIds.length > 0) {
+        return this.selectedNoteIds.indexOf(id) !== -1;
+      }
+      return this.selectedNoteId === id;
+    },
+
+    selectNote: function (id, addToSelection) {
+      if (!this.selectedNoteIds) { this.selectedNoteIds = []; }
+      if (addToSelection) {
+        if (this.selectedNoteIds.indexOf(id) === -1) {
+          this.selectedNoteIds.push(id);
+        }
+      } else {
+        this.selectedNoteIds = [id];
+      }
+      this.selectedNoteId = this.selectedNoteIds.length > 0 ? this.selectedNoteIds[0] : null;
+      this.renderNotes();
+    },
+
+    deselectNote: function (id) {
+      if (!this.selectedNoteIds) { return; }
+      var idx = this.selectedNoteIds.indexOf(id);
+      if (idx !== -1) {
+        this.selectedNoteIds.splice(idx, 1);
+      }
+      this.selectedNoteId = this.selectedNoteIds.length > 0 ? this.selectedNoteIds[0] : null;
+      this.renderNotes();
+    },
+
+    clearSelection: function () {
+      this.selectedNoteIds = [];
+      this.selectedNoteId = null;
+      this.renderNotes();
+    },
+
+    selectAll: function () {
+      if (!this.model) { return; }
+      var ids = [];
+      for (var i = 0; i < this.model.notes.length; i++) {
+        if (this.model.notes[i].voice === this.currentVoice) {
+          ids.push(this.model.notes[i].id);
+        }
+      }
+      this.selectedNoteIds = ids;
+      this.selectedNoteId = ids.length > 0 ? ids[0] : null;
+      this.renderNotes();
+    },
+
+    getSelectionBox: function () {
+      var box = document.getElementById('roll-selection-box');
+      if (!box) {
+        var grid = document.getElementById('roll-grid');
+        if (grid) {
+          box = document.createElement('div');
+          box.id = 'roll-selection-box';
+          box.className = 'roll-selection-box hidden';
+          grid.appendChild(box);
+        }
+      }
+      return box;
+    },
+
+    updateSelectionVisuals: function () {
+      var notesLayer = document.getElementById('roll-notes-layer');
+      if (!notesLayer) { return; }
+      var noteNodes = notesLayer.querySelectorAll('.roll-note');
+      var self = this;
+      for (var i = 0; i < noteNodes.length; i++) {
+        var nid = parseInt(noteNodes[i].dataset.noteId, 10);
+        noteNodes[i].classList.toggle('selected', self.isNoteSelected(nid));
+      }
+    },
+
     bindGridEvents: function () {
       var gridEl = document.getElementById('roll-grid');
       var gridScroll = document.getElementById('roll-grid-scroll');
@@ -901,7 +987,7 @@
         var noteEl = e.target.closest('.roll-note');
 
         if (resizeHandle) {
-          // Resize note
+          // Resize note duration
           e.preventDefault();
           e.stopPropagation();
           var pNoteEl = resizeHandle.closest('.roll-note');
@@ -909,6 +995,7 @@
           var rNote = self.findNote(rId);
           if (!rNote) { return; }
 
+          self.selectedNoteIds = [rId];
           self.selectedNoteId = rId;
           self.renderNotes();
 
@@ -924,7 +1011,7 @@
         }
 
         if (noteEl) {
-          // Move or select note
+          // Move or select note(s)
           if (noteEl.classList.contains('ghost')) { return; }
           e.preventDefault();
           e.stopPropagation();
@@ -932,47 +1019,78 @@
           var mNote = self.findNote(nId);
           if (!mNote) { return; }
 
-          self.selectedNoteId = nId;
-          self.renderNotes();
+          var isShift = e.shiftKey || e.metaKey || e.ctrlKey;
+          var wasAlreadySelected = self.isNoteSelected(nId);
+
+          if (isShift) {
+            if (wasAlreadySelected) {
+              self.deselectNote(nId);
+              return;
+            } else {
+              self.selectNote(nId, true);
+            }
+          } else {
+            if (!wasAlreadySelected) {
+              self.selectNote(nId, false);
+            }
+          }
+
           playTone(mNote.pitch, 0.2, self.currentVoice);
+
+          // Prepare list of all selected notes to move in lockstep
+          var notesToMove = [];
+          var minStart = Infinity;
+          var minPitch = Infinity;
+          var maxPitch = -Infinity;
+          for (var i = 0; i < self.model.notes.length; i++) {
+            var n = self.model.notes[i];
+            if (self.isNoteSelected(n.id) && n.voice === self.currentVoice) {
+              notesToMove.push({
+                note: n,
+                origStartTick: n.startTick,
+                origPitch: n.pitch
+              });
+              if (n.startTick < minStart) { minStart = n.startTick; }
+              if (n.pitch < minPitch) { minPitch = n.pitch; }
+              if (n.pitch > maxPitch) { maxPitch = n.pitch; }
+            }
+          }
 
           dragState = {
             type: 'move',
-            note: mNote,
+            leadNote: mNote,
+            notesToMove: notesToMove,
+            minStart: minStart,
+            minPitch: minPitch,
+            maxPitch: maxPitch,
             startX: e.clientX,
             startY: e.clientY,
-            origStartTick: mNote.startTick,
-            origPitch: mNote.pitch,
-            lastPitch: mNote.pitch
+            lastPitchDelta: 0,
+            hasMoved: false,
+            wasAlreadySelected: wasAlreadySelected,
+            isShift: isShift
           };
           window.addEventListener('pointermove', onPointerMove);
           window.addEventListener('pointerup', onPointerUp);
           return;
         }
 
-        // Click on empty grid cell -> create note
+        // Click or marquee drag on empty grid space
         var rect = gridEl.getBoundingClientRect();
         var clickX = e.clientX - rect.left;
         var clickY = e.clientY - rect.top;
 
-        var clickedTick = Math.max(0, Math.floor(clickX / self.tickWidth));
-        var snap = self.snapTicks || 1;
-        var noteStartTick = Math.floor(clickedTick / snap) * snap;
-        var clickedPitch = MAX_PITCH - Math.floor(clickY / self.rowHeight);
-        clickedPitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, clickedPitch));
-
-        var newNote = {
-          id: Date.now(),
-          voice: self.currentVoice,
-          pitch: clickedPitch,
-          startTick: noteStartTick,
-          durationTicks: snap
+        dragState = {
+          type: 'grid_down',
+          startX: e.clientX,
+          startY: e.clientY,
+          clickGridX: clickX,
+          clickGridY: clickY,
+          shiftKey: e.shiftKey || e.metaKey || e.ctrlKey,
+          origSelectedIds: (self.selectedNoteIds || []).slice()
         };
-
-        self.model.notes.push(newNote);
-        self.selectedNoteId = newNote.id;
-        playTone(clickedPitch, 0.25, self.currentVoice);
-        self.commitEdit();
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
       });
 
       // Double click note to delete
@@ -1001,37 +1119,139 @@
         } else if (dragState.type === 'move') {
           var dX = e.clientX - dragState.startX;
           var dY = e.clientY - dragState.startY;
-          var dTicks = Math.round(dX / self.tickWidth);
-          var dPitch = -Math.round(dY / self.rowHeight);
+          if (Math.hypot(dX, dY) > 3) {
+            dragState.hasMoved = true;
+          }
 
-          var newStart = Math.max(0, Math.round((dragState.origStartTick + dTicks) / snap) * snap);
-          var newPitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, dragState.origPitch + dPitch));
+          var rawDTicks = Math.round(dX / self.tickWidth);
+          var rawDPitch = -Math.round(dY / self.rowHeight);
+          var snappedDTicks = Math.round(rawDTicks / snap) * snap;
+
+          var clampedDTicks = Math.max(-dragState.minStart, snappedDTicks);
+          var clampedDPitch = Math.max(MIN_PITCH - dragState.minPitch, Math.min(MAX_PITCH - dragState.maxPitch, rawDPitch));
 
           var changed = false;
-          if (newStart !== dragState.note.startTick) {
-            dragState.note.startTick = newStart;
-            changed = true;
-          }
-          if (newPitch !== dragState.note.pitch) {
-            dragState.note.pitch = newPitch;
-            changed = true;
-            if (newPitch !== dragState.lastPitch) {
-              playTone(newPitch, 0.15, self.currentVoice);
-              dragState.lastPitch = newPitch;
+          for (var i = 0; i < dragState.notesToMove.length; i++) {
+            var item = dragState.notesToMove[i];
+            var newStart = item.origStartTick + clampedDTicks;
+            var newPitch = item.origPitch + clampedDPitch;
+            if (item.note.startTick !== newStart) {
+              item.note.startTick = newStart;
+              changed = true;
+            }
+            if (item.note.pitch !== newPitch) {
+              item.note.pitch = newPitch;
+              changed = true;
             }
           }
+
+          if (clampedDPitch !== dragState.lastPitchDelta) {
+            playTone(dragState.leadNote.pitch, 0.15, self.currentVoice);
+            dragState.lastPitchDelta = clampedDPitch;
+          }
+
           if (changed) {
             self.renderNotes();
+          }
+        } else if (dragState.type === 'grid_down' || dragState.type === 'marquee') {
+          var dist = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY);
+          if (dist > 4 && dragState.type === 'grid_down') {
+            dragState.type = 'marquee';
+          }
+          if (dragState.type === 'marquee') {
+            var gRect = gridEl.getBoundingClientRect();
+            var curGridX = e.clientX - gRect.left;
+            var curGridY = e.clientY - gRect.top;
+
+            var boxL = Math.max(0, Math.min(dragState.clickGridX, curGridX));
+            var boxT = Math.max(0, Math.min(dragState.clickGridY, curGridY));
+            var boxW = Math.abs(curGridX - dragState.clickGridX);
+            var boxH = Math.abs(curGridY - dragState.clickGridY);
+
+            var boxEl = self.getSelectionBox();
+            if (boxEl) {
+              boxEl.style.left = boxL + 'px';
+              boxEl.style.top = boxT + 'px';
+              boxEl.style.width = boxW + 'px';
+              boxEl.style.height = boxH + 'px';
+              boxEl.classList.remove('hidden');
+            }
+
+            var newSel = dragState.shiftKey ? dragState.origSelectedIds.slice() : [];
+            for (var j = 0; j < self.model.notes.length; j++) {
+              var note = self.model.notes[j];
+              if (note.voice !== self.currentVoice) { continue; }
+              var nLeft = note.startTick * self.tickWidth;
+              var nWidth = Math.max(4, note.durationTicks * self.tickWidth - 2);
+              var nRight = nLeft + nWidth;
+              var nTop = (MAX_PITCH - note.pitch) * self.rowHeight;
+              var nBottom = nTop + (self.rowHeight - 2);
+
+              if (nLeft < (boxL + boxW) && nRight > boxL && nTop < (boxT + boxH) && nBottom > boxT) {
+                if (newSel.indexOf(note.id) === -1) {
+                  newSel.push(note.id);
+                }
+              }
+            }
+            self.selectedNoteIds = newSel;
+            self.selectedNoteId = newSel.length > 0 ? newSel[0] : null;
+            self.updateSelectionVisuals();
           }
         }
       }
 
-      function onPointerUp() {
+      function onPointerUp(e) {
         if (!dragState) { return; }
-        dragState = null;
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
-        self.commitEdit();
+
+        var state = dragState;
+        dragState = null;
+
+        if (state.type === 'resize') {
+          self.commitEdit();
+        } else if (state.type === 'move') {
+          if (state.hasMoved) {
+            self.commitEdit();
+          } else if (state.wasAlreadySelected && !state.isShift) {
+            // User just clicked on a previously multi-selected note without moving:
+            // reduce selection to just this note
+            self.selectedNoteIds = [state.leadNote.id];
+            self.selectedNoteId = state.leadNote.id;
+            self.renderNotes();
+          }
+        } else if (state.type === 'marquee') {
+          var boxEl = self.getSelectionBox();
+          if (boxEl) { boxEl.classList.add('hidden'); }
+          self.renderNotes();
+        } else if (state.type === 'grid_down') {
+          // Click on empty grid space without dragging
+          if (self.selectedNoteIds && self.selectedNoteIds.length > 0 && !state.shiftKey) {
+            // Deselect all
+            self.clearSelection();
+          } else {
+            // Add note at clicked cell
+            var snap = self.snapTicks || 1;
+            var clickedTick = Math.max(0, Math.floor(state.clickGridX / self.tickWidth));
+            var noteStartTick = Math.floor(clickedTick / snap) * snap;
+            var clickedPitch = MAX_PITCH - Math.floor(state.clickGridY / self.rowHeight);
+            clickedPitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, clickedPitch));
+
+            var newNote = {
+              id: Date.now(),
+              voice: self.currentVoice,
+              pitch: clickedPitch,
+              startTick: noteStartTick,
+              durationTicks: snap
+            };
+
+            self.model.notes.push(newNote);
+            self.selectedNoteIds = [newNote.id];
+            self.selectedNoteId = newNote.id;
+            playTone(clickedPitch, 0.25, self.currentVoice);
+            self.commitEdit();
+          }
+        }
       }
     },
 
@@ -1046,14 +1266,31 @@
     deleteNote: function (id) {
       if (!this.model) { return; }
       this.model.notes = this.model.notes.filter(function (n) { return n.id !== id; });
-      if (this.selectedNoteId === id) { this.selectedNoteId = null; }
+      if (this.selectedNoteIds) {
+        var idx = this.selectedNoteIds.indexOf(id);
+        if (idx !== -1) { this.selectedNoteIds.splice(idx, 1); }
+      }
+      this.selectedNoteId = (this.selectedNoteIds && this.selectedNoteIds.length > 0) ? this.selectedNoteIds[0] : null;
+      this.commitEdit();
+    },
+
+    deleteSelectedNotes: function () {
+      if (!this.model) { return; }
+      var idsToDelete = (this.selectedNoteIds && this.selectedNoteIds.length > 0)
+        ? this.selectedNoteIds
+        : (this.selectedNoteId ? [this.selectedNoteId] : []);
+      if (idsToDelete.length === 0) { return; }
+
+      this.model.notes = this.model.notes.filter(function (n) {
+        return idsToDelete.indexOf(n.id) === -1;
+      });
+      this.selectedNoteIds = [];
+      this.selectedNoteId = null;
       this.commitEdit();
     },
 
     deleteSelectedNote: function () {
-      if (this.selectedNoteId) {
-        this.deleteNote(this.selectedNoteId);
-      }
+      this.deleteSelectedNotes();
     },
 
     scrollToNotes: function () {

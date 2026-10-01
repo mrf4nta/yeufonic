@@ -278,3 +278,117 @@ def test_piano_roll_transport_stepping():
     assert data["tick4"] == 16
     assert data["tick5"] == 0
 
+
+def test_piano_roll_multi_selection_and_mass_deletion():
+    """Verify multi-selection, select all, deselect, and mass deletion of selected notes."""
+    js = """
+    PianoRoll.model = parseAbc("X:1\\nM:4/4\\nL:1/16\\nQ:1/4=120\\nK:C\\n% intro\\nV: Vocal\\n\\"C\\"c4 d4 e4 f4 | \\"G\\"g16 |\\nV: Ins\\nz16|z16|\\n");
+    PianoRoll.currentVoice = "Vocal";
+    PianoRoll.clearSelection();
+
+    const noteCountInitial = PianoRoll.model.notes.length; // 5 notes (c4, d4, e4, f4, g16)
+
+    // 1. Select all in active voice
+    PianoRoll.selectAll();
+    const allSelectedCount = PianoRoll.selectedNoteIds.length;
+
+    // 2. Clear selection
+    PianoRoll.clearSelection();
+    const hasSelAfterClear = PianoRoll.hasSelection();
+
+    // 3. Select first 2 notes
+    const id0 = PianoRoll.model.notes[0].id;
+    const id1 = PianoRoll.model.notes[1].id;
+    PianoRoll.selectNote(id0, false);
+    PianoRoll.selectNote(id1, true); // add to selection
+    const twoSelected = PianoRoll.selectedNoteIds.length;
+    const is0Sel = PianoRoll.isNoteSelected(id0);
+    const is1Sel = PianoRoll.isNoteSelected(id1);
+
+    // 4. Delete selected notes (mass deletion)
+    PianoRoll.deleteSelectedNotes();
+    const countAfterDelete = PianoRoll.model.notes.length;
+    const hasSelAfterDelete = PianoRoll.hasSelection();
+
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    console.log(JSON.stringify({
+        noteCountInitial,
+        allSelectedCount,
+        hasSelAfterClear,
+        twoSelected,
+        is0Sel,
+        is1Sel,
+        countAfterDelete,
+        hasSelAfterDelete,
+        outAbc
+    }));
+    """
+    data = run_node_script(js)
+
+    assert data["noteCountInitial"] == 5
+    assert data["allSelectedCount"] == 5
+    assert data["hasSelAfterClear"] is False
+    assert data["twoSelected"] == 2
+    assert data["is0Sel"] is True
+    assert data["is1Sel"] is True
+    assert data["countAfterDelete"] == 3
+    assert data["hasSelAfterDelete"] is False
+    assert score.problems(data["outAbc"]) == []
+
+
+def test_piano_roll_group_moving_and_gap_filling():
+    """Verify selecting multiple notes and shifting them together across the timeline."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% intro\n"
+        "V: Vocal\n"
+        "\"C\"c4 d4 e4 f4 | \"G\"g4 a4 b4 c'4 |\n"
+        "V: Ins\n"
+        "z16 | z16 |\n"
+    )
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.currentVoice = "Vocal";
+
+    // Delete notes 2 and 3 (e4, f4 at ticks 8 and 12)
+    const id2 = PianoRoll.model.notes[2].id;
+    const id3 = PianoRoll.model.notes[3].id;
+    PianoRoll.selectedNoteIds = [id2, id3];
+    PianoRoll.deleteSelectedNotes();
+
+    // Select all the notes to the right of the gap (g4, a4, b4, c'4)
+    PianoRoll.selectedNoteIds = [
+        PianoRoll.model.notes[2].id,
+        PianoRoll.model.notes[3].id,
+        PianoRoll.model.notes[4].id,
+        PianoRoll.model.notes[5].id
+    ];
+
+    // Shift them left by 8 ticks to close the gap
+    const shiftTicks = -8;
+    for (let i = 0; i < PianoRoll.model.notes.length; i++) {{
+        const n = PianoRoll.model.notes[i];
+        if (PianoRoll.isNoteSelected(n.id)) {{
+            n.startTick += shiftTicks;
+        }}
+    }}
+
+    const newStartTicks = PianoRoll.model.notes.map(n => n.startTick);
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    console.log(JSON.stringify({{
+        newStartTicks,
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert data["newStartTicks"] == [0, 4, 8, 12, 16, 20]
+    assert score.problems(data["outAbc"]) == []
+
+
