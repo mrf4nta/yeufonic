@@ -307,7 +307,10 @@
     var voiceBarIndex = {};
     var ticksPerBar = 16;
     var unitLength = 16;
+    var meterNum = 4;
+    var meterDen = 4;
     var bpm = 120;
+    var inHeader = true;
 
     var tokenRe = /"([^"]*)"|([zZ])(\d*)|([_^=]*[A-Ga-g][,']*)(\d*)(-?)|(\|)/g;
     var nextId = 1;
@@ -319,7 +322,8 @@
       if (!raw) { continue; }
 
       if (raw.charAt(0) === "%") {
-        var currentBar = voiceBarIndex[currentVoice] || 0;
+        inHeader = false;
+        var currentBar = (voiceBarIndex["Vocal"] !== undefined) ? voiceBarIndex["Vocal"] : (voiceBarIndex[currentVoice] || 0);
         sections.push({ barIndex: currentBar, text: raw });
         lastMusicBars = null;
         continue;
@@ -341,22 +345,36 @@
         if (raw.indexOf("K:") === 0) {
           var km = raw.match(/^K:\s*([A-Ga-g][#b]?[m]?)/);
           if (km) { key = km[1]; }
+          inHeader = false;
         }
-        if (raw.indexOf("Q:") === 0) {
-          var qm = raw.match(/^Q:1\/4=(\d+)/);
-          if (qm) { bpm = parseInt(qm[1], 10); }
+        if (raw.indexOf("Q:") === 0 && inHeader) {
+          var qm = raw.match(/^Q:\s*(?:(\d+)\/(\d+)=)?(\d+)/);
+          if (qm) {
+            if (qm[1] && qm[2]) {
+              bpm = Math.round(parseInt(qm[3], 10) * (parseInt(qm[1], 10) * 4 / parseInt(qm[2], 10)));
+            } else {
+              bpm = parseInt(qm[3], 10);
+            }
+          }
         }
-        if (raw.indexOf("L:") === 0) {
+        if (raw.indexOf("L:") === 0 && inHeader) {
           var lm = raw.match(/^L:\s*1\/(\d+)/);
-          if (lm) { unitLength = parseInt(lm[1], 10); }
+          if (lm) {
+            unitLength = parseInt(lm[1], 10);
+            ticksPerBar = Math.round(meterNum * (unitLength / meterDen));
+          }
         }
-        if (raw.indexOf("M:") === 0) {
+        if (raw.indexOf("M:") === 0 && inHeader) {
           var mm = raw.match(/^M:\s*(\d+)\/(\d+)/);
           if (mm) {
-            var num = parseInt(mm[1], 10);
-            var den = parseInt(mm[2], 10);
-            ticksPerBar = Math.round(num * (unitLength / den));
+            meterNum = parseInt(mm[1], 10);
+            meterDen = parseInt(mm[2], 10);
+          } else if (/^M:\s*C\|/.test(raw)) {
+            meterNum = 2; meterDen = 2;
+          } else if (/^M:\s*C/.test(raw)) {
+            meterNum = 4; meterDen = 4;
           }
+          ticksPerBar = Math.round(meterNum * (unitLength / meterDen));
         }
         lastMusicBars = null;
         continue;
@@ -401,11 +419,13 @@
       if (voiceBarIndex[currentVoice] === undefined) { voiceBarIndex[currentVoice] = 0; }
       var musicLineStartBar = voiceBarIndex[currentVoice];
       var tickInBar = 0;
+      var sawZ = false;
 
       var match;
       tokenRe.lastIndex = 0;
       while ((match = tokenRe.exec(raw)) !== null) {
         if (match[1]) {
+          sawZ = false;
           chords.push({
             voice: currentVoice,
             barIndex: voiceBarIndex[currentVoice],
@@ -418,11 +438,14 @@
             var count = parseInt(match[3] || "1", 10);
             voiceBarIndex[currentVoice] += count;
             tickInBar = 0;
+            sawZ = true;
           } else {
             var rDur = parseInt(match[3] || "1", 10);
             tickInBar += rDur;
+            sawZ = false;
           }
         } else if (match[4]) {
+          sawZ = false;
           var noteStr = match[4];
           var nDur = parseInt(match[5] || "1", 10);
           var tiedNext = match[6] === "-";
@@ -443,7 +466,11 @@
           }
           tickInBar += nDur;
         } else if (match[7]) {
-          voiceBarIndex[currentVoice] += 1;
+          if (sawZ) {
+            sawZ = false;
+          } else {
+            voiceBarIndex[currentVoice] += 1;
+          }
           tickInBar = 0;
         }
       }
@@ -454,8 +481,10 @@
 
     rawNotes.sort(function (a, b) {
       if (a.voice !== b.voice) { return a.voice.localeCompare(b.voice); }
-      if (a.barIndex !== b.barIndex) { return a.barIndex - b.barIndex; }
-      return a.tickInBar - b.tickInBar;
+      var aTick = a.barIndex * ticksPerBar + a.tickInBar;
+      var bTick = b.barIndex * ticksPerBar + b.tickInBar;
+      if (aTick !== bTick) { return aTick - bTick; }
+      return a.pitch - b.pitch;
     });
 
     var notes = [];
@@ -495,6 +524,9 @@
       headers: headers,
       key: key,
       bpm: bpm,
+      meterNum: meterNum,
+      meterDen: meterDen,
+      meter: meterNum + "/" + meterDen,
       ticksPerBar: ticksPerBar,
       unitLength: unitLength,
       voices: voices,
@@ -917,7 +949,7 @@
     updateMetadata: function () {
       var metaEl = document.getElementById('roll-meta');
       if (metaEl && this.model) {
-        metaEl.textContent = 'Key ' + this.model.key + ' • ' + (this.model.ticksPerBar === 16 ? '4/4' : 'Metre') + ' • ' + this.model.bpm + ' BPM';
+        metaEl.textContent = 'Key ' + this.model.key + ' • ' + (this.model.meter || (this.model.ticksPerBar === 16 ? '4/4' : 'Metre')) + ' • ' + this.model.bpm + ' BPM';
       }
     },
 
@@ -1119,8 +1151,8 @@
       }
 
       // Vertical tick / beat / bar lines
-      var beatsPerBar = 4;
-      var ticksPerBeat = Math.round(ticksPerBar / beatsPerBar);
+      var beatsPerBar = (this.model && this.model.meterNum) || 4;
+      var ticksPerBeat = Math.max(1, Math.round(ticksPerBar / beatsPerBar));
 
       for (var t = 0; t <= totalTicks; t++) {
         var isBar = (t % ticksPerBar === 0);
@@ -1980,8 +2012,9 @@
 
       if (timeEl) {
         var intTick = Math.max(0, Math.floor(curTick));
+        var beatsPerBar = (this.model && this.model.meterNum) || 4;
         var barNum = Math.floor(intTick / ticksPerBar) + 1;
-        var beatNum = Math.floor((intTick % ticksPerBar) / (ticksPerBar / 4)) + 1;
+        var beatNum = Math.floor((intTick % ticksPerBar) / Math.max(1, ticksPerBar / beatsPerBar)) + 1;
         var totalSec = Math.floor(intTick * secondsPerTick);
         var mins = Math.floor(totalSec / 60);
         var secs = totalSec % 60;

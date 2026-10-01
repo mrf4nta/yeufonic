@@ -985,6 +985,130 @@ def test_compact_empty_bars():
     assert score.problems(data["outAbc"]) == []
 
 
+def test_meter_and_unit_length_header_order_independent():
+    """Verify ticksPerBar is correctly calculated regardless of M: and L: header ordering."""
+    # M: before L:
+    abc_m_before_l = "X:1\nM:4/4\nL:1/32\nQ:1/4=166\nK:C\n% intro\nV: Vocal\nz32|\n"
+    # L: before M:
+    abc_l_before_m = "X:1\nL:1/32\nM:4/4\nQ:1/4=166\nK:C\n% intro\nV: Vocal\nz32|\n"
+
+    js = f"""
+    const m1 = parseAbc({json.dumps(abc_m_before_l)});
+    const m2 = parseAbc({json.dumps(abc_l_before_m)});
+    console.log(JSON.stringify({{
+        m1Ticks: m1.ticksPerBar,
+        m1Unit: m1.unitLength,
+        m1Bpm: m1.bpm,
+        m1Meter: m1.meter,
+        m2Ticks: m2.ticksPerBar,
+        m2Unit: m2.unitLength
+    }}));
+    """
+    data = run_node_script(js)
+    assert data["m1Ticks"] == 32
+    assert data["m1Unit"] == 32
+    assert data["m1Bpm"] == 166
+    assert data["m1Meter"] == "4/4"
+    assert data["m2Ticks"] == 32
+    assert data["m2Unit"] == 32
+
+
+def test_multimeasure_rest_bar_index_alignment():
+    """Verify multimeasure rests Z| or Z2| do not insert phantom bars that desync voices."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "K:C\n"
+        "% intro\n"
+        "V: Vocal\n"
+        "z16|z16|z16|z16|\n"
+        "V: Ins\n"
+        "z16|Z|z16|z16|\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "c4 d4 e4 f4|g16|z16|z16|\n"
+        "V: Ins\n"
+        "Z2|z16|z16|\n"
+    )
+    js = f"""
+    const model = parseAbc({json.dumps(raw_abc)});
+    const verseSec = model.sections.find(s => s.text.includes("verse"));
+    const vocalNotes = model.notes.filter(n => n.voice === 'Vocal');
+    console.log(JSON.stringify({{
+        verseBar: verseSec ? verseSec.barIndex : -1,
+        firstNoteStartTick: vocalNotes.length ? vocalNotes[0].startTick : -1
+    }}));
+    """
+    data = run_node_script(js)
+    # Intro is 4 bars (bars 0..3), so verse must start at bar 4 (tick 64)
+    assert data["verseBar"] == 4
+    assert data["firstNoteStartTick"] == 64
+
+
+def test_lyrics_matching_with_32_tick_bars_and_tied_notes():
+    """Verify lyrics matching on score with L:1/32, tied notes across bars, and multi-sections."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/32\n"
+        "Q:1/4=166\n"
+        "K:E\n"
+        "% intro\n"
+        "V: Vocal\n"
+        "z32|z32|\n"
+        "V: Ins\n"
+        "Z2|\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"E\"z8B8B8B4B4-|\"G\"B8B8=d8c8|\"A\"A8z24|\"A\"z32|\n"
+        "V: Ins\n"
+        "E8z24|Z|z12A4z16|A8z4A8A4A4A4|\n"
+        "% chorus\n"
+        "V: Vocal\n"
+        "\"E\"z8B8B8B4B4-|\"G\"B8B8=d8c8|\"A\"A16z16|\"A\"z32|\n"
+        "V: Ins\n"
+        "Z4|\n"
+    )
+    song_lyrics = (
+        "[Verse]\n"
+        "We bought the boy a na-vy suit\n\n"
+        "[Chorus]\n"
+        "We mapped the route for Ni-gel's feet\n"
+    )
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.matchSongLyrics({json.dumps(song_lyrics)});
+    const vocalNotes = PianoRoll.model.notes.filter(n => n.voice === 'Vocal');
+    vocalNotes.sort((a,b) => a.startTick - b.startTick);
+    
+    // Check start ticks strictly monotonic
+    let monotonic = true;
+    for (let i = 1; i < vocalNotes.length; i++) {{
+        if (vocalNotes[i].startTick <= vocalNotes[i-1].startTick) {{
+            monotonic = false;
+        }}
+    }}
+
+    const matched = vocalNotes.filter(n => n.lyric);
+    console.log(JSON.stringify({{
+        ticksPerBar: PianoRoll.model.ticksPerBar,
+        vocalNotesCount: vocalNotes.length,
+        isMonotonic: monotonic,
+        lyrics: matched.map(n => n.lyric),
+        startTicks: matched.map(n => n.startTick)
+    }}));
+    """
+    data = run_node_script(js)
+    assert data["ticksPerBar"] == 32
+    assert data["isMonotonic"] is True
+    # Verse words: We (bar 2), bought, the, boy, a (bar 3), na-, vy, suit
+    assert data["lyrics"][:8] == ["We", "bought", "the", "boy", "a", "na-", "vy", "suit"]
+    # Chorus words: We, mapped, the, route, for, Ni-, gel's, feet
+    assert data["lyrics"][8:16] == ["We", "mapped", "the", "route", "for", "Ni-", "gel's", "feet"]
+
+
+
 
 
 
