@@ -40,7 +40,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, score, soundfonts, stems, trainsize, update
+from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, midi, score, soundfonts, stems, trainsize, update
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -1063,6 +1063,54 @@ async def upload_source(file: UploadFile = File(...), title: str = Form("", max_
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp.replace(dest)
 
+    # Detect MIDI uploads by extension or binary header
+    is_midi = ext in (".mid", ".midi")
+    if not is_midi:
+        try:
+            with dest.open("rb") as f_check:
+                is_midi = f_check.read(4) == b"MThd"
+        except OSError:
+            is_midi = False
+
+    if is_midi:
+        midi_data = None
+        try:
+            raw_midi = dest.read_bytes()
+            midi_data = await asyncio.to_thread(midi.parse_midi, raw_midi, title or Path(file.filename or "Untitled").stem)
+        except Exception as exc:
+            log.warning("Could not parse MIDI file %s: %s", file.filename, exc)
+
+        if midi_data:
+            duration = midi_data["duration"]
+            abc = midi_data["abc"]
+            lyrics_text = midi_data.get("lyrics")
+            record = {
+                "id": source_id,
+                "title": title or midi_data["title"] or Path(file.filename or "Untitled").stem,
+                "filename": file.filename or dest.name,
+                "stored_path": str(dest),
+                "engine_file": None,
+                "sha256": digest,
+                "created_at": time.time(),
+                "duration": duration,
+                "abc": abc,
+                "abc_updated_at": time.time(),
+                "transcribe_state": "done",
+                "lyrics": lyrics_text or None,
+                "lyrics_state": "done" if lyrics_text else "none",
+                "lyrics_method": "midi" if lyrics_text else None,
+            }
+            execute(
+                """INSERT INTO sources(id, title, filename, stored_path, engine_file, sha256, created_at, duration,
+                                       abc, abc_updated_at, transcribe_state, lyrics, lyrics_state, lyrics_method)
+                   VALUES(:id, :title, :filename, :stored_path, :engine_file, :sha256, :created_at, :duration,
+                          :abc, :abc_updated_at, :transcribe_state, :lyrics, :lyrics_state, :lyrics_method)""",
+                record,
+            )
+            dur_str = f", {record['duration']:.1f}s" if record.get("duration") else ""
+            log.info("Uploaded MIDI source '%s' (%s%s, converted to ABC)", record["title"], record["id"], dur_str)
+            return {**record, "duplicate": False}
+
     record = {
         "id": source_id,
         "title": title or Path(file.filename or "Untitled").stem,
@@ -1245,6 +1293,15 @@ async def transcribe(source_id: str) -> dict:
     source = one("SELECT * FROM sources WHERE id = ?", (source_id,))
     if not source:
         raise HTTPException(404, "no such source")
+    if (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        if source.get("abc"):
+            return {"queued": False, "transcribe_state": "done"}
+        p = Path(source["stored_path"])
+        if p.exists():
+            midi_info = await asyncio.to_thread(midi.parse_midi, p.read_bytes(), source.get("title") or "")
+            execute("UPDATE sources SET abc = ?, abc_updated_at = ?, transcribe_state = 'done', duration = ? WHERE id = ?",
+                    (midi_info["abc"], time.time(), midi_info["duration"], source_id))
+            return {"queued": False, "transcribe_state": "done"}
     if source["transcribe_state"] in ACTIVE:
         raise HTTPException(409, "this recording is already being transcribed")
     if not Path(source["stored_path"]).exists():
@@ -3223,9 +3280,11 @@ def fill_source_durations() -> None:
 @app.get("/api/sources/{source_id}/peaks")
 def source_peaks(source_id: str) -> dict:
     """The waveform for a recording, cached beside it the way a take's is."""
-    source = one("SELECT stored_path FROM sources WHERE id = ?", (source_id,))
+    source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
     if not source or not Path(source["stored_path"]).exists():
         raise HTTPException(404, "no audio for this recording")
+    if (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        return {"columns": 128, "peaks": [0.0] * 128, "rms": [0.0] * 128}
     result = ensure_peaks(Path(source["stored_path"]))
     if not result:
         raise HTTPException(500, "could not read the waveform")
@@ -3237,7 +3296,8 @@ def source_audio(source_id: str) -> FileResponse:
     source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
     if not source or not Path(source["stored_path"]).exists():
         raise HTTPException(404, "no audio for this source")
-    return FileResponse(source["stored_path"], filename=source["filename"])
+    media_type = "audio/midi" if (source.get("filename") or "").lower().endswith((".mid", ".midi")) else None
+    return FileResponse(source["stored_path"], filename=source["filename"], media_type=media_type)
 
 
 # ---------------------------------------------------------------------- jobs
@@ -3342,8 +3402,6 @@ def stems_options() -> dict:
 
 
 def queue_stems(kind: str, ref_id: str, body: StemsIn) -> dict:
-    if not stems.installed():
-        raise HTTPException(503, "demucs is not installed in this container")
     if kind == "take":
         item = one("SELECT id, title, audio_path FROM takes WHERE id = ?", (ref_id,))
         if not item:
@@ -3352,12 +3410,16 @@ def queue_stems(kind: str, ref_id: str, body: StemsIn) -> dict:
             raise HTTPException(400, "this take has no audio yet")
         take_id, source_id = item["id"], None
     else:
-        item = one("SELECT id, title, stored_path FROM sources WHERE id = ?", (ref_id,))
+        item = one("SELECT id, title, filename, stored_path FROM sources WHERE id = ?", (ref_id,))
         if not item:
             raise HTTPException(404, "no such source")
+        if (item.get("filename") or "").lower().endswith((".mid", ".midi")):
+            raise HTTPException(400, "Stem separation requires an audio recording, not a MIDI file.")
         if not Path(item["stored_path"]).exists():
             raise HTTPException(400, "the file for this recording is missing")
         take_id, source_id = None, item["id"]
+    if not stems.installed():
+        raise HTTPException(503, "demucs is not installed in this container")
     # An explicit choice wins; otherwise the Settings panel decides.
     model = body.model if body.model in stems.MODELS else setting_value("stems.model")
     if model not in stems.MODELS:
@@ -3406,6 +3468,8 @@ async def source_lyrics(source_id: str) -> dict:
     source = one("SELECT * FROM sources WHERE id = ?", (source_id,))
     if not source:
         raise HTTPException(404, "no such recording")
+    if (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        raise HTTPException(400, "Lyrics extraction with Whisper requires an audio recording, not a MIDI file.")
     if not Path(source["stored_path"]).exists():
         raise HTTPException(400, "the file for this recording is missing")
     if source["lyrics_state"] in ("queued", "running"):

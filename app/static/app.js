@@ -2560,7 +2560,10 @@ function paintSourcePickerMenu() {
       (State.mode === 'inst' ? 'No recording: write a score plan' : 'Choose a recording\u2026') + '</span></div>' +
     '</div>';
   itemsHtml += State.sources.map(function (source) {
-    var scoreBadge = source.has_score ? '<span class="source-item-score">\u2713 score</span>' : '';
+    var isMidi = Boolean(source.filename && source.filename.match(/\.midi?$/i));
+    var scoreBadge = isMidi
+      ? '<span class="source-item-score midi-tag">MIDI</span>'
+      : (source.has_score ? '<span class="source-item-score">\u2713 score</span>' : '');
     var isSel = source.id === currentId ? ' selected' : '';
     return '<div class="source-picker-item' + isSel + '" data-id="' + esc(source.id) + '" role="option">' +
       '<div class="source-item-main">' +
@@ -2766,18 +2769,18 @@ function paintSource() {
   paintHearButton();
   paintAudition();
 
-  var pickerLabel = $('source-picker-label');
+  var isMidi = Boolean(source && source.filename && source.filename.match(/\.midi?$/i));
   if (pickerLabel) {
     pickerLabel.textContent = source
-      ? source.title + (source.has_score ? ' \u2713 score' : '')
+      ? source.title + (isMidi ? ' [MIDI]' : (source.has_score ? ' \u2713 score' : ''))
       : 'Choose a recording\u2026';
   }
   var items = document.querySelectorAll('.source-picker-item');
   items.forEach(function (el) {
     el.classList.toggle('selected', el.dataset.id === (source ? source.id : ''));
   });
-  if ($('transcribe')) { $('transcribe').disabled = !source; }
-  if ($('source-lyrics')) { $('source-lyrics').disabled = !source; }
+  if ($('transcribe')) { $('transcribe').disabled = !source || isMidi; }
+  if ($('source-lyrics')) { $('source-lyrics').disabled = !source || isMidi; }
   if ($('audition')) { $('audition').disabled = !source; }
   if ($('source-delete')) { $('source-delete').disabled = !source; }
 
@@ -2792,11 +2795,18 @@ function paintSource() {
     paintInstSource();
     return;
   }
-  badge.className = 'badge' + (source.has_score ? ' ok' : '');
-  badge.textContent = source.has_score ? 'score ready' : 'no score';
-  var map = { none: 'Not transcribed yet.', queued: 'Queued for transcription.', running: 'Transcribing\u2026', done: 'Transcribed. The score is ready to edit.', failed: 'Transcription failed: ' + (source.transcribe_error || 'unknown error') };
-  status.textContent = map[source.transcribe_state] || '';
-  status.className = 'status' + (source.transcribe_state === 'failed' ? ' bad' : (source.transcribe_state === 'done' ? ' good' : ''));
+  if (isMidi) {
+    badge.className = 'badge ok';
+    badge.textContent = 'MIDI score';
+    status.textContent = 'Imported MIDI file. Score is ready to edit or cover.';
+    status.className = 'status good';
+  } else {
+    badge.className = 'badge' + (source.has_score ? ' ok' : '');
+    badge.textContent = source.has_score ? 'score ready' : 'no score';
+    var map = { none: 'Not transcribed yet.', queued: 'Queued for transcription.', running: 'Transcribing\u2026', done: 'Transcribed. The score is ready to edit.', failed: 'Transcription failed: ' + (source.transcribe_error || 'unknown error') };
+    status.textContent = map[source.transcribe_state] || '';
+    status.className = 'status' + (source.transcribe_state === 'failed' ? ' bad' : (source.transcribe_state === 'done' ? ' good' : ''));
+  }
   paintSourceTempo(source);
   // The box must hold this recording's score or nothing. Comparing ids matters:
   // this tested whether editorSourceId was set at all, so choosing a second
@@ -3960,7 +3970,62 @@ function paintHearButton() {
 function playRecording() {
   var source = currentSource();
   if (!source) { return; }
+  var isMidi = Boolean(source.filename && source.filename.match(/\.midi?$/i));
   var audio = $('audio');
+
+  if (isMidi) {
+    if (State.audition === source.id && window.PianoRoll && window.PianoRoll.isPlaying) {
+      window.PianoRoll.stop();
+      State.audition = null;
+      paintAudition();
+      return;
+    }
+    audio.pause();
+    State.loadedId = null;
+    State.playing = null;
+    State.audition = source.id;
+    State.playRequestedAt = Date.now();
+    $('np-title').textContent = source.title;
+    $('np-meta').textContent = 'the MIDI score being covered';
+    $('np-cover').className = 'np-cover grad-cover';
+    updateMediaSession({ title: source.title, style: 'the MIDI score being covered' });
+
+    var startMidiPlay = function (abcText) {
+      if (window.PianoRoll && abcText) {
+        window.PianoRoll.loadAbc(abcText);
+        window.PianoRoll.metronomeEnabled = false;
+        window.PianoRoll.play();
+        var checkTimer = setInterval(function () {
+          if (!window.PianoRoll || !window.PianoRoll.isPlaying) {
+            clearInterval(checkTimer);
+            if (State.audition === source.id) {
+              State.audition = null;
+              paintAudition();
+            }
+          }
+        }, 250);
+      }
+      paintTakes();
+      paintAudition();
+    };
+
+    if (source.abc) {
+      startMidiPlay(source.abc);
+    } else {
+      api('/api/sources/' + source.id).then(function (full) {
+        source.abc = full.abc;
+        startMidiPlay(full.abc);
+      }).catch(function () {
+        State.audition = null;
+        paintAudition();
+      });
+    }
+    return;
+  }
+
+  if (window.PianoRoll && window.PianoRoll.isPlaying) {
+    window.PianoRoll.stop();
+  }
   if (State.audition === source.id && !audio.paused) {
     audio.pause();
     State.audition = null;
@@ -3987,10 +4052,12 @@ function paintAudition() {
   var button = $('audition');
   if (!button) { return; }
   var source = currentSource();
-  var playing = Boolean(source && State.audition === source.id && !$('audio').paused);
+  var isMidi = Boolean(source && source.filename && source.filename.match(/\.midi?$/i));
+  var playing = Boolean(source && State.audition === source.id &&
+    (isMidi ? (window.PianoRoll && window.PianoRoll.isPlaying) : !$('audio').paused));
   button.disabled = !source;
   button.title = !source ? 'Choose a recording first'
-    : 'Play this recording through the player, to hear what you are covering';
+    : (isMidi ? 'Play this MIDI score' : 'Play this recording through the player, to hear what you are covering');
   button.classList.toggle('on', playing);
 }
 
@@ -7700,6 +7767,9 @@ function togglePlay(id) {
 }
 
 function playTake(id) {
+  if (window.PianoRoll && window.PianoRoll.isPlaying) {
+    window.PianoRoll.stop();
+  }
   var take = State.takes.filter(function (t) { return t.id === id; })[0];
   if (!take) { return; }
   State.playing = id;
@@ -8036,6 +8106,13 @@ function wireTransport() {
   var audio = $('audio');
   var lastPauseAt = 0;
   $('btn-play').addEventListener('click', function () {
+    if (window.PianoRoll && window.PianoRoll.isPlaying) {
+      window.PianoRoll.stop();
+      State.audition = null;
+      paintAudition();
+      paintTransport();
+      return;
+    }
     var now = Date.now();
     // Pause whatever is sounding, take or stem. Starting something else while a
     // stem plays was the old behaviour and always surprising.
@@ -8166,7 +8243,11 @@ async function uploadFile(file) {
     $('source-select').value = source.id;
     setSelection({ formTakeId: Selection.formTakeId });
     paintSource();
-    $('source-status').textContent = source.duplicate ? 'That recording is already in the library.' : 'Uploaded. Transcribe it to get a score.';
+    $('source-status').textContent = source.duplicate
+      ? 'That recording is already in the library.'
+      : (source.transcribe_state === 'done'
+         ? 'Uploaded MIDI file. Score is ready.'
+         : 'Uploaded. Transcribe it to get a score.');
     $('source-status').className = 'status good';
   } catch (err) {
     $('source-status').textContent = 'Upload failed: ' + err.message;

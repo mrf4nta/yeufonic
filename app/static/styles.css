@@ -739,6 +739,14 @@ button.icon { width: 42px; padding: 8px 0; text-align: center; }
   flex-shrink: 0;
   font-weight: 500;
 }
+.source-item-score.midi-tag {
+  color: var(--accent-a);
+  background: var(--card-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+}
 .source-item-del {
   flex-shrink: 0;
   display: flex;
