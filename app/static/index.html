@@ -385,6 +385,7 @@
         <details id="score-box" class="block">
           <summary>
             <span id="score-label">Score</span> <span id="score-badge" class="badge">no score</span>
+            <button id="score-roll" class="chip action compact" title="Open the visual piano roll note editor">Piano roll</button>
             <button id="score-expand" class="chip action compact" title="Open a full size editor">Expand</button>
           </summary>
           <p class="hint">Chords live in the quoted symbols. Change them and the next render follows your harmony.</p>
@@ -529,6 +530,7 @@
     <div class="score-tabs" id="score-views">
       <button class="chip active" data-view="chart">Chart</button>
       <button class="chip" data-view="notation">Notation</button>
+      <button class="chip" data-view="roll">Piano roll</button>
       <button class="chip" data-view="lyrics">Lyrics</button>
       <span id="score-count" class="muted small"></span>
     </div>
@@ -543,6 +545,59 @@
         <span id="notation-note" class="hint"></span>
       </div>
       <div id="notation-big"></div>
+    </div>
+    <div class="score-view hidden" id="view-roll">
+      <div class="roll-toolbar">
+        <div class="roll-voices">
+          <span class="roll-label">Voice:</span>
+          <button class="chip compact active" id="roll-voice-vocal" data-voice="Vocal">Vocal</button>
+          <button class="chip compact" id="roll-voice-ins" data-voice="Ins">Ins</button>
+          <label class="check small" title="Show inactive voice in the background"><input type="checkbox" id="roll-ghost" checked> Ghost other</label>
+        </div>
+        <div class="roll-snap">
+          <span class="roll-label">Snap:</span>
+          <select id="roll-snap-val" class="compact-select">
+            <option value="16" selected>1/16</option>
+            <option value="8">1/8</option>
+            <option value="4">1/4</option>
+          </select>
+        </div>
+        <div class="roll-transport">
+          <button id="roll-play" class="ghost compact" title="Play / Stop (Space)">▶ Play</button>
+          <span id="roll-time" class="roll-time muted small">1.1</span>
+        </div>
+        <div class="roll-zoom">
+          <button id="roll-zoom-out" class="ghost compact" title="Zoom out">−</button>
+          <button id="roll-zoom-in" class="ghost compact" title="Zoom in">+</button>
+          <button id="roll-zoom-fit" class="ghost compact" title="Scroll to notes">Fit</button>
+        </div>
+        <div class="roll-extra">
+          <button id="roll-toggle-text" class="ghost compact" title="Toggle ABC text area">Show ABC</button>
+          <span id="roll-meta" class="muted small"></span>
+        </div>
+      </div>
+      <div class="roll-hint-bar">
+        <span>Click grid to add note • Drag note to move/pitch • Drag edge to resize • Del / Backspace to remove • Space to play</span>
+      </div>
+      <div class="roll-container" id="roll-container">
+        <div class="roll-corner">
+          <span>Pitch</span>
+        </div>
+        <div class="roll-timeline-header" id="roll-timeline-header">
+          <div class="roll-ruler" id="roll-ruler"></div>
+          <div class="roll-chords-track" id="roll-chords-track"></div>
+        </div>
+        <div class="roll-keys-col">
+          <div class="roll-keys" id="roll-keys"></div>
+        </div>
+        <div class="roll-grid-scroll" id="roll-grid-scroll">
+          <div class="roll-grid" id="roll-grid">
+            <div class="roll-grid-lines" id="roll-grid-lines"></div>
+            <div class="roll-notes-layer" id="roll-notes-layer"></div>
+            <div class="roll-playhead" id="roll-playhead"></div>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="score-view hidden" id="view-lyrics"><div id="lyrics-view"></div></div>
   </div>
@@ -841,6 +896,7 @@
 </div>
 
 <script src="/static/abcjs-basic-min.js?v={{VERSION}}"></script>
+<script src="/static/pianoroll.js?v={{VERSION}}"></script>
 <script src="/static/app.js?v={{VERSION}}"></script>
 </body>
 </html>

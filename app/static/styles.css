@@ -845,6 +845,331 @@ label .lora-value:disabled { opacity: 0.6; }
   .score-split { grid-template-columns: 1fr; }
   #score-big { min-height: 220px; }
 }
+
+/* Piano Roll view */
+.modal-box.score.roll-active {
+  width: min(1340px, 98vw);
+  height: min(92vh, 980px);
+}
+.modal-box.score.roll-active:not(.show-split) .score-split {
+  display: none;
+}
+#view-roll {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 8px;
+  user-select: none;
+}
+.roll-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 2px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.roll-voices, .roll-snap, .roll-transport, .roll-zoom, .roll-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.roll-label {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.compact-select {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+}
+.roll-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--card);
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  min-width: 44px;
+  text-align: center;
+}
+.roll-hint-bar {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: -2px;
+}
+.roll-container {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  grid-template-rows: 44px 1fr;
+  flex: 1 1 auto;
+  min-height: 380px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+.roll-corner {
+  grid-column: 1;
+  grid-row: 1;
+  background: var(--card-2);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 10;
+}
+.roll-timeline-header {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: hidden;
+  background: var(--card-2);
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  height: 44px;
+  z-index: 5;
+}
+.roll-ruler {
+  height: 22px;
+  position: relative;
+  cursor: pointer;
+  border-bottom: 1px dashed rgb(var(--line) / 0.6);
+}
+.roll-bar-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--line);
+  padding-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: auto;
+}
+.roll-bar-num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.roll-sec-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgb(var(--song-rgb, 120 180 255) / 0.18);
+  color: var(--song);
+  border: 1px solid rgb(var(--song-rgb, 120 180 255) / 0.35);
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.roll-sec-badge:hover {
+  background: rgb(var(--song-rgb, 120 180 255) / 0.35);
+}
+.roll-chords-track {
+  height: 22px;
+  position: relative;
+}
+.roll-chord-slot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed rgb(var(--line) / 0.4);
+  cursor: copy;
+}
+.roll-chord-tag {
+  position: absolute;
+  top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(var(--accent-a-rgb) / 0.25);
+  color: var(--text-strong);
+  border: 1px solid rgb(var(--accent-a-rgb) / 0.5);
+  cursor: pointer;
+  z-index: 2;
+}
+.roll-chord-tag:hover {
+  background: rgb(var(--accent-a-rgb) / 0.45);
+}
+.roll-keys-col {
+  grid-column: 1;
+  grid-row: 2;
+  overflow: hidden;
+  background: var(--card-2);
+  border-right: 1px solid var(--line);
+  position: relative;
+  z-index: 5;
+}
+.roll-keys {
+  height: 100%;
+  overflow-y: hidden;
+  position: relative;
+}
+.roll-key {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgb(var(--line) / 0.4);
+  cursor: pointer;
+}
+.roll-key.white {
+  background: var(--panel);
+  color: var(--muted);
+}
+.roll-key.white.c-key {
+  background: rgb(var(--card-rgb, 40 45 55) / 0.9);
+  color: var(--text-strong);
+  font-weight: 700;
+}
+.roll-key.black {
+  background: #11141a;
+  color: #64748b;
+  width: 82%;
+  border-radius: 0 3px 3px 0;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+  z-index: 2;
+}
+.roll-key:hover, .roll-key.pressed {
+  background: rgb(var(--accent-a-rgb) / 0.5) !important;
+  color: #fff !important;
+}
+.roll-key .key-label {
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.roll-grid-scroll {
+  grid-column: 2;
+  grid-row: 2;
+  overflow: auto;
+  position: relative;
+  background: var(--bg);
+}
+.roll-grid {
+  position: relative;
+  cursor: crosshair;
+}
+.roll-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgb(var(--line) / 0.25);
+}
+.roll-row.white-row {
+  background: transparent;
+}
+.roll-row.black-row {
+  background: rgb(0 0 0 / 0.2);
+}
+.roll-vline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.roll-vline.bar-line {
+  border-right: 2px solid rgb(var(--line) / 0.9);
+}
+.roll-vline.beat-line {
+  border-right: 1px solid rgb(var(--line) / 0.45);
+}
+.roll-vline.tick-line {
+  border-right: 1px dashed rgb(var(--line) / 0.18);
+}
+.roll-notes-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+.roll-note {
+  position: absolute;
+  border-radius: 4px;
+  font-size: 10.5px;
+  line-height: 18px;
+  font-weight: 600;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  cursor: grab;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  z-index: 2;
+}
+.roll-note:active {
+  cursor: grabbing;
+}
+.roll-note.vocal {
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  color: #ffffff;
+  border: 1px solid #7dd3fc;
+}
+.roll-note.ins {
+  background: linear-gradient(135deg, #d97706, #fbbf24);
+  color: #1e1e1e;
+  border: 1px solid #fde68a;
+}
+.roll-note.ghost {
+  opacity: 0.32;
+  pointer-events: none;
+  filter: grayscale(0.25);
+}
+.roll-note.selected {
+  outline: 2px solid #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.65);
+  z-index: 4;
+}
+.roll-note-title {
+  pointer-events: none;
+}
+.roll-note-resize {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  border-radius: 0 3px 3px 0;
+  background: rgba(255, 255, 255, 0.25);
+}
+.roll-note-resize:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+.roll-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f43f5e;
+  box-shadow: 0 0 6px #f43f5e;
+  pointer-events: none;
+  z-index: 10;
+  transition: none;
+}
+
 .status { font-size: 12.5px; color: var(--muted); min-height: 18px; margin-top: 8px; }
 .status.bad { color: var(--bad); }
 .status.good { color: var(--good); }

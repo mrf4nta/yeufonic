@@ -1249,6 +1249,9 @@ function applyScoreHistory() {
   scoreStack.applying = false;
   scoreStack.at = Date.now();
   paintScoreHistory();
+  if (scoreView() === 'roll' && window.PianoRoll) {
+    window.PianoRoll.loadAbc(text || '');
+  }
 }
 
 function undoScore() {
@@ -2041,19 +2044,32 @@ function paintScoreView() {
   Array.prototype.forEach.call(document.querySelectorAll('#score-views .chip'), function (chip) {
     chip.classList.toggle('active', chip.dataset.view === view);
   });
-  ['chart', 'notation', 'lyrics'].forEach(function (name) {
+  ['chart', 'notation', 'roll', 'lyrics'].forEach(function (name) {
     var box = $('view-' + name);
     if (box) { box.classList.toggle('hidden', name !== view); }
   });
+  var scoreModalBox = $('score-modal') ? $('score-modal').querySelector('.modal-box.score') : null;
+  if (scoreModalBox) {
+    scoreModalBox.classList.toggle('roll-active', view === 'roll');
+  }
   if (view === 'chart') {
     notationStop();          // nothing on screen would stop it
+    if (window.PianoRoll) { window.PianoRoll.stop(); }
     $('chart-big').textContent = chordChart($('score-big').value || '') || '';
     $('score-view-note').textContent = '';
   } else if (view === 'notation') {
+    if (window.PianoRoll) { window.PianoRoll.stop(); }
     $('score-view-note').textContent = '';
     renderNotationView();
+  } else if (view === 'roll') {
+    notationStop();
+    $('score-view-note').textContent = '';
+    if (window.PianoRoll) {
+      window.PianoRoll.render($('score-big').value || $('abc').value || '');
+    }
   } else {
     notationStop();
+    if (window.PianoRoll) { window.PianoRoll.stop(); }
     renderLyricsView();
   }
 }
@@ -2078,6 +2094,7 @@ function openScoreEditor(view) {
 
 function closeScoreEditor() {
   notationStop();            // a preview left playing has no controls to stop it with
+  if (window.PianoRoll) { window.PianoRoll.stop(); }
   $('score-modal').classList.add('hidden');
   document.body.style.overflow = '';
   $('abc').focus();
@@ -9411,6 +9428,26 @@ function wire() {
     event.preventDefault();   // the Expand sits inside a summary, which toggles the box
     openScoreEditor();
   });
+  var scoreRoll = $('score-roll');
+  if (scoreRoll) {
+    scoreRoll.addEventListener('click', function (event) {
+      event.preventDefault();
+      openScoreEditor('roll');
+    });
+  }
+  if (window.PianoRoll) {
+    window.PianoRoll.onUpdate(function (newAbc) {
+      scoreStack.at = 0;
+      pushScoreHistory(newAbc);
+      $('score-big').value = newAbc;
+      $('abc').value = newAbc;
+      $('abc').dispatchEvent(new Event('input'));
+      paintScoreTempo();
+      paintScoreDirty();
+      updateScoreCount();
+      paintScoreHistory();
+    });
+  }
   try {
     var savedView = localStorage.getItem(SCORE_VIEW_KEY);
     if (savedView) { State.scoreView = savedView; }
