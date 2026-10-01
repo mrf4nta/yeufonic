@@ -1214,7 +1214,17 @@ def _corpus_song_lyrics(song: dict, folder: Path, abc: str, duration: float | No
     except (OSError, ValueError):
         lines = None
     if lines:
-        return identities.tag_lyrics(lines, identities.score_sections(abc), duration or 0.0), "Whisper, in the corpus analysis"
+        method = "Whisper, in the corpus analysis"
+        versions = song.get("lyrics_versions")
+        if isinstance(versions, str):
+            try:
+                versions = json.loads(versions)
+            except ValueError:
+                versions = None
+        if isinstance(versions, dict) and versions.get("active") == "llm":
+            model = (versions.get("llm") or {}).get("model") or "the external LLM"
+            method = f"{model}, in the corpus analysis"
+        return identities.tag_lyrics(lines, identities.score_sections(abc), duration or 0.0), method
     return (song["lyrics"] or ""), ("the corpus" if song["lyrics"] else None)
 
 
@@ -2080,6 +2090,10 @@ def _identity_view(identity: dict) -> dict:
     songs = rows("SELECT * FROM identity_songs WHERE identity_id = ? ORDER BY position", (identity["id"],))
     limit = _train_sizing(identity["id"])["minutes"] * 60
     for song in songs:
+        try:
+            song["lyrics_versions"] = json.loads(song.get("lyrics_versions") or "null")
+        except ValueError:
+            song["lyrics_versions"] = None
         cut = _training_cut(song, limit) if song["include"] else None
         song["trained_to"] = cut["seconds"] if cut else None
         song["caption"] = identities.caption(identity["trigger_word"], song["description"] or identity["description"],
@@ -2393,6 +2407,40 @@ async def redraft_identity_lyrics(identity_id: str, song_id: str) -> dict:
     jobs.maybe_draft(song_id)
     log.info("Redrafting the lyrics of corpus song '%s'", song.get("title") or song_id)
     return {"lyrics_state": one("SELECT lyrics_state FROM identity_songs WHERE id = ?", (song_id,))["lyrics_state"]}
+
+
+class LyricsSourceIn(BaseModel):
+    source: Literal["llm", "whisper"]
+
+
+@app.post("/api/identities/{identity_id}/songs/{song_id}/lyrics/source")
+async def choose_lyrics_source(identity_id: str, song_id: str, body: LyricsSourceIn) -> dict:
+    """Make one version of a song's words the one in use: the external model's, or Whisper's.
+    Both were kept when the song was analysed.  The words in the box are drafted again from the
+    chosen lines, replacing what is there, checked or not: it is asked for by hand."""
+    song = one("SELECT * FROM identity_songs WHERE id = ? AND identity_id = ?", (song_id, identity_id))
+    if not song:
+        raise HTTPException(404, "no such song")
+    if not song["stored_path"]:
+        raise HTTPException(400, "the lyrics have not been heard yet. Press Analyse.")
+    folder = Path(song["stored_path"]).parent
+    chosen = folder / ("lyrics-llm.json" if body.source == "llm" else "lyrics-whisper.json")
+    if not chosen.exists():
+        raise HTTPException(400, "that version of the words was not kept for this song")
+    if song["lyrics_state"] in ("queued", "running"):
+        raise HTTPException(409, "the lyrics are being drafted already")
+    try:
+        versions = json.loads(song.get("lyrics_versions") or "null") or {}
+    except ValueError:
+        versions = {}
+    versions["active"] = body.source
+    await asyncio.to_thread(shutil.copyfile, chosen, folder / "whisper.json")
+    jobs.set_song(song_id, lyrics_versions=json.dumps(versions), lyrics_checked=0, error=None)
+    jobs.maybe_draft(song_id)
+    log.info("Corpus song '%s': the %s version of the words is in use", song.get("title") or song_id,
+             "external model's" if body.source == "llm" else "Whisper")
+    return {"active": body.source,
+            "lyrics_state": one("SELECT lyrics_state FROM identity_songs WHERE id = ?", (song_id,))["lyrics_state"]}
 
 
 @app.post("/api/identities/{identity_id}/stop")

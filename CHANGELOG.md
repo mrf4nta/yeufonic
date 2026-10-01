@@ -36,6 +36,21 @@ cannot creep back in.
 
 ## Unreleased
 
+### Changed
+
+- **The external model's words win.** With an external LLM set to hear a recording's lyrics, a reply
+  that looks like lyrics is now always used, even where it differs a good deal from what Whisper
+  heard, which had been refused when it had fewer than 60% of Whisper's words or when under 30% of
+  its words matched. Whisper can miss a vocal buried in a mix, and a held syllable it loops on
+  inflated its word count. A reply that refuses, cuts lines short, writes a notice, or is almost
+  nothing, or an error, still falls back to Whisper. When the words cannot be matched to Whisper's
+  times, the lines are spread over the song instead.
+- **Both versions of a corpus song's words are kept,** and its Review panel has a **Words from**
+  switch to put either in use, the external model's by default. Songs analysed before this have
+  Whisper's or the model's lines only; analyse again to get both.
+- Whisper's lines no longer hold a word repeated more than eight times in a row: a vocalise it
+  looped on ("la" written 237 times) is cut back.
+
 ### Fixed
 
 - A plan that looped could run for ten minutes or more, mostly rests, and the render then ran to the length cap with long repeated intros and sometimes no vocal. It happened with a style LoRA, a short style and Calm plan variety together. A written plan far longer than a song (over 8 minutes, or well past a longer cap), or a song whose vocal line has no notes at all, is now written once more with a new seed, like any unreadable plan, and the take fails with advice if the second comes out the same: describe the style in more detail, or use Normal plan variety with a LoRA.

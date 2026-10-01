@@ -1177,6 +1177,8 @@ label .lora-value:disabled { opacity: 0.6; }
 .tries-values label.own { opacity: 0.45; cursor: default; }
 .tries-values input { accent-color: var(--accent-a); }
 #tries-modes label.off { opacity: 0.45; cursor: default; }
+/* A corpus song's words: which version is in use, when both were kept. */
+.lyrics-source { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
 .take-corner { display: flex; gap: 2px; align-self: flex-start; margin: -4px -4px 0 0; }
 .take-corner .take-move { margin: 0; }
 #write-brief { min-height: 90px; }

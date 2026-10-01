@@ -105,14 +105,23 @@ def test_a_model_that_cannot_take_audio_falls_back_and_says_why(whisper, monkeyp
     assert "not supported" in method
 
 
-def test_words_that_do_not_match_fall_back_and_say_so(whisper, monkeypatch):
-    async def other(vocal):
-        return ["Yesterday all my troubles seemed so far away"]
-    monkeypatch.setattr(llm, "hear_lyrics", other)
+def test_words_that_do_not_match_whisper_still_win_and_are_spread_over_the_song(whisper, monkeypatch):
+    """Whisper can miss a vocal buried in a mix.  A reply that looks like lyrics is kept even when
+    nothing in it matches what Whisper heard: it has no times to borrow, so it is laid out between
+    the first and last line Whisper found."""
+    other = ["Yesterday all my troubles seemed so far away", "Now it looks as though they are here to stay",
+             "Oh I believe in yesterday"]
+
+    async def heard(vocal):
+        return list(other)
+    monkeypatch.setattr(llm, "hear_lyrics", heard)
     external()
     set_setting("lyrics.transcriber", "llm")
     lines, method = hear()
-    assert lines == WHISPER and "did not match" in method
+    assert [l["text"] for l in lines] == other
+    assert method == "gemini-3.8-flash, spread over the song (its words differ from Whisper's)"
+    assert lines[0]["start"] == WHISPER[0]["start"] and lines[-1]["end"] <= WHISPER[-1]["end"] + 0.01
+    assert all(a["end"] <= b["start"] + 0.01 for a, b in zip(lines, lines[1:]))        # in order
 
 
 # ---------------------------------------------------------- the setting and the API
@@ -212,12 +221,50 @@ def test_a_held_back_reply_falls_back_and_says_why(whisper, monkeypatch):
     assert method == "Whisper (gemini-3.8-flash cut lines short)"
 
 
-def test_far_fewer_words_than_whisper_heard_falls_back(whisper, monkeypatch):
+def test_a_reply_that_is_almost_nothing_falls_back_but_fewer_words_than_whisper_do_not(whisper, monkeypatch):
+    """Looking like lyrics is what counts, not matching Whisper's count: Whisper can inflate its own
+    (a held "la" written a hundred times), and an LLM's shorter, right words must not lose to it."""
     async def short(vocal):
         return ["Modern girl"]
     monkeypatch.setattr(llm, "hear_lyrics", short)
     external()
     set_setting("lyrics.transcriber", "llm")
     lines, method = hear()
-    assert lines == WHISPER
-    assert "returned 2 words where Whisper heard 10" in method
+    assert lines == WHISPER and method == "Whisper (gemini-3.8-flash returned only 2 words)"
+
+    async def fewer(vocal):                     # 12 words against Whisper's 10 + a long vocalise
+        return ["I walked into a trap I set myself", "Always the last to know now"]
+    monkeypatch.setattr(identities, "transcribe", lambda vocal, on_progress=None, duration=0.0, should_stop=None:
+                        WHISPER + [{"start": 40.0, "end": 70.0, "text": "la " * 40}])
+    monkeypatch.setattr(llm, "hear_lyrics", fewer)
+    lines, method = hear()
+    assert [l["text"] for l in lines] == ["I walked into a trap I set myself", "Always the last to know now"]
+    assert method.startswith("gemini-3.8-flash")
+
+
+def test_both_versions_come_back_and_the_models_is_the_one_in_use(whisper, monkeypatch):
+    async def heard(vocal):
+        return list(HEARD)
+    monkeypatch.setattr(llm, "hear_lyrics", heard)
+    external()
+    set_setting("lyrics.transcriber", "llm")
+    found = asyncio.run(jobs.hear_all(Path("/nowhere/vocals.wav"), 40.0, title="x"))
+    assert found["whisper"] == WHISPER and [l["text"] for l in found["llm"]] == HEARD
+    assert found["lines"] == found["llm"] and found["model"] == "gemini-3.8-flash"
+    # Whisper alone: the other version is None.
+    set_setting("lyrics.transcriber", "whisper")
+    alone = asyncio.run(jobs.hear_all(Path("/nowhere/vocals.wav"), 40.0, title="x"))
+    assert alone["llm"] is None and alone["lines"] == WHISPER
+
+
+def test_a_long_run_of_one_syllable_from_whisper_is_cut_and_the_llms_is_not():
+    assert identities.collapse_runs("La " * 237) == " ".join(["La"] * identities.MAX_REPEAT)
+    assert identities.collapse_runs("la, La. la! LA la la la la la la la") == "la, La. la! LA la la la la"      # eight kept
+    assert identities.collapse_runs("go go go and go go") == "go go go and go go"                        # short runs stay
+    assert identities.collapse_runs("") == ""
+
+
+def test_lines_with_no_times_are_spread_by_their_words():
+    out = identities.spread_lines(["one two", "three four five six"], 10.0, 22.0)
+    assert [(l["start"], l["end"]) for l in out] == [(10.0, 14.0), (14.0, 22.0)]          # a third and two thirds of 12 s
+    assert [l["text"] for l in out] == ["one two", "three four five six"]

@@ -269,7 +269,7 @@ def transcribe(vocals: Path, on_progress=None, duration: float = 0.0, should_sto
         for part in parts:
             share = (seg.end - seg.start) * len(part) / total
             if not STOCK_PHRASES.match(part):
-                lines.append({"start": round(at, 2), "end": round(at + share, 2), "text": part.rstrip(".")})
+                lines.append({"start": round(at, 2), "end": round(at + share, 2), "text": collapse_runs(part.rstrip("."))})
             at += share
     return lines
 
@@ -278,10 +278,39 @@ def _word(token: str) -> str:
     return re.sub(r"[^a-z']", "", token.lower().replace("\u2019", "'"))
 
 
-# Below this share of its words agreeing with what Whisper heard, a reply is taken to
-# be something other than this recording: a famous song's published lyrics written
-# out from memory, say.  On Modern Girl the two agreed on nearly every word.
+# Below this share of its words agreeing with what Whisper heard, `time_lines` cannot
+# lay a reply over Whisper's times: the words are not matched to anything, so the caller
+# spreads them over the song instead (`spread_lines`).  The words are kept either way.
 AGREEMENT_FLOOR = 0.3
+
+# Whisper can loop on a held or repeated syllable and write it hundreds of times ("la" 237
+# times for 26 seconds of vocalise).  A run longer than this is cut to this many.
+MAX_REPEAT = 8
+
+
+def collapse_runs(text: str, limit: int = MAX_REPEAT) -> str:
+    """The same word more than `limit` times in a row, cut to `limit`.  Only Whisper's lines
+    go through this: a model that was asked for the words writes the syllables it heard."""
+    kept, run, last = [], 0, None
+    for token in text.split():
+        word = _word(token)
+        run = run + 1 if word and word == last else 1
+        last = word
+        if run <= limit:
+            kept.append(token)
+    return " ".join(kept)
+
+
+def spread_lines(lines: list[str], start: float, end: float) -> list[dict]:
+    """Lines with no times to match, laid between `start` and `end` in proportion to their
+    words.  Rough, and enough to put each line under the section it falls in."""
+    weights = [max(1, len(line.split())) for line in lines]
+    total, span, at, out = sum(weights) or 1, max(0.0, end - start), start, []
+    for line, weight in zip(lines, weights):
+        length = span * weight / total
+        out.append({"start": round(at, 2), "end": round(at + length, 2), "text": line.strip()})
+        at += length
+    return out
 
 
 def time_lines(timed: list[dict], lines: list[str]) -> list[dict] | None:

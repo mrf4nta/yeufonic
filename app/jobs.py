@@ -941,16 +941,33 @@ async def prepare_song(song_id: str) -> None:
         stage("Hearing the lyrics (Whisper)", 0.0)
         stop = CURRENT_IDENTITY.get("stop")
         try:
-            lines, method = await hear(folder / "vocals.wav", seconds=song["duration"] or 0.0, title=song_title,
-                                       on_progress=lambda frac: stage("Hearing the lyrics (Whisper)", frac),
-                                       should_stop=stop.is_set if stop else None)
+            found = await hear_all(folder / "vocals.wav", seconds=song["duration"] or 0.0, title=song_title,
+                                   on_progress=lambda frac: stage("Hearing the lyrics (Whisper)", frac),
+                                   should_stop=stop.is_set if stop else None)
+            lines, method = found["lines"], found["method"]
             log.info("Corpus song '%s': lyrics heard by %s", song_title, method)
         except Exception as exc:  # noqa: BLE001
             set_song(song_id, lyrics_state="failed", error=f"lyrics: {exc}"[:400])
             return
         (folder / "whisper.json").write_text(json.dumps(lines, indent=1), encoding="utf-8")
+        keep_lyric_versions(song_id, folder, found)
     log.info("Finished preparing corpus song '%s'", song_title)
     maybe_draft(song_id)
+
+
+def keep_lyric_versions(song_id: str, folder: Path, found: dict) -> None:
+    """Both versions of the words, each in a file of its own, and which one `whisper.json`
+    (the lines in use) holds.  The file keeps its old name: everything that reads the lines
+    reads it."""
+    words = lambda lines: sum(len(line["text"].split()) for line in lines)
+    versions = {"active": "llm" if found.get("llm") else "whisper", "whisper": {"words": words(found["whisper"])}}
+    (folder / "lyrics-whisper.json").write_text(json.dumps(found["whisper"], indent=1), encoding="utf-8")
+    if found.get("llm"):
+        (folder / "lyrics-llm.json").write_text(json.dumps(found["llm"], indent=1), encoding="utf-8")
+        versions["llm"] = {"model": found["model"], "words": words(found["llm"])}
+    else:
+        (folder / "lyrics-llm.json").unlink(missing_ok=True)
+    set_song(song_id, lyrics_versions=json.dumps(versions))
 
 
 def maybe_draft(song_id: str) -> None:
@@ -1780,18 +1797,24 @@ def fail_cover_lyrics(source_id: str, message: str) -> None:
 # An LLM that heard the whole song writes about as many words as Whisper, or more:
 # 204 against 205 on Modern Girl, 281 against about 250 on Silly Love Songs.  Well
 # under that, it left something out.
-COMPLETE_SHARE = 0.6
+# A reply with fewer words than this is not a song's lyrics, whatever it says.
+MIN_HEARD_WORDS = 8
 
 
-async def hear(vocal: Path, seconds: float = 0.0, on_progress=None, on_stage=None,
-               title: str = "", should_stop=None) -> tuple[list[dict], str]:
-    """The sung lines of a separated vocal, with times, and which method heard them.
+async def hear_all(vocal: Path, seconds: float = 0.0, on_progress=None, on_stage=None,
+                   title: str = "", should_stop=None) -> dict:
+    """What was heard in a separated vocal, by each method that ran, and which one is in use.
 
-    Whisper always runs: it is the default method, and in the other it keeps the
-    time.  When Settings asks for the external LLM to listen, and an external LLM is
-    the provider, the vocal is sent to it and its words are laid over Whisper's
-    times.  Every way that can fail comes back to Whisper's lines, with the reason
-    in the method, so the lyrics always arrive and it is always clear who heard them.
+    Whisper always runs: it times the lines.  When Settings asks for the external LLM to
+    listen, and an external LLM is the provider, the vocal is sent to it too.  A reply that
+    looks like lyrics always wins over Whisper's: Whisper can miss a vocal buried in a mix, where
+    the model that was asked for the words has no such trouble.  A reply that does not look like
+    lyrics (a refusal, a notice, cut-off lines, almost nothing) or no reply at all comes back to
+    Whisper's lines, with the reason in the method, so the lyrics always arrive and it is always
+    clear who heard them.  Both versions come back, for whoever wants the other.
+
+    The result: `lines` and `method` (what was chosen), `whisper` (Whisper's own lines),
+    `llm` (the model's lines, timed, or None) and `model`.
 
     The method is decided, and logged, before anything runs.  Whisper's own log
     lines appear in both methods, so without this a reader of the log cannot tell
@@ -1811,8 +1834,9 @@ async def hear(vocal: Path, seconds: float = 0.0, on_progress=None, on_stage=Non
         log.info("Lyrics for '%s': Whisper, as set in Settings", name)
 
     lines = await asyncio.to_thread(identities.transcribe, vocal, on_progress, seconds, should_stop)
+    only_whisper = {"lines": lines, "method": "Whisper", "whisper": lines, "llm": None, "model": model}
     if not (wanted and external):
-        return lines, "Whisper"
+        return only_whisper
     if on_stage:
         on_stage(f"Listening with {model}")
     log.info("Lyrics for '%s': Whisper timed %d lines; sending the vocal to %s", name, len(lines), model)
@@ -1821,24 +1845,34 @@ async def hear(vocal: Path, seconds: float = 0.0, on_progress=None, on_stage=Non
     except Exception as exc:  # noqa: BLE001
         log.warning("Lyrics for '%s': %s could not hear the vocal, keeping Whisper's lines: %s",
                     name, model, exc)
-        return lines, f"Whisper ({model} could not take the audio: {str(exc)[:160]})"
-    # A reply that is not the whole song still matches what Whisper heard, word for
-    # word, as far as it goes: the agreement check below cannot see what is missing.
-    reason = llm.held_back(heard)
+        return {**only_whisper, "method": f"Whisper ({model} could not take the audio: {str(exc)[:160]})"}
     heard_words = sum(len(line.split()) for line in heard)
-    whisper_words = sum(len(line["text"].split()) for line in lines)
-    if reason is None and whisper_words and heard_words < COMPLETE_SHARE * whisper_words:
-        reason = f"returned {heard_words} words where Whisper heard {whisper_words}"
+    reason = llm.held_back(heard)
+    if reason is None and (heard_words < MIN_HEARD_WORDS or len(heard) < 2):
+        reason = f"returned only {heard_words} word{'s' if heard_words != 1 else ''}"
     if reason:
         log.warning("Lyrics for '%s': %s %s, keeping Whisper's lines", name, model, reason)
-        return lines, f"Whisper ({model} {reason})"
+        return {**only_whisper, "method": f"Whisper ({model} {reason})"}
+    whisper_words = sum(len(line["text"].split()) for line in lines)
     timed = identities.time_lines(lines, heard)
+    method = f"{model}, timed by Whisper"
     if timed is None:
-        log.warning("Lyrics for '%s': %s's words did not match what Whisper heard, keeping "
-                    "Whisper's lines", name, model)
-        return lines, f"Whisper ({model}'s words did not match the recording)"
+        # Its words are not Whisper's, so there is nothing to match the times to: spread them
+        # over the stretch Whisper heard singing (or the whole song, if it heard none).
+        start, end = (lines[0]["start"], lines[-1]["end"]) if lines else (0.0, seconds)
+        timed = identities.spread_lines(heard, start, end if end > start else seconds)
+        method = f"{model}, spread over the song (its words differ from Whisper's)"
+        log.info("Lyrics for '%s': %s's %d words agree little with Whisper's %d, so its lines are spread "
+                 "over the song and kept", name, model, heard_words, whisper_words)
     log.info("Lyrics for '%s': %s heard %d lines, where Whisper heard %d", name, model, len(timed), len(lines))
-    return timed, f"{model}, timed by Whisper"
+    return {"lines": timed, "method": method, "whisper": lines, "llm": timed, "model": model}
+
+
+async def hear(vocal: Path, seconds: float = 0.0, on_progress=None, on_stage=None,
+               title: str = "", should_stop=None) -> tuple[list[dict], str]:
+    """The lines chosen by `hear_all`, and which method heard them."""
+    found = await hear_all(vocal, seconds, on_progress, on_stage, title, should_stop)
+    return found["lines"], found["method"]
 
 
 async def run_cover_lyrics(source_id: str) -> None:

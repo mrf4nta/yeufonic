@@ -379,6 +379,13 @@ def _cover_lyrics() -> None:
             execute(f"ALTER TABLE sources ADD COLUMN {name} {spec}")
 
 
+def _lyrics_versions() -> None:
+    """A corpus song keeps which versions of its words were heard (Whisper's, and the external
+    model's) and which is in use, as JSON."""
+    if "lyrics_versions" not in _columns("identity_songs"):
+        execute("ALTER TABLE identity_songs ADD COLUMN lyrics_versions TEXT")
+
+
 def _loudness() -> None:
     """A finished take keeps how loud it came out, in dB.  A render that loses its
     footing comes out quiet all the way through, thin and noisy, so a take far
@@ -469,6 +476,7 @@ MIGRATIONS = [
     _engine,                                                         # -> 24
     _normalised_to,                                                  # -> 25
     _source_corpus_song,                                             # -> 26
+    _lyrics_versions,                                                # -> 27
 ]
 
 

@@ -5932,6 +5932,19 @@ function songRow(song) {
   '</tr>' + detail;
 }
 
+/* When both versions of a song's words were kept, a switch for which one is in use. */
+function lyricsSourceRow(song) {
+  var v = song.lyrics_versions;
+  if (!v || !v.llm || !v.whisper) { return ''; }
+  var chip = function (key, label, words) {
+    return '<button type="button" class="chip' + (v.active === key ? ' active' : '') + '" data-lyrics-source="' + key +
+      '" data-song="' + song.id + '" title="Use the words ' + (key === 'llm' ? 'the external model heard' : 'Whisper heard') +
+      '. They go in the box, replacing what is there">' + esc(label) + ' \u00b7 ' + words + ' words</button>';
+  };
+  return '<div class="lyrics-source" data-for="' + song.id + '" data-active="' + esc(v.active || '') + '">Words from ' + chip('llm', v.llm.model || 'the external model', v.llm.words) +
+    chip('whisper', 'Whisper', v.whisper.words) + '</div>';
+}
+
 function songDetail(song) {
   var base = '/api/identities/' + IDENTITY.id + '/songs/' + song.id + '/audio';
   var players = song.stored_path
@@ -5941,6 +5954,7 @@ function songDetail(song) {
   return '<div class="grid"><div>' +
       '<div class="label-row"><label>Lyrics' + (song.lyrics_state === 'done' && !song.lyrics_checked ? ' <span class="muted">(a draft)</span>' : '') +
       '</label><label class="check"><input type="checkbox" data-checked="' + song.id + '"' + (song.lyrics_checked ? ' checked' : '') + '> checked</label></div>' +
+      lyricsSourceRow(song) +
       '<textarea data-lyrics="' + song.id + '" spellcheck="false" placeholder="[Verse]&#10;...">' + esc(song.lyrics || '') + '</textarea>' +
       '<div class="row" style="margin-top:6px"><button class="ghost" data-save="' + song.id + '">Save</button>' +
       (song.lyrics_state === 'done' && IDENTITY.data && IDENTITY.data.external_llm
@@ -6270,6 +6284,13 @@ async function pollIdentity() {
       }
       var cap = document.querySelector('[data-caption="' + song.id + '"]');
       if (cap) { cap.textContent = song.caption; }
+      // Which version of the words is in use may have been switched.
+      var sourceRow = document.querySelector('.lyrics-source[data-for="' + song.id + '"]');
+      if (sourceRow && song.lyrics_versions && sourceRow.dataset.active !== (song.lyrics_versions.active || '')) {
+        sourceRow.outerHTML = lyricsSourceRow(song);
+      } else if (!sourceRow && box && song.lyrics_versions && song.lyrics_versions.llm && song.lyrics_versions.whisper) {
+        box.insertAdjacentHTML('beforebegin', lyricsSourceRow(song));
+      }
     });
   }
   var trainingHere = State.training && data && State.training.identity_id === data.id;
@@ -6443,6 +6464,32 @@ async function identityClick(event) {
       pollIdentity();
       note.className = 'status good';
     } catch (err) { note.textContent = err.message; note.className = 'status bad'; }
+    return;
+  }
+  var picked = target.closest('[data-lyrics-source]');
+  if (picked) {
+    var pickedId = picked.dataset.song, wanted = picked.dataset.lyricsSource;
+    var held = identitySong(pickedId);
+    if (held && held.lyrics_versions && held.lyrics_versions.active === wanted) { return; }
+    var pickedBox = document.querySelector('[data-lyrics="' + pickedId + '"]');
+    var pickedSaid = document.querySelector('[data-saved="' + pickedId + '"]');
+    if (((held && held.lyrics_checked) || (pickedBox && pickedBox.dataset.edited)) &&
+        !confirm('Replace the lyrics in the box with the other version?')) { return; }
+    picked.disabled = true;
+    try {
+      await api('/api/identities/' + IDENTITY.id + '/songs/' + pickedId + '/lyrics/source', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: wanted })
+      });
+      if (pickedBox) { delete pickedBox.dataset.edited; }
+      var pickedTick = document.querySelector('[data-checked="' + pickedId + '"]');
+      if (pickedTick) { pickedTick.checked = false; }
+      if (pickedSaid) { pickedSaid.textContent = 'Drafting\u2026'; pickedSaid.className = 'status'; }
+      pollIdentity();
+    } catch (err) {
+      if (pickedSaid) { pickedSaid.textContent = err.message; pickedSaid.className = 'status bad'; }
+    } finally {
+      picked.disabled = false;
+    }
     return;
   }
   var redraft = target.closest('[data-redraft]');

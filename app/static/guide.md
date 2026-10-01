@@ -350,10 +350,18 @@ misheard, especially where voices overlap.
 *Lyrics from a recording*. Set it to **External LLM** and the separated vocal is sent to the model to
 hear the words, while Whisper still works out when each line is sung. On the same two songs Gemini
 got **1.5% and 23%**, so the two are close; try both on a song Whisper struggles with. It needs a
-model that accepts audio, such as Gemini. If the model refuses the audio, writes words that don't
-match the recording, or holds back — cutting lines short, or pointing you at a lyrics site, as a
-model may with a song it recognises — you get Whisper's version instead. The message when it finishes names which one
+model that accepts audio, such as Gemini. When the model's reply looks like lyrics, its words are
+used, even where they differ a good deal from Whisper's: a vocal buried in a mix is where Whisper
+struggles most, and the model does not. If the model refuses the audio, holds back (cutting lines
+short, or pointing you at a lyrics site, as a model may with a song it recognises) or sends back
+almost nothing, you get Whisper's version instead. The message when it finishes names which one
 heard the words. The vocal leaves your machine for this; Whisper keeps it here.
+
+For a corpus song, **both versions are kept**. When both exist, the song's Review panel shows
+**Words from** with each version and its word count, the external model's in use by default. Pick
+the other and its words go in the box, replacing what is there. Whisper's own lines have any word
+it repeated more than eight times in a row, such as a held "la" it wrote hundreds of times, cut
+back to eight.
 
 ---
 
