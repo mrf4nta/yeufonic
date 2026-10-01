@@ -11,7 +11,7 @@ PIANOROLL_JS = Path(__file__).resolve().parent.parent / "app" / "static" / "pian
 def run_node_script(js_code: str) -> dict:
     """Run a small JS snippet importing pianoroll.js and return parsed JSON result."""
     script = f"""
-    const {{ parseAbc, serializeToAbc, PianoRoll, extractLyricsSections, tokenizeLyricLines, matchScoreSectionToLyricSection, splitWordSyllables }} = require({json.dumps(str(PIANOROLL_JS))});
+    const {{ parseAbc, serializeToAbc, PianoRoll, extractLyricsSections, tokenizeLyricLines, matchScoreSectionToLyricSection, splitWordSyllables, playClick }} = require({json.dumps(str(PIANOROLL_JS))});
     {js_code}
     """
     res = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
@@ -706,6 +706,65 @@ def test_lyrics_footer_and_dancing_ball_dom_rendering():
     assert data["ballHiddenDuringSinging"] is False
     assert "translate3d" in data["ballTransform"]
     assert data["ballHiddenAfterStop"] is True
+
+
+def test_metronome_click_track():
+    """Verify metronome toggle, default enabled state, and audio click synthesis."""
+    js = """
+    // Mock Web Audio Context
+    class MockAudioParam {
+      constructor() { this.value = 0; }
+      setValueAtTime(v, t) { this.value = v; }
+      exponentialRampToValueAtTime(v, t) { this.value = v; }
+    }
+    class MockNode {
+      constructor() {
+        this.frequency = new MockAudioParam();
+        this.gain = new MockAudioParam();
+      }
+      connect() {}
+      disconnect() {}
+      start() {}
+      stop() {}
+    }
+    class MockAudioContext {
+      constructor() {
+        this.currentTime = 1.0;
+        this.destination = new MockNode();
+        this.state = 'running';
+      }
+      createOscillator() { return new MockNode(); }
+      createGain() { return new MockNode(); }
+      createBiquadFilter() { return new MockNode(); }
+    }
+
+    global.window = {
+      AudioContext: MockAudioContext
+    };
+
+    const initialEnabled = PianoRoll.metronomeEnabled;
+    const toggledOff = PianoRoll.toggleMetronome();
+    const toggledOn = PianoRoll.toggleMetronome();
+
+    // Verify click synthesis works without error for both downbeat and regular beat
+    const downbeatOsc = playClick(true, 1.0);
+    const beatOsc = playClick(false, 1.5);
+
+    console.log(JSON.stringify({
+      initialEnabled,
+      toggledOff,
+      toggledOn,
+      hasDownbeat: Boolean(downbeatOsc),
+      hasBeat: Boolean(beatOsc)
+    }));
+    """
+    data = run_node_script(js)
+    assert data["initialEnabled"] is True
+    assert data["toggledOff"] is False
+    assert data["toggledOn"] is True
+    assert data["hasDownbeat"] is True
+    assert data["hasBeat"] is True
+
 
 
 

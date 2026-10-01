@@ -160,6 +160,38 @@
     return osc;
   }
 
+  function playClick(isDownbeat, startTime) {
+    var ctx = getAudioContext();
+    if (!ctx) { return null; }
+    var now = startTime !== undefined ? startTime : ctx.currentTime;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+
+    var freq = isDownbeat ? 1400 : 900;
+    var dur = isDownbeat ? 0.035 : 0.025;
+    var vol = isDownbeat ? 0.28 : 0.16;
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.5, now + dur);
+
+    gain.gain.setValueAtTime(vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + dur + 0.01);
+
+    activeOscillators.push(osc);
+    osc.onended = function () {
+      var idx = activeOscillators.indexOf(osc);
+      if (idx !== -1) { activeOscillators.splice(idx, 1); }
+    };
+    return osc;
+  }
+
   /* ---------------------------------------------------- ABC Parser */
   function parseAbc(abcText) {
     var lines = (abcText || "").split(/\r?\n/);
@@ -559,6 +591,7 @@
     rowHeight: ROW_HEIGHT,
     selectedNoteId: null,
     selectedNoteIds: [],
+    metronomeEnabled: true,
     isPlaying: false,
     playheadTick: 0,
     playTimer: null,
@@ -601,7 +634,7 @@
         });
       }
 
-      // Transport Rewind / Prev / Play / Next
+      // Transport Rewind / Prev / Play / Next / Metronome
       var rewindBtn = document.getElementById('roll-rewind');
       if (rewindBtn) {
         rewindBtn.addEventListener('click', function () { self.rewindToStart(); });
@@ -617,6 +650,10 @@
       var nextBtn = document.getElementById('roll-next');
       if (nextBtn) {
         nextBtn.addEventListener('click', function () { self.stepNext(); });
+      }
+      var metroBtn = document.getElementById('roll-metronome');
+      if (metroBtn) {
+        metroBtn.addEventListener('click', function () { self.toggleMetronome(); });
       }
 
       // History Undo / Redo
@@ -1544,7 +1581,26 @@
       }
     },
 
-    /* ------------------------------------------------ Transport & Playback */
+    toggleMetronome: function (forceState) {
+      this.metronomeEnabled = (forceState !== undefined) ? Boolean(forceState) : !this.metronomeEnabled;
+      if (typeof document !== 'undefined') {
+        var btn = document.getElementById('roll-metronome');
+        if (btn) {
+          if (this.metronomeEnabled) {
+            btn.classList.add('active');
+            btn.title = 'Click track: ON (Press C or M to mute)';
+          } else {
+            btn.classList.remove('active');
+            btn.title = 'Click track: OFF (Press C or M to enable)';
+          }
+        }
+      }
+      if (typeof window !== 'undefined' && window.toast) {
+        window.toast('Click track: ' + (this.metronomeEnabled ? 'ON' : 'OFF'));
+      }
+      return this.metronomeEnabled;
+    },
+
     togglePlay: function () {
       if (this.isPlaying) {
         this.stop();
@@ -1565,7 +1621,7 @@
       var ticksPerBar = this.model.ticksPerBar || 16;
       var unitLength = this.model.unitLength || 16;
       var bpm = this.model.bpm || 120;
-      var ticksPerBeat = Math.max(1, unitLength / 4);
+      var ticksPerBeat = Math.max(1, Math.round(unitLength / 4));
       var secondsPerTick = (60 / bpm) / ticksPerBeat;
       var totalTicks = this.getTotalTicks();
 
@@ -1603,8 +1659,23 @@
         }
       }
 
+      function scheduleClicks(fromTick, toTick) {
+        if (!self.metronomeEnabled || !ctx) { return; }
+        var startBeat = Math.ceil(fromTick / ticksPerBeat) * ticksPerBeat;
+        for (var bt = startBeat; bt < toTick && bt < totalTicks; bt += ticksPerBeat) {
+          var isDownbeat = (bt % ticksPerBar === 0);
+          var clickOffsetSec = (bt - startTick) * secondsPerTick;
+          var targetAudioTime = baseAudioTime + clickOffsetSec;
+          if (targetAudioTime < ctx.currentTime) {
+            targetAudioTime = ctx.currentTime;
+          }
+          playClick(isDownbeat, targetAudioTime);
+        }
+      }
+
       // Schedule initial chunk
       scheduleNotes(startTick, startTick + LOOKAHEAD_TICKS);
+      scheduleClicks(startTick, startTick + LOOKAHEAD_TICKS);
       scheduledUpToTick = startTick + LOOKAHEAD_TICKS;
 
       // Visual animation & scheduling loop
@@ -1623,6 +1694,7 @@
         var lookaheadTick = currentTick + LOOKAHEAD_TICKS;
         if (lookaheadTick > scheduledUpToTick) {
           scheduleNotes(scheduledUpToTick, lookaheadTick);
+          scheduleClicks(scheduledUpToTick, lookaheadTick);
           scheduledUpToTick = lookaheadTick;
         }
 
@@ -2156,5 +2228,6 @@
   global.splitWordSyllables = splitWordSyllables;
   global.tokenizeLyricLines = tokenizeLyricLines;
   global.matchScoreSectionToLyricSection = matchScoreSectionToLyricSection;
+  global.playClick = playClick;
 
 })(typeof window !== 'undefined' ? window : this);
