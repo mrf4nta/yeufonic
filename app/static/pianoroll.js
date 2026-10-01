@@ -1160,9 +1160,13 @@
         var left = t * self.tickWidth;
 
         if (isBar || isBeat || self.tickWidth >= 16) {
+          var barNum = Math.floor(t / ticksPerBar) + 1;
           linesHtml.push(
             '<div class="roll-vline ' + (isBar ? 'bar-line' : (isBeat ? 'beat-line' : 'tick-line')) + '" ' +
-            'style="left:' + left + 'px"></div>'
+            (isBar ? ('data-bar="' + barNum + '" ') : '') +
+            'style="left:' + left + 'px">' +
+            (isBar && t < totalTicks ? ('<span class="roll-bar-line-tag">' + barNum + '</span>') : '') +
+            '</div>'
           );
         }
       }
@@ -1249,6 +1253,17 @@
 
       var self = this;
       var html = [];
+
+      var ticksPerBar = this.model.ticksPerBar || 16;
+      var totalBars = Math.ceil(totalTicks / ticksPerBar);
+      for (var b = 0; b < totalBars; b++) {
+        var bLeft = b * ticksPerBar * self.tickWidth;
+        html.push(
+          '<div class="roll-lyric-bar-marker" style="left:' + bLeft + 'px" data-bar="' + (b + 1) + '">' +
+          '<span class="roll-lyric-bar-num">' + (b + 1) + '</span>' +
+          '</div>'
+        );
+      }
 
       for (var vi = 0; vi < vocalNotes.length; vi++) {
         var vNote = vocalNotes[vi];

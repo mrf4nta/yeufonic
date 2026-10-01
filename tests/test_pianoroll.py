@@ -1108,6 +1108,98 @@ def test_lyrics_matching_with_32_tick_bars_and_tied_notes():
     assert data["lyrics"][8:16] == ["We", "mapped", "the", "route", "for", "Ni-", "gel's", "feet"]
 
 
+def test_piano_roll_vertical_bar_markers_rendering():
+    """Verify vertical bar markers and bar numbers are rendered across the grid, ruler, and lyrics footer."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% intro\n"
+        "V: Vocal\n"
+        "c16 | d16 | e16 | f16 |\n"
+        "w: one | two | three | four |\n"
+    )
+    js = f"""
+    class MockClassList {{
+      constructor() {{ this.classes = new Set(); }}
+      add(c) {{ this.classes.add(c); }}
+      remove(c) {{ this.classes.delete(c); }}
+      contains(c) {{ return this.classes.has(c); }}
+    }}
+    class MockElement {{
+      constructor(id = '', tag = 'div') {{
+        this.id = id;
+        this.tagName = tag;
+        this.classList = new MockClassList();
+        this.style = {{}};
+        this.dataset = {{}};
+        this.innerHTML = '';
+      }}
+      addEventListener() {{}}
+      removeEventListener() {{}}
+      getBoundingClientRect() {{ return {{ left: 0, top: 0, width: 400, height: 44 }}; }}
+      querySelector() {{ return null; }}
+      querySelectorAll() {{ return []; }}
+    }}
+
+    const elements = {{
+      'roll-grid': new MockElement('roll-grid'),
+      'roll-grid-lines': new MockElement('roll-grid-lines'),
+      'roll-notes-layer': new MockElement('roll-notes-layer'),
+      'roll-ruler': new MockElement('roll-ruler'),
+      'roll-chords-track': new MockElement('roll-chords-track'),
+      'roll-lyrics-footer': new MockElement('roll-lyrics-footer'),
+      'roll-lyrics-strip': new MockElement('roll-lyrics-strip'),
+      'roll-lyrics-items': new MockElement('roll-lyrics-items'),
+      'roll-meta': new MockElement('roll-meta'),
+      'roll-keys': new MockElement('roll-keys')
+    }};
+
+    global.document = {{
+      getElementById: (id) => elements[id] || null,
+      querySelector: () => null,
+      querySelectorAll: () => []
+    }};
+
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.renderGrid();
+    PianoRoll.renderTimeline();
+    PianoRoll.renderLyricsFooter();
+
+    const gridLinesHtml = elements['roll-grid-lines'].innerHTML;
+    const rulerHtml = elements['roll-ruler'].innerHTML;
+    const lyricsHtml = elements['roll-lyrics-items'].innerHTML;
+
+    // Check bar lines in grid
+    const hasBar1Line = gridLinesHtml.includes('bar-line') && gridLinesHtml.includes('data-bar="1"');
+    const hasBar2Line = gridLinesHtml.includes('bar-line') && gridLinesHtml.includes('data-bar="2"');
+    const hasBarTags = gridLinesHtml.includes('roll-bar-line-tag');
+
+    // Check bar markers in ruler
+    const hasRulerBars = rulerHtml.includes('roll-bar-marker') && rulerHtml.includes('roll-bar-num');
+
+    // Check bar markers in lyrics footer
+    const hasLyricBarMarkers = lyricsHtml.includes('roll-lyric-bar-marker') && lyricsHtml.includes('roll-lyric-bar-num');
+
+    console.log(JSON.stringify({{
+      hasBar1Line,
+      hasBar2Line,
+      hasBarTags,
+      hasRulerBars,
+      hasLyricBarMarkers
+    }}));
+    """
+    data = run_node_script(js)
+    assert data["hasBar1Line"] is True
+    assert data["hasBar2Line"] is True
+    assert data["hasBarTags"] is True
+    assert data["hasRulerBars"] is True
+    assert data["hasLyricBarMarkers"] is True
+
+
+
 
 
 

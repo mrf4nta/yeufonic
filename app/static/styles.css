@@ -973,7 +973,7 @@ label .lora-value:disabled { opacity: 0.6; }
   color: var(--muted);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  border-bottom: 1px dashed rgb(var(--line) / 0.4);
+  border-bottom: 1px dashed rgb(var(--ink) / 0.15);
 }
 .roll-corner-row:last-child {
   border-bottom: none;
@@ -992,14 +992,14 @@ label .lora-value:disabled { opacity: 0.6; }
   height: 22px;
   position: relative;
   cursor: pointer;
-  border-bottom: 1px dashed rgb(var(--line) / 0.6);
+  border-bottom: 1px solid rgb(var(--ink) / 0.18);
 }
 .roll-bar-marker {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px solid var(--line);
-  padding-left: 4px;
+  border-left: 2px solid rgb(var(--ink) / 0.5);
+  padding-left: 5px;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1008,8 +1008,8 @@ label .lora-value:disabled { opacity: 0.6; }
 .roll-bar-num {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
-  color: var(--muted);
-  font-weight: 600;
+  color: var(--text-strong);
+  font-weight: 700;
 }
 .roll-sec-badge {
   font-size: 10px;
@@ -1034,7 +1034,7 @@ label .lora-value:disabled { opacity: 0.6; }
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px dashed rgb(var(--line) / 0.4);
+  border-left: 1px dashed rgb(var(--ink) / 0.25);
   cursor: copy;
 }
 .roll-chord-tag {
@@ -1144,7 +1144,7 @@ label .lora-value:disabled { opacity: 0.6; }
 .roll-lyric-item.empty {
   background: transparent;
   color: var(--muted);
-  border: 1px dashed rgb(var(--line) / 0.45);
+  border: 1px dashed rgb(var(--ink) / 0.25);
   opacity: 0.45;
   font-size: 11px;
 }
@@ -1203,7 +1203,7 @@ label .lora-value:disabled { opacity: 0.6; }
   justify-content: flex-end;
   padding-right: 6px;
   box-sizing: border-box;
-  border-bottom: 1px solid rgb(var(--line) / 0.4);
+  border-bottom: 1px solid rgb(var(--ink) / 0.12);
   cursor: pointer;
 }
 .roll-key.white {
@@ -1247,7 +1247,7 @@ label .lora-value:disabled { opacity: 0.6; }
   left: 0;
   right: 0;
   box-sizing: border-box;
-  border-bottom: 1px solid rgb(var(--line) / 0.25);
+  border-bottom: 1px solid rgb(var(--ink) / 0.08);
 }
 .roll-row.white-row {
   background: transparent;
@@ -1255,20 +1255,64 @@ label .lora-value:disabled { opacity: 0.6; }
 .roll-row.black-row {
   background: rgb(0 0 0 / 0.2);
 }
+.roll-grid-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
 .roll-vline {
   position: absolute;
   top: 0;
   bottom: 0;
+  width: 0;
   pointer-events: none;
+  box-sizing: border-box;
 }
 .roll-vline.bar-line {
-  border-right: 2px solid rgb(var(--line) / 0.9);
+  border-left: 2px solid rgb(var(--ink) / 0.48);
+  z-index: 2;
+}
+.roll-vline.bar-line .roll-bar-line-tag {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: rgb(var(--ink) / 0.55);
+  background: rgb(var(--shade, 0 0 0) / 0.65);
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 12px;
+  user-select: none;
+  pointer-events: none;
 }
 .roll-vline.beat-line {
-  border-right: 1px solid rgb(var(--line) / 0.45);
+  border-left: 1px solid rgb(var(--ink) / 0.14);
+  z-index: 1;
 }
 .roll-vline.tick-line {
-  border-right: 1px dashed rgb(var(--line) / 0.18);
+  border-left: 1px dashed rgb(var(--ink) / 0.05);
+  z-index: 1;
+}
+.roll-lyric-bar-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid rgb(var(--ink) / 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+.roll-lyric-bar-num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: rgb(var(--ink) / 0.4);
+  padding-left: 3px;
+  line-height: 12px;
+  display: block;
+  user-select: none;
 }
 .roll-notes-layer {
   position: absolute;
