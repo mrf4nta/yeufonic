@@ -764,17 +764,10 @@
         selectRightBtn.addEventListener('click', function () { self.selectRightOfPlayhead(); });
       }
 
-      // Hide obsolete ghost checkbox if present from old cached template
-      var ghostCheckLabel = document.querySelector('.roll-voices .check');
-      if (ghostCheckLabel) {
-        ghostCheckLabel.style.display = 'none';
-      }
-
-      // Update voice label to Draw:
-      var voiceLabel = document.querySelector('.roll-voices .roll-label');
-      if (voiceLabel && voiceLabel.textContent.trim() === 'Voice:') {
-        voiceLabel.textContent = 'Draw:';
-        voiceLabel.title = 'Both voices are always active. Click to choose voice when drawing new notes';
+      // Hide obsolete voice selector if present from cached HTML
+      var rollVoices = document.querySelector('.roll-voices');
+      if (rollVoices) {
+        rollVoices.style.display = 'none';
       }
 
       // Update zoom button tooltips
@@ -979,6 +972,13 @@
       this.model = parseAbc(abcText);
       this.selectedNoteIds = [];
       this.selectedNoteId = null;
+      if (this.model && this.model.voices) {
+        if (this.model.voices.indexOf('Vocal') !== -1) {
+          this.currentVoice = 'Vocal';
+        } else if (this.model.voices.length > 0) {
+          this.currentVoice = this.model.voices[0];
+        }
+      }
 
       // Auto-match song lyrics on load if score has no lyrics embedded yet
       var hasAnyLyrics = this.model.notes.some(function (n) { return n.voice === 'Vocal' && n.lyric; });
