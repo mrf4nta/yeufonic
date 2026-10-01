@@ -11,7 +11,7 @@ PIANOROLL_JS = Path(__file__).resolve().parent.parent / "app" / "static" / "pian
 def run_node_script(js_code: str) -> dict:
     """Run a small JS snippet importing pianoroll.js and return parsed JSON result."""
     script = f"""
-    const {{ parseAbc, serializeToAbc, PianoRoll, extractLyricsSections, tokenizeLyricLines, matchScoreSectionToLyricSection }} = require({json.dumps(str(PIANOROLL_JS))});
+    const {{ parseAbc, serializeToAbc, PianoRoll, extractLyricsSections, tokenizeLyricLines, matchScoreSectionToLyricSection, splitWordSyllables }} = require({json.dumps(str(PIANOROLL_JS))});
     {js_code}
     """
     res = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
@@ -561,5 +561,151 @@ def test_lyrics_move_and_delete_with_notes():
     assert "beau-" not in data["remainingLyrics"]
     assert data["remainingLyrics"] == ["Hel-", "lo", "ti-", "ful", "morn-", "ing", "light"]
     assert score.problems(data["outAbc"]) == []
+
+
+def test_syllable_splitting():
+    """Verify rule-based syllable hyphenation splits unhyphenated English words."""
+    js = """
+    console.log(JSON.stringify({
+        walking: splitWordSyllables("walking"),
+        avenue: splitWordSyllables("avenue"),
+        tonight: splitWordSyllables("tonight"),
+        manual: splitWordSyllables("walk-ing"),
+        dont: splitWordSyllables("don't"),
+        waited: splitWordSyllables("waited"),
+        walked: splitWordSyllables("walked")
+    }));
+    """
+    data = run_node_script(js)
+    assert data["walking"] == ["wal-", "king"]
+    assert data["avenue"] == ["a-", "ve-", "nue"]
+    assert data["tonight"] == ["to-", "night"]
+    assert data["manual"] == ["walk-", "ing"]
+    assert data["dont"] == ["don't"]
+    assert data["waited"] == ["wai-", "ted"]
+    assert data["walked"] == ["walked"]
+
+
+def test_unhyphenated_lyrics_matching_expands_to_vocal_notes():
+    """Verify plain unhyphenated text splits across vocal notes without leaving large gaps."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/8\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "V: Vocal\n"
+        "C D E F | G A B c |\n"
+    )
+    song_lyrics = "Walking down the avenue tonight"
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.matchSongLyrics({json.dumps(song_lyrics)});
+    const assigned = PianoRoll.model.notes.filter(n => n.voice === 'Vocal').map(n => n.lyric);
+    console.log(JSON.stringify({{ assigned }}));
+    """
+    data = run_node_script(js)
+    assigned = data["assigned"]
+    # 8 vocal notes should all receive syllables
+    assert len(assigned) == 8
+    assert assigned[0] == "Wal-"
+    assert assigned[1] == "king"
+    assert assigned[2] == "down"
+    assert assigned[3] == "the"
+    assert assigned[4] == "a-"
+    assert assigned[5] == "ve-"
+    assert assigned[6] == "nue"
+    assert assigned[7] == "to-"
+
+
+def test_lyrics_footer_and_dancing_ball_dom_rendering():
+    """Verify lyrics footer DOM items and real-time dancing ball/illumination updates."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/8\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "V: Vocal\n"
+        "C2 D2 E2 F2 |\n"
+        "w: Hel- lo world now |\n"
+    )
+    js = f"""
+    // Minimal DOM environment for node
+    class MockClassList {{
+      constructor() {{ this.classes = new Set(); }}
+      add(c) {{ this.classes.add(c); }}
+      remove(c) {{ this.classes.delete(c); }}
+      contains(c) {{ return this.classes.has(c); }}
+    }}
+    class MockElement {{
+      constructor(id = '', tag = 'div') {{
+        this.id = id;
+        this.tagName = tag;
+        this.classList = new MockClassList();
+        this.style = {{}};
+        this.dataset = {{}};
+        this.children = [];
+        this.innerHTML = '';
+        this.textContent = '';
+      }}
+      addEventListener() {{}}
+      removeEventListener() {{}}
+      getBoundingClientRect() {{ return {{ left: 0, top: 0, width: 400, height: 44 }}; }}
+      querySelector() {{ return null; }}
+      querySelectorAll() {{ return []; }}
+    }}
+
+    const elements = {{
+      'roll-lyrics-footer': new MockElement('roll-lyrics-footer'),
+      'roll-lyrics-strip': new MockElement('roll-lyrics-strip'),
+      'roll-lyrics-items': new MockElement('roll-lyrics-items'),
+      'roll-dancing-ball': new MockElement('roll-dancing-ball'),
+      'roll-playhead': new MockElement('roll-playhead'),
+      'roll-ruler-playhead': new MockElement('roll-ruler-playhead'),
+      'roll-time': new MockElement('roll-time'),
+      'roll-grid-scroll': new MockElement('roll-grid-scroll'),
+    }};
+    elements['roll-dancing-ball'].classList.add('hidden');
+
+    global.document = {{
+      getElementById: (id) => elements[id] || null,
+      querySelector: (sel) => {{
+        if (sel === '.roll-lyric-item.illuminated') return null;
+        if (sel === '.roll-note.singing-now') return null;
+        return null;
+      }},
+      querySelectorAll: () => []
+    }};
+
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.renderLyricsFooter();
+
+    const footerHtml = elements['roll-lyrics-items'].innerHTML;
+    const hasItems = footerHtml.includes('roll-lyric-item') && footerHtml.includes('Hel-') && footerHtml.includes('world');
+
+    // Test playhead at tick 1.5 during playback
+    PianoRoll.isPlaying = true;
+    PianoRoll.updatePlayhead(1.5);
+    const ballHiddenDuringSinging = elements['roll-dancing-ball'].classList.contains('hidden');
+    const ballTransform = elements['roll-dancing-ball'].style.transform;
+
+    // Test stop()
+    PianoRoll.stop();
+    const ballHiddenAfterStop = elements['roll-dancing-ball'].classList.contains('hidden');
+
+    console.log(JSON.stringify({{
+      hasItems,
+      ballHiddenDuringSinging,
+      ballTransform,
+      ballHiddenAfterStop
+    }}));
+    """
+    data = run_node_script(js)
+    assert data["hasItems"] is True
+    assert data["ballHiddenDuringSinging"] is False
+    assert "translate3d" in data["ballTransform"]
+    assert data["ballHiddenAfterStop"] is True
+
 
 
