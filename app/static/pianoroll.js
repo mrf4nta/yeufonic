@@ -734,11 +734,70 @@
     listeners: [],
     initialized: false,
 
+    ensureToolbar: function () {
+      if (typeof document === 'undefined') { return; }
+      var self = this;
+
+      // Ensure selection buttons exist in toolbar
+      var selectAllBtn = document.getElementById('roll-select-all');
+      var selectRightBtn = document.getElementById('roll-select-right');
+      if (!selectAllBtn) {
+        var snapEl = document.querySelector('.roll-snap');
+        if (snapEl && snapEl.parentNode) {
+          var selGroup = document.createElement('div');
+          selGroup.className = 'roll-select';
+          selGroup.innerHTML =
+            '<button id="roll-select-all" class="ghost compact" title="Select all notes across both Vocal and Instrument voices (Ctrl+A)">Select All</button>' +
+            '<button id="roll-select-right" class="ghost compact" title="Select all notes from cursor/playhead to right across both voices (Ctrl+Shift+A or Alt+A)">From Cursor ▶</button>';
+          snapEl.parentNode.insertBefore(selGroup, snapEl);
+          selectAllBtn = document.getElementById('roll-select-all');
+          selectRightBtn = document.getElementById('roll-select-right');
+        }
+      }
+
+      if (selectAllBtn && !selectAllBtn._bound) {
+        selectAllBtn._bound = true;
+        selectAllBtn.addEventListener('click', function () { self.selectAll(); });
+      }
+      if (selectRightBtn && !selectRightBtn._bound) {
+        selectRightBtn._bound = true;
+        selectRightBtn.addEventListener('click', function () { self.selectRightOfPlayhead(); });
+      }
+
+      // Hide obsolete ghost checkbox if present from old cached template
+      var ghostCheckLabel = document.querySelector('.roll-voices .check');
+      if (ghostCheckLabel) {
+        ghostCheckLabel.style.display = 'none';
+      }
+
+      // Update voice label to Draw:
+      var voiceLabel = document.querySelector('.roll-voices .roll-label');
+      if (voiceLabel && voiceLabel.textContent.trim() === 'Voice:') {
+        voiceLabel.textContent = 'Draw:';
+        voiceLabel.title = 'Both voices are always active. Click to choose voice when drawing new notes';
+      }
+
+      // Update zoom button tooltips
+      var zOut = document.getElementById('roll-zoom-out');
+      if (zOut) { zOut.title = 'Zoom out (− or _)'; }
+      var zIn = document.getElementById('roll-zoom-in');
+      if (zIn) { zIn.title = 'Zoom in (+ or =)'; }
+      var zFit = document.getElementById('roll-zoom-fit');
+      if (zFit) { zFit.title = 'Scroll to notes (F or 0)'; }
+
+      // Update hint bar
+      var hintBar = document.querySelector('.roll-hint-bar span');
+      if (hintBar && hintBar.textContent.indexOf('+/−: zoom') === -1) {
+        hintBar.textContent = 'Click: add note • Drag: move note • Edge: resize • Marquee select • +/−: zoom • L: edit lyric • C: click track • H: chords • Del: delete • Left/Right: step bar • Space: play';
+      }
+    },
+
     init: function () {
       if (this.initialized) { return; }
       this.initialized = true;
 
       var self = this;
+      this.ensureToolbar();
 
       // Voice selectors (active voice for drawing new notes)
       var vocalBtn = document.getElementById('roll-voice-vocal');
@@ -951,6 +1010,7 @@
     renderAll: function () {
       if (!this.model) { return; }
       if (typeof document === 'undefined') { return; }
+      this.ensureToolbar();
       this.updateMetadata();
       this.renderKeys();
       this.renderTimeline();

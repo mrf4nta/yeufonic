@@ -690,7 +690,8 @@ _GUIDE = (STATIC_DIR / "guide.html").read_text(encoding="utf-8").replace("{{VERS
 
 @app.get("/")
 def index() -> HTMLResponse:
-    return HTMLResponse(_INDEX)
+    content = (STATIC_DIR / "index.html").read_text(encoding="utf-8").replace("{{VERSION}}", config.VERSION)
+    return HTMLResponse(content)
 
 
 @app.get("/guide")
