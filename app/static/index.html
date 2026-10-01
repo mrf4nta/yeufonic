@@ -569,6 +569,7 @@
           <button id="roll-play" class="ghost compact" title="Play / Pause (Space)">▶ Play</button>
           <button id="roll-next" class="ghost compact" title="Forward 1 bar (Right arrow)">Forward ▶</button>
           <button id="roll-metronome" class="ghost compact active" title="Toggle audible click track / metronome (C or M)">Click</button>
+          <button id="roll-chords" class="ghost compact active" title="Toggle chord accompaniment during playback (H)">Chords</button>
           <span id="roll-time" class="roll-time muted small" title="Current Bar.Beat (Time)">1.1 (0:00)</span>
         </div>
         <div class="roll-history">
@@ -582,13 +583,15 @@
         </div>
         <div class="roll-extra">
           <button id="roll-match-lyrics" class="ghost compact" title="Auto-match lyrics from song text to vocal melody notes">Match Lyrics</button>
+          <button id="roll-fill-gaps" class="ghost compact" title="Harmonize empty bars with accompaniment notes from chords">Fill Gaps</button>
+          <button id="roll-compact-gaps" class="ghost compact" title="Remove silent empty bars and compact score">Compact Gaps</button>
           <button id="roll-maximize" class="ghost compact" title="Maximize to full browser width">Maximize</button>
           <button id="roll-toggle-text" class="ghost compact" title="Toggle ABC text area">Show ABC</button>
           <span id="roll-meta" class="muted small"></span>
         </div>
       </div>
       <div class="roll-hint-bar">
-        <span>Click to add note • Drag note to move • Drag edge to resize • Drag empty grid to marquee select • L to edit lyric • C to toggle click track • Del to delete • Left/Right to step bar • Space to play</span>
+        <span>Click: add note • Drag: move note • Edge: resize • Marquee select • L: edit lyric • C: click track • H: chords • Del: delete • Left/Right: step bar • Space: play</span>
       </div>
       <div class="roll-container" id="roll-container">
         <div class="roll-corner">

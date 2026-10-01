@@ -924,7 +924,8 @@ label .lora-value:disabled { opacity: 0.6; }
   min-width: 90px;
   text-align: center;
 }
-#roll-metronome.active {
+#roll-metronome.active,
+#roll-chords.active {
   background: rgb(var(--song-rgb, 120 180 255) / 0.2);
   border-color: var(--song, #38bdf8);
   color: var(--song, #38bdf8);

@@ -192,6 +192,107 @@
     return osc;
   }
 
+  var NOTE_SEMITONES = {
+    'C': 0, 'C#': 1, 'DB': 1, 'D': 2, 'D#': 3, 'EB': 3,
+    'E': 4, 'F': 5, 'F#': 6, 'GB': 6, 'G': 7, 'G#': 8,
+    'AB': 8, 'A': 9, 'A#': 10, 'BB': 10, 'B': 11
+  };
+
+  function chordToMidiPitches(chordName) {
+    if (!chordName || typeof chordName !== 'string') { return []; }
+    var clean = chordName.trim().replace(/^["\(\)]+|["\(\)]+$/g, '');
+    if (!clean) { return []; }
+
+    var slashBass = null;
+    var slashIdx = clean.indexOf('/');
+    if (slashIdx !== -1) {
+      slashBass = clean.slice(slashIdx + 1).trim().toUpperCase();
+      clean = clean.slice(0, slashIdx).trim();
+    }
+
+    var match = clean.match(/^([A-Ga-g][#b]?)(.*)$/);
+    if (!match) { return []; }
+    var rootStr = match[1].toUpperCase();
+    var qual = match[2].toLowerCase();
+
+    var rootSemi = NOTE_SEMITONES[rootStr];
+    if (rootSemi === undefined) { return []; }
+
+    var baseMidi = 48 + rootSemi;
+    var intervals = [0, 4, 7];
+
+    if (qual.startsWith('m7') || qual.startsWith('min7')) {
+      intervals = [0, 3, 7, 10];
+    } else if (qual.startsWith('maj7') || qual.startsWith('m7+')) {
+      intervals = [0, 4, 7, 11];
+    } else if (qual.startsWith('m') && !qual.startsWith('maj')) {
+      intervals = [0, 3, 7];
+    } else if (qual.startsWith('7')) {
+      intervals = [0, 4, 7, 10];
+    } else if (qual.startsWith('dim') || qual.startsWith('o')) {
+      intervals = [0, 3, 6];
+    } else if (qual.startsWith('aug') || qual.startsWith('+')) {
+      intervals = [0, 4, 8];
+    } else if (qual.startsWith('sus4') || qual.startsWith('sus')) {
+      intervals = [0, 5, 7];
+    } else if (qual.startsWith('sus2')) {
+      intervals = [0, 2, 7];
+    }
+
+    var pitches = intervals.map(function (iv) { return baseMidi + iv; });
+    var bassSemi = rootSemi;
+    if (slashBass && NOTE_SEMITONES[slashBass] !== undefined) {
+      bassSemi = NOTE_SEMITONES[slashBass];
+    }
+    pitches.unshift(36 + bassSemi);
+    return pitches;
+  }
+
+  function playChord(pitches, durationSec, startTime) {
+    var ctx = getAudioContext();
+    if (!ctx || !pitches || pitches.length === 0) { return []; }
+    var now = startTime !== undefined ? startTime : ctx.currentTime;
+    var dur = durationSec || 1.0;
+    var oscs = [];
+
+    for (var i = 0; i < pitches.length; i++) {
+      var pitch = pitches[i];
+      var isBass = (i === 0);
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      var filter = ctx.createBiquadFilter();
+
+      osc.type = isBass ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(midiToFreq(pitch), now);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(isBass ? 450 : 900, now);
+
+      var peakVol = isBass ? 0.11 : (0.07 / Math.max(1, pitches.length - 1));
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peakVol, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(peakVol * 0.7, now + Math.min(0.2, dur * 0.4));
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + dur + 0.05);
+
+      activeOscillators.push(osc);
+      oscs.push(osc);
+      (function (o) {
+        o.onended = function () {
+          var idx = activeOscillators.indexOf(o);
+          if (idx !== -1) { activeOscillators.splice(idx, 1); }
+        };
+      })(osc);
+    }
+    return oscs;
+  }
+
   /* ---------------------------------------------------- ABC Parser */
   function parseAbc(abcText) {
     var lines = (abcText || "").split(/\r?\n/);
@@ -592,6 +693,7 @@
     selectedNoteId: null,
     selectedNoteIds: [],
     metronomeEnabled: true,
+    chordsEnabled: true,
     isPlaying: false,
     playheadTick: 0,
     playTimer: null,
@@ -654,6 +756,10 @@
       var metroBtn = document.getElementById('roll-metronome');
       if (metroBtn) {
         metroBtn.addEventListener('click', function () { self.toggleMetronome(); });
+      }
+      var chordsBtn = document.getElementById('roll-chords');
+      if (chordsBtn) {
+        chordsBtn.addEventListener('click', function () { self.toggleChords(); });
       }
 
       // History Undo / Redo
@@ -719,6 +825,20 @@
       if (matchLyricsBtn) {
         matchLyricsBtn.addEventListener('click', function () {
           self.matchSongLyrics();
+        });
+      }
+
+      // Fill gaps and compact gaps buttons
+      var fillGapsBtn = document.getElementById('roll-fill-gaps');
+      if (fillGapsBtn) {
+        fillGapsBtn.addEventListener('click', function () {
+          self.fillGapsFromChords();
+        });
+      }
+      var compactGapsBtn = document.getElementById('roll-compact-gaps');
+      if (compactGapsBtn) {
+        compactGapsBtn.addEventListener('click', function () {
+          self.compactEmptyBars();
         });
       }
 
@@ -1601,6 +1721,26 @@
       return this.metronomeEnabled;
     },
 
+    toggleChords: function (forceState) {
+      this.chordsEnabled = (forceState !== undefined) ? Boolean(forceState) : !this.chordsEnabled;
+      if (typeof document !== 'undefined') {
+        var btn = document.getElementById('roll-chords');
+        if (btn) {
+          if (this.chordsEnabled) {
+            btn.classList.add('active');
+            btn.title = 'Chord accompaniment: ON (Press H to mute)';
+          } else {
+            btn.classList.remove('active');
+            btn.title = 'Chord accompaniment: OFF (Press H to enable)';
+          }
+        }
+      }
+      if (typeof window !== 'undefined' && window.toast) {
+        window.toast('Chords playback: ' + (this.chordsEnabled ? 'ON' : 'OFF'));
+      }
+      return this.chordsEnabled;
+    },
+
     togglePlay: function () {
       if (this.isPlaying) {
         this.stop();
@@ -1673,9 +1813,50 @@
         }
       }
 
+      function scheduleChords(fromTick, toTick) {
+        if (!self.chordsEnabled || !ctx || !self.model || !self.model.chords || self.model.chords.length === 0) { return; }
+        var seen = {};
+        var chords = [];
+        for (var ci = 0; ci < self.model.chords.length; ci++) {
+          var ch = self.model.chords[ci];
+          var k = ch.barIndex + ':' + ch.tickInBar + ':' + ch.name;
+          if (!seen[k]) {
+            seen[k] = true;
+            chords.push(ch);
+          }
+        }
+        chords.sort(function (a, b) {
+          var at = a.barIndex * ticksPerBar + a.tickInBar;
+          var bt = b.barIndex * ticksPerBar + b.tickInBar;
+          return at - bt;
+        });
+
+        for (var i = 0; i < chords.length; i++) {
+          var chord = chords[i];
+          var chordStartTick = chord.barIndex * ticksPerBar + chord.tickInBar;
+          if (chordStartTick >= fromTick && chordStartTick < toTick) {
+            var nextTick = (i + 1 < chords.length)
+              ? (chords[i + 1].barIndex * ticksPerBar + chords[i + 1].tickInBar)
+              : ((chord.barIndex + 1) * ticksPerBar);
+            var chordDurTicks = Math.max(ticksPerBar / 4, nextTick - chordStartTick);
+            var chordOffsetSec = (chordStartTick - startTick) * secondsPerTick;
+            var targetAudioTime = baseAudioTime + chordOffsetSec;
+            if (targetAudioTime < ctx.currentTime) {
+              targetAudioTime = ctx.currentTime;
+            }
+            var chordDurSec = chordDurTicks * secondsPerTick;
+            var pitches = chordToMidiPitches(chord.name);
+            if (pitches.length > 0) {
+              playChord(pitches, chordDurSec, targetAudioTime);
+            }
+          }
+        }
+      }
+
       // Schedule initial chunk
       scheduleNotes(startTick, startTick + LOOKAHEAD_TICKS);
       scheduleClicks(startTick, startTick + LOOKAHEAD_TICKS);
+      scheduleChords(startTick, startTick + LOOKAHEAD_TICKS);
       scheduledUpToTick = startTick + LOOKAHEAD_TICKS;
 
       // Visual animation & scheduling loop
@@ -1695,6 +1876,7 @@
         if (lookaheadTick > scheduledUpToTick) {
           scheduleNotes(scheduledUpToTick, lookaheadTick);
           scheduleClicks(scheduledUpToTick, lookaheadTick);
+          scheduleChords(scheduledUpToTick, lookaheadTick);
           scheduledUpToTick = lookaheadTick;
         }
 
@@ -1879,6 +2061,203 @@
       }
     },
 
+    /* ------------------------------------------------ Score Gap Filling & Compaction */
+    fillGapsFromChords: function (targetVoice) {
+      if (!this.model) { return 0; }
+      targetVoice = targetVoice || 'Ins';
+      var ticksPerBar = this.model.ticksPerBar || 16;
+      var maxBar = 0;
+      for (var n = 0; n < this.model.notes.length; n++) {
+        var note = this.model.notes[n];
+        var endB = Math.floor((note.startTick + note.durationTicks - 1) / ticksPerBar);
+        if (endB > maxBar) { maxBar = endB; }
+      }
+      for (var c = 0; c < this.model.chords.length; c++) {
+        if (this.model.chords[c].barIndex > maxBar) { maxBar = this.model.chords[c].barIndex; }
+      }
+
+      var chordsByBar = {};
+      for (var ci = 0; ci < this.model.chords.length; ci++) {
+        var ch = this.model.chords[ci];
+        if (!chordsByBar[ch.barIndex]) { chordsByBar[ch.barIndex] = []; }
+        var exists = false;
+        for (var cbi = 0; cbi < chordsByBar[ch.barIndex].length; cbi++) {
+          if (chordsByBar[ch.barIndex][cbi].tickInBar === ch.tickInBar && chordsByBar[ch.barIndex][cbi].name === ch.name) {
+            exists = true;
+            break;
+          }
+        }
+        if (!exists) { chordsByBar[ch.barIndex].push(ch); }
+      }
+
+      var filledBars = 0;
+      var nextId = Date.now();
+
+      for (var b = 0; b <= maxBar; b++) {
+        var hasNotes = false;
+        for (var ni = 0; ni < this.model.notes.length; ni++) {
+          var nt = this.model.notes[ni];
+          if (nt.voice !== targetVoice) { continue; }
+          var nStart = Math.floor(nt.startTick / ticksPerBar);
+          var nEnd = Math.floor((nt.startTick + nt.durationTicks - 1) / ticksPerBar);
+          if (b >= nStart && b <= nEnd) {
+            hasNotes = true;
+            break;
+          }
+        }
+        if (hasNotes) { continue; }
+
+        var barChords = chordsByBar[b];
+        if (!barChords || barChords.length === 0) {
+          for (var pb = b - 1; pb >= 0; pb--) {
+            if (chordsByBar[pb] && chordsByBar[pb].length > 0) {
+              var lastKnown = chordsByBar[pb][chordsByBar[pb].length - 1];
+              barChords = [{ barIndex: b, tickInBar: 0, name: lastKnown.name }];
+              break;
+            }
+          }
+        }
+        if (!barChords || barChords.length === 0) { continue; }
+
+        barChords.sort(function (x, y) { return x.tickInBar - y.tickInBar; });
+
+        for (var bci = 0; bci < barChords.length; bci++) {
+          var barCh = barChords[bci];
+          var startT = b * ticksPerBar + barCh.tickInBar;
+          var nextT = (bci + 1 < barChords.length)
+            ? (b * ticksPerBar + barChords[bci + 1].tickInBar)
+            : ((b + 1) * ticksPerBar);
+          var chDur = nextT - startT;
+          var pitches = chordToMidiPitches(barCh.name);
+          if (pitches.length === 0) { continue; }
+
+          var bassPitch = pitches[0];
+          var triadRoot = pitches[1];
+          var triadThird = pitches[2] || (triadRoot + 4);
+          var triadFifth = pitches[3] || (triadRoot + 7);
+
+          if (chDur >= 16) {
+            var pat16 = [bassPitch + 12, triadThird, triadFifth, triadThird];
+            for (var p1 = 0; p1 < 4; p1++) {
+              this.model.notes.push({
+                id: nextId++,
+                voice: targetVoice,
+                pitch: pat16[p1],
+                startTick: startT + (p1 * 4),
+                durationTicks: 4,
+                lyric: ''
+              });
+            }
+          } else if (chDur >= 8) {
+            var pat8 = [bassPitch + 12, triadFifth];
+            for (var p2 = 0; p2 < 2; p2++) {
+              this.model.notes.push({
+                id: nextId++,
+                voice: targetVoice,
+                pitch: pat8[p2],
+                startTick: startT + (p2 * 4),
+                durationTicks: 4,
+                lyric: ''
+              });
+            }
+          } else {
+            this.model.notes.push({
+              id: nextId++,
+              voice: targetVoice,
+              pitch: bassPitch + 12,
+              startTick: startT,
+              durationTicks: chDur,
+              lyric: ''
+            });
+          }
+        }
+        filledBars++;
+      }
+
+      if (filledBars > 0) {
+        this.commitEdit();
+        if (typeof window !== 'undefined' && window.toast) {
+          window.toast('Harmonized ' + filledBars + ' empty bar' + (filledBars > 1 ? 's' : '') + ' from chords in ' + targetVoice);
+        }
+      } else {
+        if (typeof window !== 'undefined' && window.toast) {
+          window.toast('No empty bars found to harmonize in ' + targetVoice);
+        }
+      }
+      return filledBars;
+    },
+
+    compactEmptyBars: function () {
+      if (!this.model) { return 0; }
+      var ticksPerBar = this.model.ticksPerBar || 16;
+      var maxBar = 0;
+      for (var n = 0; n < this.model.notes.length; n++) {
+        var note = this.model.notes[n];
+        var endB = Math.floor((note.startTick + note.durationTicks - 1) / ticksPerBar);
+        if (endB > maxBar) { maxBar = endB; }
+      }
+      for (var c = 0; c < this.model.chords.length; c++) {
+        if (this.model.chords[c].barIndex > maxBar) { maxBar = this.model.chords[c].barIndex; }
+      }
+
+      var emptyBars = [];
+      for (var b = 0; b <= maxBar; b++) {
+        var hasAnyNote = false;
+        for (var ni = 0; ni < this.model.notes.length; ni++) {
+          var nt = this.model.notes[ni];
+          var nStart = Math.floor(nt.startTick / ticksPerBar);
+          var nEnd = Math.floor((nt.startTick + nt.durationTicks - 1) / ticksPerBar);
+          if (b >= nStart && b <= nEnd) {
+            hasAnyNote = true;
+            break;
+          }
+        }
+        if (!hasAnyNote) {
+          emptyBars.push(b);
+        }
+      }
+
+      if (emptyBars.length === 0) {
+        if (typeof window !== 'undefined' && window.toast) {
+          window.toast('No empty bars to compact');
+        }
+        return 0;
+      }
+
+      emptyBars.sort(function (a, b) { return b - a; });
+
+      for (var ei = 0; ei < emptyBars.length; ei++) {
+        var eb = emptyBars[ei];
+        var shiftTicks = ticksPerBar;
+        var barStartTick = eb * ticksPerBar;
+
+        for (var nIdx = 0; nIdx < this.model.notes.length; nIdx++) {
+          if (this.model.notes[nIdx].startTick >= (barStartTick + shiftTicks)) {
+            this.model.notes[nIdx].startTick -= shiftTicks;
+          }
+        }
+
+        this.model.chords = this.model.chords.filter(function (ch) { return ch.barIndex !== eb; });
+        for (var chIdx = 0; chIdx < this.model.chords.length; chIdx++) {
+          if (this.model.chords[chIdx].barIndex > eb) {
+            this.model.chords[chIdx].barIndex -= 1;
+          }
+        }
+
+        for (var sIdx = 0; sIdx < this.model.sections.length; sIdx++) {
+          if (this.model.sections[sIdx].barIndex > eb) {
+            this.model.sections[sIdx].barIndex -= 1;
+          }
+        }
+      }
+
+      this.commitEdit();
+      if (typeof window !== 'undefined' && window.toast) {
+        window.toast('Removed ' + emptyBars.length + ' empty bar' + (emptyBars.length > 1 ? 's' : '') + ' and compacted score');
+      }
+      return emptyBars.length;
+    },
+
     /* ------------------------------------------------ Lyrics Management */
     editLyricForNote: function (noteId) {
       if (!this.model) { return; }
@@ -1999,41 +2378,32 @@
           var matchedIdx = matchScoreSectionToLyricSection(sSec.text, lyricSections, usedLyricIndices);
           if (matchedIdx !== null) {
             usedLyricIndices.push(matchedIdx);
-            var secTokens = tokenizeLyricLines(lyricSections[matchedIdx].lines);
-            for (var tk = 0; tk < secVocalNotes.length && tk < secTokens.length; tk++) {
-              secVocalNotes[tk].lyric = secTokens[tk];
-              assignedCount++;
-            }
+            assignedCount += assignLyricsToVocalNotes(lyricSections[matchedIdx].lines, secVocalNotes, ticksPerBar);
           }
         }
 
-        // Fill remaining unassigned vocal notes from unused lyric section tokens
+        // Fill remaining unassigned vocal notes from unused lyric sections
         var unassignedNotes = vocalNotes.filter(function (n) { return !n.lyric; });
         if (unassignedNotes.length > 0) {
-          var unusedTokens = [];
+          var unusedLines = [];
           for (var li = 0; li < lyricSections.length; li++) {
             if (usedLyricIndices.indexOf(li) === -1) {
-              unusedTokens = unusedTokens.concat(tokenizeLyricLines(lyricSections[li].lines));
+              unusedLines = unusedLines.concat(lyricSections[li].lines);
             }
           }
-          for (var uk = 0; uk < unassignedNotes.length && uk < unusedTokens.length; uk++) {
-            unassignedNotes[uk].lyric = unusedTokens[uk];
-            assignedCount++;
+          if (unusedLines.length > 0) {
+            assignedCount += assignLyricsToVocalNotes(unusedLines, unassignedNotes, ticksPerBar);
           }
         }
       }
 
-      // If section-by-section didn't assign any notes or only 1 section existed, do global sequential match
+      // If section-by-section didn't assign any notes or only 1 section existed, do phrase-aware global match
       if (assignedCount === 0) {
-        var allTokens = [];
+        var allLines = [];
         for (var lsi = 0; lsi < lyricSections.length; lsi++) {
-          var linesTokens = tokenizeLyricLines(lyricSections[lsi].lines);
-          allTokens = allTokens.concat(linesTokens);
+          allLines = allLines.concat(lyricSections[lsi].lines);
         }
-        for (var gk = 0; gk < vocalNotes.length && gk < allTokens.length; gk++) {
-          vocalNotes[gk].lyric = allTokens[gk];
-          assignedCount++;
-        }
+        assignedCount += assignLyricsToVocalNotes(allLines, vocalNotes, ticksPerBar);
       }
 
       this.commitEdit();
@@ -2221,6 +2591,120 @@
     return null;
   }
 
+  function alignLinesToNotes(linesTokens, notes, ticksPerBar) {
+    var L = linesTokens.length;
+    var N = notes.length;
+    if (L === 0 || N === 0) { return []; }
+    if (L === 1) {
+      return [{ lineIdx: 0, startIdx: 0, endIdx: N }];
+    }
+
+    var bScore = new Float32Array(N);
+    for (var i = 1; i < N; i++) {
+      var prev = notes[i - 1];
+      var curr = notes[i];
+      var rest = curr.startTick - (prev.startTick + prev.durationTicks);
+      var s = 0;
+      if (rest >= 16) { s += 100; }
+      else if (rest >= 8) { s += 60; }
+      else if (rest >= 4) { s += 40; }
+      else if (rest >= 2) { s += 20; }
+      else if (rest > 0) { s += 8; }
+
+      if (prev.durationTicks >= 8) { s += 15; }
+      else if (prev.durationTicks >= 6) { s += 8; }
+
+      var prevBar = Math.floor(prev.startTick / ticksPerBar);
+      var currBar = Math.floor(curr.startTick / ticksPerBar);
+      if (currBar > prevBar) { s += 10 * (currBar - prevBar); }
+      if ((curr.startTick % ticksPerBar) === 0) { s += 8; }
+      bScore[i] = s;
+    }
+
+    function segCost(l, j, i) {
+      var T = linesTokens[l].length;
+      var M = i - j;
+      if (M <= 0) { return 10000; }
+      var diffCost = 0;
+      if (M === T) {
+        diffCost = 0;
+      } else if (M > T) {
+        diffCost = (M - T) * 2;
+      } else {
+        diffCost = (T - M) * 6;
+      }
+      var boundaryBonus = (j > 0) ? bScore[j] : 0;
+      return diffCost - boundaryBonus;
+    }
+
+    var dp = [];
+    var parent = [];
+    for (var d = 0; d <= L; d++) {
+      dp.push(new Float32Array(N + 1).fill(1e9));
+      parent.push(new Int32Array(N + 1).fill(-1));
+    }
+
+    for (var bIdx = 1; bIdx <= N; bIdx++) {
+      dp[1][bIdx] = segCost(0, 0, bIdx);
+    }
+
+    for (var l = 2; l <= L; l++) {
+      for (var ni = l; ni <= N; ni++) {
+        for (var pj = l - 1; pj < ni; pj++) {
+          var c = dp[l - 1][pj] + segCost(l - 1, pj, ni);
+          if (c < dp[l][ni]) {
+            dp[l][ni] = c;
+            parent[l][ni] = pj;
+          }
+        }
+      }
+    }
+
+    var splits = [];
+    var currI = N;
+    for (var bl = L; bl >= 1; bl--) {
+      var prevJ = (bl === 1) ? 0 : parent[bl][currI];
+      if (prevJ < 0) { prevJ = 0; }
+      splits.unshift({ lineIdx: bl - 1, startIdx: prevJ, endIdx: currI });
+      currI = prevJ;
+    }
+    return splits;
+  }
+
+  function assignLyricsToVocalNotes(lines, secVocalNotes, ticksPerBar) {
+    if (!lines || lines.length === 0 || !secVocalNotes || secVocalNotes.length === 0) {
+      return 0;
+    }
+    var lineTokensList = [];
+    for (var i = 0; i < lines.length; i++) {
+      var toks = tokenizeLyricLines([lines[i]]);
+      if (toks.length > 0) {
+        lineTokensList.push(toks);
+      }
+    }
+    if (lineTokensList.length === 0) { return 0; }
+
+    var splits = alignLinesToNotes(lineTokensList, secVocalNotes, ticksPerBar);
+    var count = 0;
+
+    for (var s = 0; s < splits.length; s++) {
+      var sp = splits[s];
+      var toks = lineTokensList[sp.lineIdx];
+      var segNotes = secVocalNotes.slice(sp.startIdx, sp.endIdx);
+      if (segNotes.length === 0) { continue; }
+
+      var limit = Math.min(segNotes.length, toks.length);
+      for (var k = 0; k < limit; k++) {
+        segNotes[k].lyric = toks[k];
+        count++;
+      }
+      for (var ek = limit; ek < segNotes.length; ek++) {
+        delete segNotes[ek].lyric;
+      }
+    }
+    return count;
+  }
+
   global.PianoRoll = PianoRoll;
   global.parseAbc = parseAbc;
   global.serializeToAbc = serializeToAbc;
@@ -2229,5 +2713,9 @@
   global.tokenizeLyricLines = tokenizeLyricLines;
   global.matchScoreSectionToLyricSection = matchScoreSectionToLyricSection;
   global.playClick = playClick;
+  global.playChord = playChord;
+  global.chordToMidiPitches = chordToMidiPitches;
+  global.alignLinesToNotes = alignLinesToNotes;
+  global.assignLyricsToVocalNotes = assignLyricsToVocalNotes;
 
 })(typeof window !== 'undefined' ? window : this);

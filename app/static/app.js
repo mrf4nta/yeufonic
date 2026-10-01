@@ -9678,6 +9678,11 @@ function wire() {
           if (window.PianoRoll) { window.PianoRoll.toggleMetronome(); }
           return;
         }
+        if (event.key.toLowerCase() === 'h' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.toggleChords(); }
+          return;
+        }
       }
     }
 

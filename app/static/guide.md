@@ -180,20 +180,23 @@ The editor displays two voices — **Vocal** (the lead singing melody) and **Ins
 Along the top ruler, the timeline displays measure numbers and section boundaries:
 - **Rename sections:** Click any section marker badge (`intro`, `verse`, `chorus`, etc.) to edit its name or reassign it.
 - **Edit chords:** Directly below the bar ruler, the chord track displays the song's harmonic progression. Click an existing chord badge to rename it (for example, change `C` to `Am7` or `G/B`), or click an empty bar slot to place a new chord.
+- **Harmonize empty bars (Fill Gaps):** Click **Fill Gaps** in the toolbar to populate empty bars in the instrumental accompaniment track with musical notes generated from the chord progression.
+- **Remove empty bars (Compact Gaps):** Click **Compact Gaps** to remove silent empty bars across both voices, shifting subsequent notes and chords left to eliminate unwanted gaps in the arrangement.
 
 #### Lyrics and karaoke tracking
 
 At the bottom of the piano roll, a dedicated lyrics track aligns each syllable with the vocal melody:
-- **Auto-matching:** Click **Match Lyrics** to take the lyrics from the song editor and automatically distribute them across the vocal notes section by section. An intelligent syllable splitter divides multi-syllable words across melody notes so vocal phrases are filled naturally.
+- **Phrase-aware matching:** Click **Match Lyrics** to distribute lyrics across the vocal melody. The alignment detects natural musical breath pauses and rest gaps between melodic phrases, assigning each lyric line to its intended phrase without spilling words across rests into subsequent measures. Multi-syllable words split cleanly across notes.
 - **Editing syllables:** Click any lyric tag (or select a vocal note and press <kbd>L</kbd>) to edit its text. If you enter space- or hyphen-separated syllables (for instance, `Hel- lo world`), they automatically flow across consecutive vocal notes.
 - **Hover highlighting:** Hovering over a lyric tag highlights the corresponding note on the piano roll grid, and hovering a vocal note highlights its lyric tag below.
 - **Karaoke dancing ball:** During playback, an animated dancing ball arcs across each note as it is sung, and the active syllable and grid note illuminate with a real-time glow.
 
-#### Playback and the click track
+#### Playback and harmony accompaniment
 
 Press <kbd>Space</kbd> or click **▶ Play** to start playback from the playhead cursor. The playhead line sweeps across the grid, updating the current bar, beat, and elapsed time counter.
 
-- **Audible click track (metronome):** Playback includes an audible click track by default, with an accented woodblock click on beat 1 of each bar and softer clicks on inner beats. There are no flashing lights or visual distractions — just pure timing guidance. Press <kbd>C</kbd> or <kbd>M</kbd> (or click **Click** in the transport bar) to toggle the metronome on or off at any moment.
+- **Audible click track (metronome):** Playback includes an audible click track by default, with an accented woodblock click on beat 1 of each bar and softer clicks on inner beats. Press <kbd>C</kbd> or <kbd>M</kbd> (or click **Click** in the transport bar) to toggle the metronome on or off at any moment.
+- **Harmonic chord accompaniment:** Playback synthesizes warm polyphonic chord accompaniment pads directly from the score's chord progression. Even when the vocal or instrumental tracks rest, the harmonic space remains musical and warm rather than dropping out into dead silence. Press <kbd>H</kbd> (or click **Chords** in the transport bar) to toggle chord accompaniment on or off.
 - **Stepping measures:** Press <kbd>Left Arrow</kbd> and <kbd>Right Arrow</kbd> to step backward and forward bar by bar, or press <kbd>Home</kbd> to jump straight back to the beginning.
 
 #### Keyboard shortcuts
@@ -205,6 +208,7 @@ Press <kbd>Space</kbd> or click **▶ Play** to start playback from the playhead
 | <kbd>Right Arrow</kbd> | Step forward one bar |
 | <kbd>Home</kbd> | Return playhead to start (bar 1) |
 | <kbd>C</kbd> or <kbd>M</kbd> | Toggle audible click track (metronome) on / off |
+| <kbd>H</kbd> | Toggle chord harmony accompaniment on / off |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Delete selected note(s) |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Cmd</kbd>+<kbd>Z</kbd> | Undo last edit |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo edit |

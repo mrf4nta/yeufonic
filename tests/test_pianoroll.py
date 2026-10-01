@@ -11,7 +11,7 @@ PIANOROLL_JS = Path(__file__).resolve().parent.parent / "app" / "static" / "pian
 def run_node_script(js_code: str) -> dict:
     """Run a small JS snippet importing pianoroll.js and return parsed JSON result."""
     script = f"""
-    const {{ parseAbc, serializeToAbc, PianoRoll, extractLyricsSections, tokenizeLyricLines, matchScoreSectionToLyricSection, splitWordSyllables, playClick }} = require({json.dumps(str(PIANOROLL_JS))});
+    const {{ parseAbc, serializeToAbc, PianoRoll, extractLyricsSections, tokenizeLyricLines, matchScoreSectionToLyricSection, splitWordSyllables, playClick, playChord, chordToMidiPitches, alignLinesToNotes, assignLyricsToVocalNotes }} = require({json.dumps(str(PIANOROLL_JS))});
     {js_code}
     """
     res = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
@@ -764,6 +764,226 @@ def test_metronome_click_track():
     assert data["toggledOn"] is True
     assert data["hasDownbeat"] is True
     assert data["hasBeat"] is True
+
+
+def test_chord_to_midi_pitches():
+    """Verify chord name parsing into root bass and triad/seventh MIDI pitches."""
+    js = """
+    console.log(JSON.stringify({
+        c: chordToMidiPitches('C'),
+        am: chordToMidiPitches('Am'),
+        g: chordToMidiPitches('G'),
+        gb: chordToMidiPitches('G/B'),
+        fmaj7: chordToMidiPitches('Fmaj7'),
+        dm7: chordToMidiPitches('Dm7'),
+        e7: chordToMidiPitches('E7'),
+        bb: chordToMidiPitches('Bb'),
+        csus4: chordToMidiPitches('Csus4'),
+        bdim: chordToMidiPitches('Bdim')
+    }));
+    """
+    data = run_node_script(js)
+    # C major: bass C2 (36), C3 (48), E3 (52), G3 (55)
+    assert data["c"] == [36, 48, 52, 55]
+    # Am: bass A2 (45), A3 (57), C4 (60), E4 (64)
+    assert data["am"] == [45, 57, 60, 64]
+    # G/B slash chord: slash bass B2 (47), triad G3 (55), B3 (59), D4 (62)
+    assert data["gb"] == [47, 55, 59, 62]
+    # Fmaj7: bass F2 (41), F3 (53), A3 (57), C4 (60), E4 (64)
+    assert data["fmaj7"] == [41, 53, 57, 60, 64]
+    # Dm7: bass D2 (38), D3 (50), F3 (53), A3 (57), C4 (60)
+    assert data["dm7"] == [38, 50, 53, 57, 60]
+
+
+def test_chord_accompaniment_playback_and_toggle():
+    """Verify chords playback toggle, default enabled state, and polyphonic audio synthesis."""
+    js = """
+    class MockAudioParam {
+      constructor() { this.value = 0; }
+      setValueAtTime(v, t) { this.value = v; }
+      exponentialRampToValueAtTime(v, t) { this.value = v; }
+    }
+    class MockNode {
+      constructor() {
+        this.frequency = new MockAudioParam();
+        this.gain = new MockAudioParam();
+      }
+      connect() {}
+      disconnect() {}
+      start() {}
+      stop() {}
+    }
+    class MockAudioContext {
+      constructor() {
+        this.currentTime = 1.0;
+        this.destination = new MockNode();
+        this.state = 'running';
+      }
+      createOscillator() { return new MockNode(); }
+      createGain() { return new MockNode(); }
+      createBiquadFilter() { return new MockNode(); }
+    }
+
+    global.window = {
+      AudioContext: MockAudioContext
+    };
+
+    const initialChords = PianoRoll.chordsEnabled;
+    const toggledOff = PianoRoll.toggleChords();
+    const toggledOn = PianoRoll.toggleChords();
+
+    // Verify playChord creates multiple polyphonic oscillators for chord pitches
+    const oscs = playChord([36, 48, 52, 55], 1.0, 1.0);
+
+    console.log(JSON.stringify({
+      initialChords,
+      toggledOff,
+      toggledOn,
+      oscCount: oscs.length
+    }));
+    """
+    data = run_node_script(js)
+    assert data["initialChords"] is True
+    assert data["toggledOff"] is False
+    assert data["toggledOn"] is True
+    assert data["oscCount"] == 4
+
+
+def test_phrase_aware_lyrics_alignment_across_rests():
+    """Verify lyrics do not spill across musical rests into subsequent phrases."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"C\"C4 D4 E4 G4 | \"C\"G16 | \"G\"z16 | \"F\"F4 E4 D4 C4 |\n"
+        "V: Ins\n"
+        "z16 | z16 | z16 | z16 |\n"
+    )
+    # Line 1 has 4 syllables, Phrase 1 has 5 notes (bar 0: 4 notes, bar 1: 1 whole note)
+    # Bar 2 is 16 ticks of rest
+    # Line 2 has 4 syllables, Phrase 2 has 4 notes in bar 3
+    song_lyrics = (
+        "[verse]\n"
+        "Walk down the lane\n"
+        "Look at the moon\n"
+    )
+
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.matchSongLyrics({json.dumps(song_lyrics)});
+
+    const vocalNotes = PianoRoll.model.notes.filter(n => n.voice === 'Vocal');
+    vocalNotes.sort((a, b) => a.startTick - b.startTick);
+
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    console.log(JSON.stringify({{
+        noteLyrics: vocalNotes.map(n => ({{ tick: n.startTick, lyric: n.lyric || '' }})),
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+    lyrics_by_tick = {item["tick"]: item["lyric"] for item in data["noteLyrics"]}
+
+    # Line 1 assigned to phrase 1
+    assert lyrics_by_tick[0] == "Walk"
+    assert lyrics_by_tick[4] == "down"
+    assert lyrics_by_tick[8] == "the"
+    assert lyrics_by_tick[12] == "lane"
+    # Held note in bar 1 does NOT take the first word of Line 2!
+    assert lyrics_by_tick[16] == ""
+
+    # Line 2 strictly starts after the 16-tick rest in bar 2 (at tick 48 in bar 3)
+    assert lyrics_by_tick[48] == "Look"
+    assert lyrics_by_tick[52] == "at"
+    assert lyrics_by_tick[56] == "the"
+    assert lyrics_by_tick[60] == "moon"
+
+    assert score.problems(data["outAbc"]) == []
+
+
+def test_fill_gaps_from_chords():
+    """Verify fillGapsFromChords populates empty bars in Ins voice with accompaniment matching chords."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"C\"C4 D4 E4 G4 | \"G\"z16 | \"Am\"z16 | \"F\"F4 E4 D4 C4 |\n"
+        "V: Ins\n"
+        "\"C\"z16 | \"G\"z16 | \"Am\"z16 | \"F\"z16 |\n"
+    )
+
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    const insNotesBefore = PianoRoll.model.notes.filter(n => n.voice === 'Ins').length;
+
+    const filledCount = PianoRoll.fillGapsFromChords('Ins');
+    const insNotesAfter = PianoRoll.model.notes.filter(n => n.voice === 'Ins').length;
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    console.log(JSON.stringify({{
+        insNotesBefore,
+        filledCount,
+        insNotesAfter,
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert data["insNotesBefore"] == 0
+    assert data["filledCount"] == 4
+    assert data["insNotesAfter"] == 16  # 4 notes per bar across 4 bars
+    assert score.problems(data["outAbc"]) == []
+    est = score.estimate(data["outAbc"])
+    assert est["bars"] == 4
+
+
+def test_compact_empty_bars():
+    """Verify compactEmptyBars removes completely empty measures and shifts later notes and chords."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"C\"C4 D4 E4 G4 | \"G\"z16 | \"Am\"z16 | \"F\"F4 E4 D4 C4 |\n"
+        "V: Ins\n"
+        "\"C\"z16 | \"G\"z16 | \"Am\"z16 | \"F\"z16 |\n"
+    )
+
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    const removedCount = PianoRoll.compactEmptyBars();
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    // After compacting 2 empty bars (bars 1 and 2), the F chord and phrase 2 should be at bar 1 (tick 16)
+    const phrase2Notes = PianoRoll.model.notes.filter(n => n.voice === 'Vocal' && n.pitch === 65); // F4
+    const fChord = PianoRoll.model.chords.find(c => c.name === 'F');
+
+    console.log(JSON.stringify({{
+        removedCount,
+        phrase2StartTick: phrase2Notes.length ? phrase2Notes[0].startTick : -1,
+        fChordBarIndex: fChord ? fChord.barIndex : -1,
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert data["removedCount"] == 2
+    assert data["phrase2StartTick"] == 16  # Shifted from tick 48 to tick 16
+    assert data["fChordBarIndex"] == 1    # Shifted from bar 3 to bar 1
+    assert score.problems(data["outAbc"]) == []
+
 
 
 
