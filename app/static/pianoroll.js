@@ -94,19 +94,31 @@
       }
     }
     if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume();
+      audioCtx.resume().catch(function () {});
     }
     return audioCtx;
+  }
+
+  var activeOscillators = [];
+
+  function stopAllAudio() {
+    for (var i = 0; i < activeOscillators.length; i++) {
+      try {
+        activeOscillators[i].stop();
+        activeOscillators[i].disconnect();
+      } catch (err) {}
+    }
+    activeOscillators = [];
   }
 
   function midiToFreq(pitch) {
     return 440 * Math.pow(2, (pitch - 69) / 12);
   }
 
-  function playTone(pitch, durationSec, voiceType) {
+  function playTone(pitch, durationSec, voiceType, startTime) {
     var ctx = getAudioContext();
-    if (!ctx) { return; }
-    var now = ctx.currentTime;
+    if (!ctx) { return null; }
+    var now = startTime !== undefined ? startTime : ctx.currentTime;
     var dur = durationSec || 0.25;
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
@@ -129,6 +141,13 @@
 
     osc.start(now);
     osc.stop(now + dur + 0.04);
+
+    activeOscillators.push(osc);
+    osc.onended = function () {
+      var idx = activeOscillators.indexOf(osc);
+      if (idx !== -1) { activeOscillators.splice(idx, 1); }
+    };
+    return osc;
   }
 
   /* ---------------------------------------------------- ABC Parser */
@@ -497,10 +516,36 @@
         });
       }
 
-      // Transport Play / Stop
+      // Transport Rewind / Prev / Play / Next
+      var rewindBtn = document.getElementById('roll-rewind');
+      if (rewindBtn) {
+        rewindBtn.addEventListener('click', function () { self.rewindToStart(); });
+      }
+      var prevBtn = document.getElementById('roll-prev');
+      if (prevBtn) {
+        prevBtn.addEventListener('click', function () { self.stepPrev(); });
+      }
       var playBtn = document.getElementById('roll-play');
       if (playBtn) {
         playBtn.addEventListener('click', function () { self.togglePlay(); });
+      }
+      var nextBtn = document.getElementById('roll-next');
+      if (nextBtn) {
+        nextBtn.addEventListener('click', function () { self.stepNext(); });
+      }
+
+      // History Undo / Redo
+      var undoBtn = document.getElementById('roll-undo-btn');
+      if (undoBtn) {
+        undoBtn.addEventListener('click', function () {
+          if (global.undoScore) { global.undoScore(); }
+        });
+      }
+      var redoBtn = document.getElementById('roll-redo-btn');
+      if (redoBtn) {
+        redoBtn.addEventListener('click', function () {
+          if (global.redoScore) { global.redoScore(); }
+        });
       }
 
       // Zoom controls
@@ -550,24 +595,6 @@
 
       // Grid interactions: note click, move, resize, add
       this.bindGridEvents();
-
-      // Keyboard shortcuts: Spacebar (play/pause), Delete/Backspace (delete note)
-      document.addEventListener('keydown', function (e) {
-        var viewRoll = document.getElementById('view-roll');
-        if (!viewRoll || viewRoll.classList.contains('hidden')) { return; }
-        var targetTag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
-        if (targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select') { return; }
-
-        if (e.code === 'Space') {
-          e.preventDefault();
-          self.togglePlay();
-        } else if (e.code === 'Delete' || e.code === 'Backspace') {
-          if (self.selectedNoteId) {
-            e.preventDefault();
-            self.deleteSelectedNote();
-          }
-        }
-      });
     },
 
     setVoice: function (voiceName) {
@@ -1063,38 +1090,64 @@
 
     play: function () {
       if (!this.model) { return; }
-      this.isPlaying = true;
-      var playBtn = document.getElementById('roll-play');
-      if (playBtn) { playBtn.textContent = '⏸ Pause'; }
+      this.stop();
 
       var ctx = getAudioContext();
-      this.playStartTime = ctx ? ctx.currentTime : Date.now() / 1000;
-      this.playStartTick = this.playheadTick;
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(function () {});
+      }
 
+      var ticksPerBar = this.model.ticksPerBar || 16;
+      var unitLength = this.model.unitLength || 16;
       var bpm = this.model.bpm || 120;
-      // 1 beat = 1 quarter note = 4 ticks (assuming L:1/16)
-      var secondsPerTick = (60 / bpm) / 4;
+      var ticksPerBeat = Math.max(1, unitLength / 4);
+      var secondsPerTick = (60 / bpm) / ticksPerBeat;
       var totalTicks = this.getTotalTicks();
-      var self = this;
 
-      // Schedule notes that start on or after this.playheadTick
-      if (ctx) {
-        for (var i = 0; i < this.model.notes.length; i++) {
-          var note = this.model.notes[i];
-          if (note.startTick >= self.playheadTick) {
-            var noteOffset = (note.startTick - self.playheadTick) * secondsPerTick;
+      if (this.playheadTick >= totalTicks) {
+        this.playheadTick = 0;
+      }
+
+      this.isPlaying = true;
+      var playBtn = document.getElementById('roll-play');
+      if (playBtn) {
+        playBtn.textContent = '⏸ Pause';
+        playBtn.title = 'Pause (Space)';
+      }
+
+      var self = this;
+      var startTick = this.playheadTick;
+      var startTime = performance.now();
+      var baseAudioTime = (ctx ? ctx.currentTime : 0) + 0.05;
+      var LOOKAHEAD_TICKS = Math.max(8, Math.ceil(0.5 / secondsPerTick));
+      var scheduledUpToTick = startTick;
+
+      function scheduleNotes(fromTick, toTick) {
+        if (!ctx || !self.model || !self.model.notes) { return; }
+        for (var i = 0; i < self.model.notes.length; i++) {
+          var note = self.model.notes[i];
+          if (note.startTick >= fromTick && note.startTick < toTick) {
+            var noteOffsetSec = (note.startTick - startTick) * secondsPerTick;
+            var targetAudioTime = baseAudioTime + noteOffsetSec;
+            if (targetAudioTime < ctx.currentTime) {
+              targetAudioTime = ctx.currentTime;
+            }
             var noteDur = note.durationTicks * secondsPerTick;
-            playTone(note.pitch, noteDur, note.voice);
+            playTone(note.pitch, noteDur, note.voice, targetAudioTime);
           }
         }
       }
 
-      // Playhead animation loop
+      // Schedule initial chunk
+      scheduleNotes(startTick, startTick + LOOKAHEAD_TICKS);
+      scheduledUpToTick = startTick + LOOKAHEAD_TICKS;
+
+      // Visual animation & scheduling loop
       function tickLoop() {
         if (!self.isPlaying) { return; }
-        var now = ctx ? ctx.currentTime : Date.now() / 1000;
-        var elapsed = now - self.playStartTime;
-        var currentTick = self.playStartTick + Math.floor(elapsed / secondsPerTick);
+        var now = performance.now();
+        var elapsedSec = (now - startTime) / 1000;
+        var currentTick = startTick + (elapsedSec / secondsPerTick);
 
         if (currentTick >= totalTicks) {
           self.stop();
@@ -1102,12 +1155,19 @@
           return;
         }
 
-        self.playheadTick = currentTick;
-        self.updatePlayhead();
+        var lookaheadTick = currentTick + LOOKAHEAD_TICKS;
+        if (lookaheadTick > scheduledUpToTick) {
+          scheduleNotes(scheduledUpToTick, lookaheadTick);
+          scheduledUpToTick = lookaheadTick;
+        }
+
+        self.playheadTick = Math.floor(currentTick);
+        self.updatePlayhead(currentTick);
         self.playTimer = requestAnimationFrame(tickLoop);
       }
 
       this.playTimer = requestAnimationFrame(tickLoop);
+      this.updatePlayhead(startTick);
     },
 
     stop: function () {
@@ -1116,32 +1176,104 @@
         cancelAnimationFrame(this.playTimer);
         this.playTimer = null;
       }
-      var playBtn = document.getElementById('roll-play');
-      if (playBtn) { playBtn.textContent = '▶ Play'; }
+      stopAllAudio();
+      if (typeof document !== 'undefined') {
+        var playBtn = document.getElementById('roll-play');
+        if (playBtn) {
+          playBtn.textContent = '▶ Play';
+          playBtn.title = 'Play (Space)';
+        }
+      }
+      this.updatePlayhead();
     },
 
     seekTick: function (tick) {
+      var wasPlaying = this.isPlaying;
+      if (wasPlaying) {
+        this.stop();
+      }
       this.playheadTick = Math.max(0, tick);
       this.updatePlayhead();
-      if (this.isPlaying) {
-        this.stop();
+      this.ensurePlayheadVisible();
+      if (wasPlaying) {
         this.play();
       }
     },
 
-    updatePlayhead: function () {
+    stepPrev: function () {
+      var ticksPerBar = (this.model && this.model.ticksPerBar) || 16;
+      var curBar = Math.floor(this.playheadTick / ticksPerBar);
+      var inBar = this.playheadTick % ticksPerBar;
+      var targetBar = inBar > 0 ? curBar : Math.max(0, curBar - 1);
+      this.seekTick(targetBar * ticksPerBar);
+    },
+
+    stepNext: function () {
+      var ticksPerBar = (this.model && this.model.ticksPerBar) || 16;
+      var curBar = Math.floor(this.playheadTick / ticksPerBar);
+      var targetBar = curBar + 1;
+      this.seekTick(targetBar * ticksPerBar);
+    },
+
+    rewindToStart: function () {
+      this.seekTick(0);
+    },
+
+    ensurePlayheadVisible: function () {
+      if (typeof document === 'undefined') { return; }
+      var scrollEl = document.getElementById('roll-grid-scroll');
+      if (!scrollEl) { return; }
+      var left = this.playheadTick * this.tickWidth;
+      var viewW = scrollEl.clientWidth || 600;
+      var curScroll = scrollEl.scrollLeft;
+      if (left < curScroll || left > curScroll + viewW - 60) {
+        scrollEl.scrollLeft = Math.max(0, left - 60);
+      }
+    },
+
+    updatePlayhead: function (continuousTick) {
+      if (typeof document === 'undefined') { return; }
       var playhead = document.getElementById('roll-playhead');
+      var rulerPlayhead = document.getElementById('roll-ruler-playhead');
       var timeEl = document.getElementById('roll-time');
       var ticksPerBar = (this.model && this.model.ticksPerBar) || 16;
-      var curTick = this.playheadTick;
+      var unitLength = (this.model && this.model.unitLength) || 16;
+      var bpm = (this.model && this.model.bpm) || 120;
+      var ticksPerBeat = Math.max(1, unitLength / 4);
+      var secondsPerTick = (60 / bpm) / ticksPerBeat;
 
+      var curTick = continuousTick !== undefined ? continuousTick : this.playheadTick;
       var left = curTick * this.tickWidth;
-      if (playhead) { playhead.style.left = left + 'px'; }
+
+      if (playhead) {
+        playhead.style.left = left + 'px';
+      }
+      if (rulerPlayhead) {
+        rulerPlayhead.style.left = left + 'px';
+      }
 
       if (timeEl) {
-        var barNum = Math.floor(curTick / ticksPerBar) + 1;
-        var beatNum = Math.floor((curTick % ticksPerBar) / 4) + 1;
-        timeEl.textContent = barNum + '.' + beatNum;
+        var intTick = Math.max(0, Math.floor(curTick));
+        var barNum = Math.floor(intTick / ticksPerBar) + 1;
+        var beatNum = Math.floor((intTick % ticksPerBar) / (ticksPerBar / 4)) + 1;
+        var totalSec = Math.floor(intTick * secondsPerTick);
+        var mins = Math.floor(totalSec / 60);
+        var secs = totalSec % 60;
+        var timeStr = mins + ':' + (secs < 10 ? '0' : '') + secs;
+        timeEl.textContent = barNum + '.' + beatNum + ' (' + timeStr + ')';
+      }
+
+      if (this.isPlaying) {
+        var scrollEl = document.getElementById('roll-grid-scroll');
+        if (scrollEl) {
+          var viewW = scrollEl.clientWidth || 600;
+          var curScroll = scrollEl.scrollLeft;
+          if (left > curScroll + viewW - 80) {
+            scrollEl.scrollLeft = left - 60;
+          } else if (left < curScroll) {
+            scrollEl.scrollLeft = Math.max(0, left - 60);
+          }
+        }
       }
     },
 

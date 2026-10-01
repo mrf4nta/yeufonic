@@ -11,7 +11,7 @@ PIANOROLL_JS = Path(__file__).resolve().parent.parent / "app" / "static" / "pian
 def run_node_script(js_code: str) -> dict:
     """Run a small JS snippet importing pianoroll.js and return parsed JSON result."""
     script = f"""
-    const {{ parseAbc, serializeToAbc }} = require({json.dumps(str(PIANOROLL_JS))});
+    const {{ parseAbc, serializeToAbc, PianoRoll }} = require({json.dumps(str(PIANOROLL_JS))});
     {js_code}
     """
     res = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
@@ -237,4 +237,44 @@ def test_good_score_roundtrip_and_editing():
     assert score.problems(data["edited"]) == []
     est_edited = score.estimate(data["edited"])
     assert est_edited["bars"] == est_orig["bars"]
+
+
+def test_piano_roll_transport_stepping():
+    """Verify transport operations: stepNext, stepPrev (at boundary vs mid-bar), and rewindToStart."""
+    js = """
+    PianoRoll.model = parseAbc("X:1\\nM:4/4\\nL:1/16\\nQ:1/4=120\\nK:C\\n% intro\\nV: Vocal\\nz16|z16|z16|z16|\\n");
+    PianoRoll.playheadTick = 0;
+
+    // 1. Step forward 1 bar (16 ticks per bar in 4/4 with L:1/16)
+    PianoRoll.stepNext();
+    const tick1 = PianoRoll.playheadTick;
+
+    // 2. Step forward another bar
+    PianoRoll.stepNext();
+    const tick2 = PianoRoll.playheadTick;
+
+    // 3. Move playhead midway into bar 2 (tick 37)
+    PianoRoll.seekTick(37);
+
+    // 4. Stepping back while midway into bar 2 rewinds to the start of bar 2 (tick 32)
+    PianoRoll.stepPrev();
+    const tick3 = PianoRoll.playheadTick;
+
+    // 5. Stepping back while at the start of bar 2 steps back to bar 1 (tick 16)
+    PianoRoll.stepPrev();
+    const tick4 = PianoRoll.playheadTick;
+
+    // 6. Rewind to start returns to bar 0 (tick 0)
+    PianoRoll.rewindToStart();
+    const tick5 = PianoRoll.playheadTick;
+
+    console.log(JSON.stringify({ tick1, tick2, tick3, tick4, tick5 }));
+    """
+    data = run_node_script(js)
+
+    assert data["tick1"] == 16
+    assert data["tick2"] == 32
+    assert data["tick3"] == 32
+    assert data["tick4"] == 16
+    assert data["tick5"] == 0
 

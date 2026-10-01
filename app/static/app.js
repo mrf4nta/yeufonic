@@ -1236,8 +1236,12 @@ function setScoreTempo(bpm) {
 }
 
 function paintScoreHistory() {
-  if ($('score-undo')) { $('score-undo').disabled = scoreStack.index <= 0; }
-  if ($('score-redo')) { $('score-redo').disabled = scoreStack.index >= scoreStack.items.length - 1; }
+  var canUndo = scoreStack.index > 0;
+  var canRedo = scoreStack.index < scoreStack.items.length - 1;
+  if ($('score-undo')) { $('score-undo').disabled = !canUndo; }
+  if ($('score-redo')) { $('score-redo').disabled = !canRedo; }
+  if ($('roll-undo-btn')) { $('roll-undo-btn').disabled = !canUndo; }
+  if ($('roll-redo-btn')) { $('roll-redo-btn').disabled = !canRedo; }
 }
 
 function applyScoreHistory() {
@@ -9478,6 +9482,10 @@ function wire() {
   });
   $('score-undo').addEventListener('click', undoScore);
   $('score-redo').addEventListener('click', redoScore);
+  var rollUndo = $('roll-undo-btn');
+  var rollRedo = $('roll-redo-btn');
+  if (rollUndo) { rollUndo.addEventListener('click', undoScore); }
+  if (rollRedo) { rollRedo.addEventListener('click', redoScore); }
   paintScoreHistory();
   // The Lyrics and Score editors are for working in, so a click beside them does not
   // close them: only Done does (or Esc).
@@ -9545,9 +9553,10 @@ function wire() {
 
     if (compareOpen()) { if (compareKey(event)) { event.preventDefault(); } return; }
 
-    // Undo and redo of the score, from either box.
+    // Undo and redo of the score, from either box or score editor modal.
     var focus = document.activeElement;
-    var inScore = focus === $('abc') || focus === $('score-big');
+    var inScoreModal = $('score-modal') && !$('score-modal').classList.contains('hidden');
+    var inScore = focus === $('abc') || focus === $('score-big') || inScoreModal;
     if (inScore && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
       event.preventDefault();
       if (event.shiftKey) { redoScore(); } else { undoScore(); }
@@ -9557,6 +9566,39 @@ function wire() {
       event.preventDefault();
       redoScore();
       return;
+    }
+
+    if (inScoreModal && scoreView() === 'roll') {
+      var rollTag = (focus && focus.tagName) || '';
+      if (rollTag !== 'INPUT' && rollTag !== 'TEXTAREA' && rollTag !== 'SELECT') {
+        if (event.code === 'Space') {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.togglePlay(); }
+          return;
+        }
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.stepPrev(); }
+          return;
+        }
+        if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.stepNext(); }
+          return;
+        }
+        if (event.key === 'Home') {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.rewindToStart(); }
+          return;
+        }
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+          if (window.PianoRoll && window.PianoRoll.selectedNoteId) {
+            event.preventDefault();
+            window.PianoRoll.deleteSelectedNote();
+            return;
+          }
+        }
+      }
     }
 
     // Playback shortcuts, but never while typing, and never through a window

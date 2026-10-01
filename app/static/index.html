@@ -563,8 +563,15 @@
           </select>
         </div>
         <div class="roll-transport">
-          <button id="roll-play" class="ghost compact" title="Play / Stop (Space)">▶ Play</button>
-          <span id="roll-time" class="roll-time muted small">1.1</span>
+          <button id="roll-rewind" class="ghost compact" title="Return to start (Home)">⏮</button>
+          <button id="roll-prev" class="ghost compact" title="Back 1 bar (Left arrow)">◀ Back</button>
+          <button id="roll-play" class="ghost compact" title="Play / Pause (Space)">▶ Play</button>
+          <button id="roll-next" class="ghost compact" title="Forward 1 bar (Right arrow)">Forward ▶</button>
+          <span id="roll-time" class="roll-time muted small" title="Current Bar.Beat (Time)">1.1 (0:00)</span>
+        </div>
+        <div class="roll-history">
+          <button id="roll-undo-btn" class="ghost compact" title="Undo (Ctrl+Z)" disabled>Undo</button>
+          <button id="roll-redo-btn" class="ghost compact" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
         </div>
         <div class="roll-zoom">
           <button id="roll-zoom-out" class="ghost compact" title="Zoom out">−</button>
@@ -577,7 +584,7 @@
         </div>
       </div>
       <div class="roll-hint-bar">
-        <span>Click grid to add note • Drag note to move/pitch • Drag edge to resize • Del / Backspace to remove • Space to play</span>
+        <span>Click grid to add note • Drag note to move/pitch • Drag edge to resize • Del / Backspace to remove • Left/Right to step bar • Space to play</span>
       </div>
       <div class="roll-container" id="roll-container">
         <div class="roll-corner">
@@ -586,6 +593,7 @@
         <div class="roll-timeline-header" id="roll-timeline-header">
           <div class="roll-ruler" id="roll-ruler"></div>
           <div class="roll-chords-track" id="roll-chords-track"></div>
+          <div class="roll-ruler-playhead" id="roll-ruler-playhead"></div>
         </div>
         <div class="roll-keys-col">
           <div class="roll-keys" id="roll-keys"></div>
