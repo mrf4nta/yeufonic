@@ -3186,12 +3186,12 @@ function paintCorporaBadge() {
   State.activeCorpus = shown ? shown.id : null;
   button.classList.remove('hidden');
   button.classList.add('shown');
-  button.classList.toggle('busy', Boolean(busy || training));
-  var failed = 0;
-  ids.forEach(function (id) { failed += Number(progress[id].failed) || 0; });
+  var isBusy = Boolean((shown && shown.busy) || training);
+  button.classList.toggle('busy', isBusy);
+  var failed = shown ? (Number(shown.failed) || 0) : 0;
   // A settled failure is not work in progress, so it gets its own mark rather than
   // a pulse: the count alone would read as a corpus that never finished.
-  button.classList.toggle('trouble', failed > 0 && !busy && !training);
+  button.classList.toggle('trouble', failed > 0 && !isBusy);
   var name = shown ? shown.name : 'Corpora';
   var text = esc(name || 'Corpora');
   var job = training && State.currentJob && State.currentJob.kind === 'train' ? State.currentJob : null;
@@ -3205,8 +3205,8 @@ function paintCorporaBadge() {
   var trouble = failed ? ' ' + failed + (failed === 1 ? ' song did not analyse.' : ' songs did not analyse.') : '';
   button.title = training
     ? training.name + ': training its LoRA' + (job && job.value && job.max ? ', step ' + job.value + ' of ' + job.max : '') + '. Click to open it.'
-    : busy
-    ? busy.name + ': ' + busy.done + ' of ' + busy.total + ' songs settled, still working. Click to open it.'
+    : (shown && shown.busy)
+    ? shown.name + ': ' + shown.done + ' of ' + shown.total + ' songs settled, still working. Click to open it.'
     : (shown ? shown.name + ': ' + shown.done + ' of ' + shown.total + ' settled.' + trouble + ' Click to open it.'
              : 'Your corpora. Click to open them.');
 }
