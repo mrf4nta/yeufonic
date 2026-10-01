@@ -1199,6 +1199,164 @@ def test_piano_roll_vertical_bar_markers_rendering():
     assert data["hasLyricBarMarkers"] is True
 
 
+def test_piano_roll_unified_multi_voice_selection_and_drag_left():
+    """Verify selecting notes across both Vocal and Ins voices and moving them left in lockstep."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% intro\n"
+        "V: Vocal\n"
+        "\"C\"c4 d4 e4 f4 | z16 | \"G\"g4 a4 b4 c'4 | \"C\"c'16 |\n"
+        "w: Hel- lo to you | | sing with the band | yes |\n"
+        "V: Ins\n"
+        "\"C\"C8 E8 | z16 | \"G\"G8 B8 | \"C\"C16 |\n"
+    )
+
+    js = f"""
+    const input = {json.dumps(raw_abc)};
+    PianoRoll.model = parseAbc(input);
+    PianoRoll.tickWidth = 10;
+    PianoRoll.rowHeight = 16;
+    PianoRoll.playheadTick = 32; // at bar 2
+
+    // 1. selectAll selects ALL notes across both Vocal and Ins
+    PianoRoll.selectAll();
+    const totalNoteCount = PianoRoll.model.notes.length; // 4 vocal (bar 0) + 4 vocal (bar 2) + 1 vocal (bar 3) + 2 ins (bar 0) + 2 ins (bar 2) + 1 ins (bar 3) = 14
+    const selectAllCount = PianoRoll.selectedNoteIds.length;
+    const vocalSelected = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Vocal').length;
+    const insSelected = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Ins').length;
+
+    // 2. selectRightOfPlayhead (from tick 32 onwards)
+    PianoRoll.selectRightOfPlayhead();
+    const rightSelectedIds = PianoRoll.selectedNoteIds.slice();
+    const rightVocalCount = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Vocal').length;
+    const rightInsCount = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Ins').length;
+    // Earliest startTick among right-selected notes should be >= 32
+    const minRightTick = Math.min(...PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id)).map(n => n.startTick));
+
+    // 3. Move selected notes left by 1 bar (16 ticks) to close the silent gap at bar 1 (ticks 16-31)
+    const prevVocalTicks = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Vocal').map(n => n.startTick);
+    PianoRoll.moveSelectedNotes(-16, 0);
+    const newVocalTicks = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Vocal').map(n => n.startTick);
+
+    // 4. Marquee box selection: select box covering bar 1 (tick 16 to 32)
+    // In our coordinate space: x = tick * 10 -> x from 160 to 320
+    PianoRoll.clearSelection();
+    PianoRoll.selectNotesInBox(150, 0, 180, 2000, false);
+    const boxVocalCount = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Vocal').length;
+    const boxInsCount = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Ins').length;
+
+    const outAbc = serializeToAbc(PianoRoll.model);
+    const reparsed = parseAbc(outAbc);
+    const reparsedVocalMoved = reparsed.notes.filter(n => n.voice === 'Vocal' && n.startTick >= 16 && n.startTick < 32);
+    const reparsedInsMoved = reparsed.notes.filter(n => n.voice === 'Ins' && n.startTick >= 16 && n.startTick < 32);
+
+    console.log(JSON.stringify({{
+        totalNoteCount,
+        selectAllCount,
+        vocalSelected,
+        insSelected,
+        rightVocalCount,
+        rightInsCount,
+        minRightTick,
+        prevVocalTicks,
+        newVocalTicks,
+        boxVocalCount,
+        boxInsCount,
+        reparsedVocalCount: reparsedVocalMoved.length,
+        reparsedInsCount: reparsedInsMoved.length,
+        lyricsMoved: reparsedVocalMoved.map(n => n.lyric),
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    # 1. selectAll includes ALL notes
+    assert data["selectAllCount"] == data["totalNoteCount"]
+    assert data["vocalSelected"] > 0
+    assert data["insSelected"] > 0
+
+    # 2. selectRightOfPlayhead includes both voices starting from tick 32
+    assert data["rightVocalCount"] > 0
+    assert data["rightInsCount"] > 0
+    assert data["minRightTick"] >= 32
+
+    # 3. moving left by 16 ticks shifted all selected notes by exactly 16 ticks
+    for prev_t, new_t in zip(data["prevVocalTicks"], data["newVocalTicks"]):
+        assert new_t == prev_t - 16
+
+    # 4. Box selection captured both vocal and instrument notes in the moved bar
+    assert data["boxVocalCount"] > 0
+    assert data["boxInsCount"] > 0
+
+    # 5. Serialized ABC is valid and preserves moved notes and lyrics
+    assert data["reparsedVocalCount"] == 4
+    assert data["reparsedInsCount"] == 2
+    assert data["lyricsMoved"] == ["sing", "with", "the", "band"]
+    assert score.problems(data["outAbc"]) == []
+
+
+def test_piano_roll_unified_multi_voice_deletion():
+    """Verify deleting selected notes removes notes across both Vocal and Ins in unison."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "V: Vocal\n"
+        "\"C\"c4 d4 e4 f4 | \"G\"g16 |\n"
+        "V: Ins\n"
+        "\"C\"C8 E8 | \"G\"G16 |\n"
+    )
+
+    js = f"""
+    const input = {json.dumps(raw_abc)};
+    PianoRoll.model = parseAbc(input);
+
+    const initialTotal = PianoRoll.model.notes.length;
+    // Select bar 0 notes across both voices (startTick < 16)
+    PianoRoll.selectFromTick(0);
+    // Keep only bar 0
+    PianoRoll.selectedNoteIds = PianoRoll.model.notes.filter(n => n.startTick < 16).map(n => n.id);
+    const selectedBar0Count = PianoRoll.selectedNoteIds.length;
+    const vocalInBar0 = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Vocal').length;
+    const insInBar0 = PianoRoll.model.notes.filter(n => PianoRoll.isNoteSelected(n.id) && n.voice === 'Ins').length;
+
+    // Mass delete
+    PianoRoll.deleteSelectedNotes();
+
+    const remainingTotal = PianoRoll.model.notes.length;
+    const remainingVocal = PianoRoll.model.notes.filter(n => n.voice === 'Vocal').length;
+    const remainingIns = PianoRoll.model.notes.filter(n => n.voice === 'Ins').length;
+
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    console.log(JSON.stringify({{
+        initialTotal,
+        selectedBar0Count,
+        vocalInBar0,
+        insInBar0,
+        remainingTotal,
+        remainingVocal,
+        remainingIns,
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert data["vocalInBar0"] == 4
+    assert data["insInBar0"] == 2
+    assert data["remainingTotal"] == data["initialTotal"] - data["selectedBar0Count"]
+    assert data["remainingVocal"] == 1  # only g16 remains
+    assert data["remainingIns"] == 1    # only G16 remains
+    assert score.problems(data["outAbc"]) == []
+
+
+
 
 
 

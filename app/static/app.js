@@ -9663,7 +9663,18 @@ function wire() {
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
           event.preventDefault();
-          if (window.PianoRoll) { window.PianoRoll.selectAll(); }
+          if (window.PianoRoll) {
+            if (event.shiftKey) {
+              window.PianoRoll.selectRightOfPlayhead();
+            } else {
+              window.PianoRoll.selectAll();
+            }
+          }
+          return;
+        }
+        if (event.altKey && event.key.toLowerCase() === 'a') {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.selectRightOfPlayhead(); }
           return;
         }
         if (event.key.toLowerCase() === 'l' && !event.ctrlKey && !event.metaKey && !event.altKey) {

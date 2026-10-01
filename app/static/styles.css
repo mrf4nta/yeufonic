@@ -889,10 +889,20 @@ label .lora-value:disabled { opacity: 0.6; }
   padding: 2px 0 4px;
   border-bottom: 1px solid var(--line);
 }
-.roll-voices, .roll-snap, .roll-transport, .roll-history, .roll-zoom, .roll-extra {
+.roll-voices, .roll-select, .roll-snap, .roll-transport, .roll-history, .roll-zoom, .roll-extra {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+#roll-voice-vocal.active {
+  color: #38bdf8;
+  border-color: #0284c7;
+  background: rgba(2, 132, 199, 0.2);
+}
+#roll-voice-ins.active {
+  color: #fbbf24;
+  border-color: #d97706;
+  background: rgba(217, 119, 6, 0.2);
 }
 .roll-history button:disabled {
   opacity: 0.35;

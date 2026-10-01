@@ -162,13 +162,13 @@ first.
 
 Click **Piano Roll** in the score window to open the visual MIDI editor. Rather than editing raw ABC letters, you can see and shape the melody directly on an interactive pitch and time grid.
 
-The editor displays two voices — **Vocal** (the lead singing melody) and **Ins** (the instrumental accompaniment). Use the voice buttons at the top left to switch which voice you are editing. When **Ghost** is ticked, notes from the other voice appear as translucent silhouettes, making it easy to align vocal phrasing with instrumental countermelodies and chord rhythms.
+The editor displays both score voices simultaneously — **Vocal** (the lead singing melody in sky blue) and **Ins** (the instrumental accompaniment in warm amber). Both voices are always fully active, visible, selectable, and editable. The **Draw** buttons at the top left choose which voice new notes will be assigned to when you click to add notes.
 
 #### Editing notes
 
 - **Add a note:** Click any empty cell on the grid to create a note at that pitch and time. The note auditions immediately so you can hear its tone.
-- **Select notes:** Click a note to select it. Hold <kbd>Shift</kbd> or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> while clicking to select multiple notes. To select an entire phrase or passage, click and drag a **marquee selection box** over empty grid space. Press <kbd>Ctrl</kbd>+<kbd>A</kbd> (<kbd>Cmd</kbd>+<kbd>A</kbd> on macOS) to select all notes in the active voice.
-- **Move notes:** Drag any selected note to shift its timing earlier or later, or drag vertically to transpose its pitch. When multiple notes are selected, they all move together in lockstep.
+- **Select notes:** Click a note to select it. Hold <kbd>Shift</kbd> or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> while clicking to select multiple notes across both vocal and instrumental parts. Click and drag a **marquee selection box** over empty grid space to select any phrase or passage across all voices. Press <kbd>Ctrl</kbd>+<kbd>A</kbd> (<kbd>Cmd</kbd>+<kbd>A</kbd> on macOS) or click **Select All** to select all notes across the entire score. To select all notes from the playhead cursor to the end of the song, press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> or <kbd>Alt</kbd>+<kbd>A</kbd> (or click **From Cursor ▶** in the toolbar).
+- **Move notes:** Drag any selected note to shift its timing earlier or later, or drag vertically to transpose its pitch. When multiple notes are selected — whether vocal, instrumental, or a combination of both — they all move together in lockstep, preserving their relative timing, melodies, and lyrics.
 - **Resize and duration:** Drag the right-hand edge of a note to lengthen or shorten its duration. The **Snap** selector (1/16, 1/8, or 1/4 note) constrains movement and resizing to clean musical divisions.
 - **Delete notes:** Double-click any note to delete it, or select one or more notes and press <kbd>Delete</kbd> or <kbd>Backspace</kbd>.
 - **Undo and redo:** Every note edit, move, resize, addition, and deletion is recorded in the history stack. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> (<kbd>Cmd</kbd>+<kbd>Z</kbd>) to undo, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> to redo.
@@ -212,7 +212,8 @@ Press <kbd>Space</kbd> or click **▶ Play** to start playback from the playhead
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Delete selected note(s) |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Cmd</kbd>+<kbd>Z</kbd> | Undo last edit |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo edit |
-| <kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Cmd</kbd>+<kbd>A</kbd> | Select all notes in active voice |
+| <kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Cmd</kbd>+<kbd>A</kbd> | Select all notes across both voices |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> / <kbd>Alt</kbd>+<kbd>A</kbd> | Select all notes from playhead cursor to end across both voices |
 | <kbd>L</kbd> | Edit lyric for selected vocal note |
 | <kbd>Escape</kbd> | Clear note selection, or close score window |
 

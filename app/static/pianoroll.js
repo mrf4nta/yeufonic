@@ -740,7 +740,7 @@
 
       var self = this;
 
-      // Voice selectors
+      // Voice selectors (active voice for drawing new notes)
       var vocalBtn = document.getElementById('roll-voice-vocal');
       var insBtn = document.getElementById('roll-voice-ins');
       if (vocalBtn) {
@@ -750,7 +750,17 @@
         insBtn.addEventListener('click', function () { self.setVoice('Ins'); });
       }
 
-      // Ghost checkbox
+      // Selection buttons
+      var selectAllBtn = document.getElementById('roll-select-all');
+      if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function () { self.selectAll(); });
+      }
+      var selectRightBtn = document.getElementById('roll-select-right');
+      if (selectRightBtn) {
+        selectRightBtn.addEventListener('click', function () { self.selectRightOfPlayhead(); });
+      }
+
+      // Ghost checkbox (optional backwards compatibility)
       var ghostCheck = document.getElementById('roll-ghost');
       if (ghostCheck) {
         ghostCheck.addEventListener('change', function () {
@@ -893,13 +903,10 @@
 
     setVoice: function (voiceName) {
       this.currentVoice = voiceName;
-      this.selectedNoteIds = [];
-      this.selectedNoteId = null;
       var vocalBtn = document.getElementById('roll-voice-vocal');
       var insBtn = document.getElementById('roll-voice-ins');
       if (vocalBtn) { vocalBtn.classList.toggle('active', voiceName === 'Vocal'); }
       if (insBtn) { insBtn.classList.toggle('active', voiceName === 'Ins'); }
-      this.renderNotes();
     },
 
     loadAbc: function (abcText) {
@@ -1183,9 +1190,6 @@
 
       for (var i = 0; i < this.model.notes.length; i++) {
         var note = this.model.notes[i];
-        var isCurrentVoice = note.voice === self.currentVoice;
-        if (!isCurrentVoice && !self.ghostOther) { continue; }
-
         var left = note.startTick * self.tickWidth;
         var top = (MAX_PITCH - note.pitch) * self.rowHeight;
         var width = Math.max(4, note.durationTicks * self.tickWidth - 2);
@@ -1206,16 +1210,15 @@
         }
 
         var voiceClass = (note.voice === 'Ins') ? 'ins' : 'vocal';
-        var ghostClass = isCurrentVoice ? '' : 'ghost';
         var selClass = isSelected ? 'selected' : '';
         var lyrClass = lyricText ? ' has-lyric' : '';
 
         html.push(
-          '<div class="roll-note ' + voiceClass + ' ' + ghostClass + ' ' + selClass + lyrClass + '" ' +
+          '<div class="roll-note ' + voiceClass + ' ' + selClass + lyrClass + '" ' +
           'data-note-id="' + note.id + '" ' +
           'style="left:' + left + 'px; top:' + top + 'px; width:' + width + 'px; height:' + height + 'px">' +
           '<span class="roll-note-title">' + label + '</span>' +
-          (isCurrentVoice ? '<div class="roll-note-resize"></div>' : '') +
+          '<div class="roll-note-resize"></div>' +
           '</div>'
         );
       }
@@ -1372,13 +1375,82 @@
       if (!this.model) { return; }
       var ids = [];
       for (var i = 0; i < this.model.notes.length; i++) {
-        if (this.model.notes[i].voice === this.currentVoice) {
+        ids.push(this.model.notes[i].id);
+      }
+      this.selectedNoteIds = ids;
+      this.selectedNoteId = ids.length > 0 ? ids[0] : null;
+      this.renderNotes();
+    },
+
+    selectFromTick: function (fromTick) {
+      if (!this.model) { return; }
+      fromTick = (fromTick !== undefined && fromTick !== null) ? fromTick : (this.playheadTick || 0);
+      var ids = [];
+      for (var i = 0; i < this.model.notes.length; i++) {
+        if (this.model.notes[i].startTick >= fromTick) {
           ids.push(this.model.notes[i].id);
         }
       }
       this.selectedNoteIds = ids;
       this.selectedNoteId = ids.length > 0 ? ids[0] : null;
       this.renderNotes();
+    },
+
+    selectRightOfPlayhead: function () {
+      this.selectFromTick(this.playheadTick || 0);
+    },
+
+    selectNotesInBox: function (boxL, boxT, boxW, boxH, addToSelection) {
+      if (!this.model) { return []; }
+      var newSel = addToSelection ? (this.selectedNoteIds || []).slice() : [];
+      for (var j = 0; j < this.model.notes.length; j++) {
+        var note = this.model.notes[j];
+        var nLeft = note.startTick * this.tickWidth;
+        var nWidth = Math.max(4, note.durationTicks * this.tickWidth - 2);
+        var nRight = nLeft + nWidth;
+        var nTop = (MAX_PITCH - note.pitch) * this.rowHeight;
+        var nBottom = nTop + (this.rowHeight - 2);
+
+        if (nLeft < (boxL + boxW) && nRight > boxL && nTop < (boxT + boxH) && nBottom > boxT) {
+          if (newSel.indexOf(note.id) === -1) {
+            newSel.push(note.id);
+          }
+        }
+      }
+      this.selectedNoteIds = newSel;
+      this.selectedNoteId = newSel.length > 0 ? newSel[0] : null;
+      return newSel;
+    },
+
+    moveSelectedNotes: function (deltaTicks, deltaPitch) {
+      if (!this.model || !this.hasSelection()) { return; }
+      deltaTicks = deltaTicks || 0;
+      deltaPitch = deltaPitch || 0;
+
+      var selected = [];
+      var minStart = Infinity;
+      var minPitch = Infinity;
+      var maxPitch = -Infinity;
+
+      for (var i = 0; i < this.model.notes.length; i++) {
+        var n = this.model.notes[i];
+        if (this.isNoteSelected(n.id)) {
+          selected.push(n);
+          if (n.startTick < minStart) { minStart = n.startTick; }
+          if (n.pitch < minPitch) { minPitch = n.pitch; }
+          if (n.pitch > maxPitch) { maxPitch = n.pitch; }
+        }
+      }
+      if (selected.length === 0) { return; }
+
+      var clampedDTicks = Math.max(-minStart, deltaTicks);
+      var clampedDPitch = Math.max(MIN_PITCH - minPitch, Math.min(MAX_PITCH - maxPitch, deltaPitch));
+
+      for (var j = 0; j < selected.length; j++) {
+        selected[j].startTick += clampedDTicks;
+        selected[j].pitch += clampedDPitch;
+      }
+      this.commitEdit();
     },
 
     getSelectionBox: function () {
@@ -1444,7 +1516,6 @@
 
         if (noteEl) {
           // Move or select note(s)
-          if (noteEl.classList.contains('ghost')) { return; }
           e.preventDefault();
           e.stopPropagation();
           var nId = parseInt(noteEl.dataset.noteId, 10);
@@ -1467,16 +1538,16 @@
             }
           }
 
-          playTone(mNote.pitch, 0.2, self.currentVoice);
+          playTone(mNote.pitch, 0.2, mNote.voice || self.currentVoice);
 
-          // Prepare list of all selected notes to move in lockstep
+          // Prepare list of all selected notes to move in lockstep across all voices
           var notesToMove = [];
           var minStart = Infinity;
           var minPitch = Infinity;
           var maxPitch = -Infinity;
           for (var i = 0; i < self.model.notes.length; i++) {
             var n = self.model.notes[i];
-            if (self.isNoteSelected(n.id) && n.voice === self.currentVoice) {
+            if (self.isNoteSelected(n.id)) {
               notesToMove.push({
                 note: n,
                 origStartTick: n.startTick,
@@ -1528,7 +1599,7 @@
       // Double click note to delete
       gridEl.addEventListener('dblclick', function (e) {
         var noteEl = e.target.closest('.roll-note');
-        if (noteEl && !noteEl.classList.contains('ghost')) {
+        if (noteEl) {
           e.preventDefault();
           e.stopPropagation();
           var id = parseInt(noteEl.dataset.noteId, 10);
@@ -1578,7 +1649,7 @@
           }
 
           if (clampedDPitch !== dragState.lastPitchDelta) {
-            playTone(dragState.leadNote.pitch, 0.15, self.currentVoice);
+            playTone(dragState.leadNote.pitch, 0.15, dragState.leadNote.voice || self.currentVoice);
             dragState.lastPitchDelta = clampedDPitch;
           }
 
@@ -1609,24 +1680,7 @@
               boxEl.classList.remove('hidden');
             }
 
-            var newSel = dragState.shiftKey ? dragState.origSelectedIds.slice() : [];
-            for (var j = 0; j < self.model.notes.length; j++) {
-              var note = self.model.notes[j];
-              if (note.voice !== self.currentVoice) { continue; }
-              var nLeft = note.startTick * self.tickWidth;
-              var nWidth = Math.max(4, note.durationTicks * self.tickWidth - 2);
-              var nRight = nLeft + nWidth;
-              var nTop = (MAX_PITCH - note.pitch) * self.rowHeight;
-              var nBottom = nTop + (self.rowHeight - 2);
-
-              if (nLeft < (boxL + boxW) && nRight > boxL && nTop < (boxT + boxH) && nBottom > boxT) {
-                if (newSel.indexOf(note.id) === -1) {
-                  newSel.push(note.id);
-                }
-              }
-            }
-            self.selectedNoteIds = newSel;
-            self.selectedNoteId = newSel.length > 0 ? newSel[0] : null;
+            self.selectNotesInBox(boxL, boxT, boxW, boxH, dragState.shiftKey);
             self.updateSelectionVisuals();
           }
         }
