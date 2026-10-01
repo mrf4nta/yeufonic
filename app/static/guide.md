@@ -158,6 +158,60 @@ it works offline afterwards. **Play** fetches whatever the current score needs a
 **Get the sounds** fetches the same without playing, for anyone who would rather have it ready
 first.
 
+### The Piano Roll
+
+Click **Piano Roll** in the score window to open the visual MIDI editor. Rather than editing raw ABC letters, you can see and shape the melody directly on an interactive pitch and time grid.
+
+The editor displays two voices — **Vocal** (the lead singing melody) and **Ins** (the instrumental accompaniment). Use the voice buttons at the top left to switch which voice you are editing. When **Ghost** is ticked, notes from the other voice appear as translucent silhouettes, making it easy to align vocal phrasing with instrumental countermelodies and chord rhythms.
+
+#### Editing notes
+
+- **Add a note:** Click any empty cell on the grid to create a note at that pitch and time. The note auditions immediately so you can hear its tone.
+- **Select notes:** Click a note to select it. Hold <kbd>Shift</kbd> or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> while clicking to select multiple notes. To select an entire phrase or passage, click and drag a **marquee selection box** over empty grid space. Press <kbd>Ctrl</kbd>+<kbd>A</kbd> (<kbd>Cmd</kbd>+<kbd>A</kbd> on macOS) to select all notes in the active voice.
+- **Move notes:** Drag any selected note to shift its timing earlier or later, or drag vertically to transpose its pitch. When multiple notes are selected, they all move together in lockstep.
+- **Resize and duration:** Drag the right-hand edge of a note to lengthen or shorten its duration. The **Snap** selector (1/16, 1/8, or 1/4 note) constrains movement and resizing to clean musical divisions.
+- **Delete notes:** Double-click any note to delete it, or select one or more notes and press <kbd>Delete</kbd> or <kbd>Backspace</kbd>.
+- **Undo and redo:** Every note edit, move, resize, addition, and deletion is recorded in the history stack. Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> (<kbd>Cmd</kbd>+<kbd>Z</kbd>) to undo, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> to redo.
+- **Audition keys:** Click any key on the left-hand piano keyboard to hear its pitch.
+- **Maximize:** Click **Maximize** in the top toolbar to expand the piano roll to the full width of your browser window.
+
+#### Timeline, sections, and chords
+
+Along the top ruler, the timeline displays measure numbers and section boundaries:
+- **Rename sections:** Click any section marker badge (`intro`, `verse`, `chorus`, etc.) to edit its name or reassign it.
+- **Edit chords:** Directly below the bar ruler, the chord track displays the song's harmonic progression. Click an existing chord badge to rename it (for example, change `C` to `Am7` or `G/B`), or click an empty bar slot to place a new chord.
+
+#### Lyrics and karaoke tracking
+
+At the bottom of the piano roll, a dedicated lyrics track aligns each syllable with the vocal melody:
+- **Auto-matching:** Click **Match Lyrics** to take the lyrics from the song editor and automatically distribute them across the vocal notes section by section. An intelligent syllable splitter divides multi-syllable words across melody notes so vocal phrases are filled naturally.
+- **Editing syllables:** Click any lyric tag (or select a vocal note and press <kbd>L</kbd>) to edit its text. If you enter space- or hyphen-separated syllables (for instance, `Hel- lo world`), they automatically flow across consecutive vocal notes.
+- **Hover highlighting:** Hovering over a lyric tag highlights the corresponding note on the piano roll grid, and hovering a vocal note highlights its lyric tag below.
+- **Karaoke dancing ball:** During playback, an animated dancing ball arcs across each note as it is sung, and the active syllable and grid note illuminate with a real-time glow.
+
+#### Playback and the click track
+
+Press <kbd>Space</kbd> or click **▶ Play** to start playback from the playhead cursor. The playhead line sweeps across the grid, updating the current bar, beat, and elapsed time counter.
+
+- **Audible click track (metronome):** Playback includes an audible click track by default, with an accented woodblock click on beat 1 of each bar and softer clicks on inner beats. There are no flashing lights or visual distractions — just pure timing guidance. Press <kbd>C</kbd> or <kbd>M</kbd> (or click **Click** in the transport bar) to toggle the metronome on or off at any moment.
+- **Stepping measures:** Press <kbd>Left Arrow</kbd> and <kbd>Right Arrow</kbd> to step backward and forward bar by bar, or press <kbd>Home</kbd> to jump straight back to the beginning.
+
+#### Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| <kbd>Space</kbd> | Play / Pause playback |
+| <kbd>Left Arrow</kbd> | Step back one bar |
+| <kbd>Right Arrow</kbd> | Step forward one bar |
+| <kbd>Home</kbd> | Return playhead to start (bar 1) |
+| <kbd>C</kbd> or <kbd>M</kbd> | Toggle audible click track (metronome) on / off |
+| <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Delete selected note(s) |
+| <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Cmd</kbd>+<kbd>Z</kbd> | Undo last edit |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo edit |
+| <kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Cmd</kbd>+<kbd>A</kbd> | Select all notes in active voice |
+| <kbd>L</kbd> | Edit lyric for selected vocal note |
+| <kbd>Escape</kbd> | Clear note selection, or close score window |
+
 ### Harmony
 
 YuE2 left alone tends to write one four-chord loop and stay there. The **Harmony** slider pushes it

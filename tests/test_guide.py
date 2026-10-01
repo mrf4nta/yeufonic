@@ -28,7 +28,7 @@ def test_every_feature_has_a_section():
     headings are pinned to the features they describe."""
     text = GUIDE.read_text(encoding="utf-8")
     headings = set(re.findall(r"^#{2,3} (.+)$", text, re.M))
-    for wanted in ("Your first song", "Harmony", "Rendering", "Covering a recording",
+    for wanted in ("Your first song", "The Piano Roll", "Harmony", "Rendering", "Covering a recording",
                    "Instrumentals", "Voices", "Corpora", "Style LoRAs", "Stems",
                    "The library", "Settings", "When something is wrong"):
         assert any(wanted in head for head in headings), f"the guide says nothing about {wanted}"
