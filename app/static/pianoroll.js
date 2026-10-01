@@ -571,6 +571,16 @@
         });
       }
 
+      // Maximize toggle
+      var maxBtn = document.getElementById('roll-maximize');
+      if (maxBtn) {
+        maxBtn.addEventListener('click', function () {
+          if (global.toggleScoreMaximized) {
+            global.toggleScoreMaximized();
+          }
+        });
+      }
+
       // Show / Hide ABC text split toggle
       var toggleTextBtn = document.getElementById('roll-toggle-text');
       if (toggleTextBtn) {

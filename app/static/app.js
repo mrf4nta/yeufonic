@@ -2084,12 +2084,63 @@ function setScoreView(name) {
   paintScoreView();
 }
 
+function isScoreMaximized() {
+  var modal = $('score-modal');
+  return modal ? modal.classList.contains('maximized') : false;
+}
+
+function paintScoreMaximized() {
+  var isMax = isScoreMaximized();
+  var scoreMaxBtn = $('score-maximize');
+  var rollMaxBtn = $('roll-maximize');
+  if (scoreMaxBtn) {
+    scoreMaxBtn.textContent = isMax ? 'Restore' : 'Maximize';
+    scoreMaxBtn.title = isMax ? 'Restore standard size' : 'Maximize (Full width)';
+  }
+  if (rollMaxBtn) {
+    rollMaxBtn.textContent = isMax ? 'Restore' : 'Maximize';
+    rollMaxBtn.title = isMax ? 'Restore standard size' : 'Maximize to full browser width';
+  }
+}
+
+function toggleScoreMaximized() {
+  var modal = $('score-modal');
+  var box = modal ? modal.querySelector('.modal-box.score') : null;
+  if (!modal || !box) { return; }
+  var nextState = !modal.classList.contains('maximized');
+  modal.classList.toggle('maximized', nextState);
+  box.classList.toggle('maximized', nextState);
+  try {
+    localStorage.setItem('yeufonic_score_max', nextState ? '1' : '0');
+  } catch (err) {}
+  paintScoreMaximized();
+  if (window.PianoRoll && scoreView() === 'roll') {
+    window.PianoRoll.ensurePlayheadVisible();
+  }
+}
+window.toggleScoreMaximized = toggleScoreMaximized;
+
+function loadScoreMaximized() {
+  var saved = null;
+  try { saved = localStorage.getItem('yeufonic_score_max'); } catch (err) {}
+  if (saved === '1') {
+    var modal = $('score-modal');
+    var box = modal ? modal.querySelector('.modal-box.score') : null;
+    if (modal && box) {
+      modal.classList.add('maximized');
+      box.classList.add('maximized');
+    }
+  }
+  paintScoreMaximized();
+}
+
 function openScoreEditor(view) {
   $('score-big').value = $('abc').value;
   paintScoreTempo();
   if (scoreStack.items[scoreStack.index] !== $('abc').value) { scoreReset($('abc').value); }
   if (view) { State.scoreView = view; }
   paintScoreView();
+  paintScoreMaximized();
   updateScoreCount();
   $('score-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -9486,6 +9537,11 @@ function wire() {
   var rollRedo = $('roll-redo-btn');
   if (rollUndo) { rollUndo.addEventListener('click', undoScore); }
   if (rollRedo) { rollRedo.addEventListener('click', redoScore); }
+  var scoreMaxBtn = $('score-maximize');
+  if (scoreMaxBtn) { scoreMaxBtn.addEventListener('click', toggleScoreMaximized); }
+  var rollMaxBtn = $('roll-maximize');
+  if (rollMaxBtn) { rollMaxBtn.addEventListener('click', toggleScoreMaximized); }
+  loadScoreMaximized();
   paintScoreHistory();
   // The Lyrics and Score editors are for working in, so a click beside them does not
   // close them: only Done does (or Esc).

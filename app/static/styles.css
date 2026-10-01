@@ -854,6 +854,24 @@ label .lora-value:disabled { opacity: 0.6; }
 .modal-box.score.roll-active:not(.show-split) .score-split {
   display: none;
 }
+/* Maximized score modal: full browser width and height */
+#score-modal.maximized {
+  padding: 6px;
+  box-sizing: border-box;
+}
+.modal-box.score.maximized {
+  width: calc(100vw - 12px) !important;
+  max-width: none !important;
+  height: calc(100vh - 12px) !important;
+  max-height: none !important;
+  border-radius: 10px;
+}
+.modal-box.score.maximized.roll-active {
+  width: calc(100vw - 12px) !important;
+  max-width: none !important;
+  height: calc(100vh - 12px) !important;
+  max-height: none !important;
+}
 #view-roll {
   display: flex;
   flex-direction: column;
