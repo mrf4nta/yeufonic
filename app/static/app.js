@@ -9694,6 +9694,21 @@ function wire() {
           if (window.PianoRoll) { window.PianoRoll.toggleChords(); }
           return;
         }
+        if (event.key === '+' || event.key === '=' || event.code === 'NumpadAdd' || (event.code === 'Equal' && !event.altKey)) {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.zoomIn(); }
+          return;
+        }
+        if (event.key === '-' || event.key === '_' || event.code === 'NumpadSubtract' || (event.code === 'Minus' && !event.altKey)) {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.zoomOut(); }
+          return;
+        }
+        if ((event.key.toLowerCase() === 'f' || event.key === '0') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          if (window.PianoRoll) { window.PianoRoll.scrollToNotes(); }
+          return;
+        }
       }
     }
 

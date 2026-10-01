@@ -823,21 +823,28 @@
       var zoomOut = document.getElementById('roll-zoom-out');
       var zoomFit = document.getElementById('roll-zoom-fit');
       if (zoomIn) {
-        zoomIn.addEventListener('click', function () {
-          self.tickWidth = Math.min(36, self.tickWidth + 4);
-          self.renderAll();
-        });
+        zoomIn.addEventListener('click', function () { self.zoomIn(); });
       }
       if (zoomOut) {
-        zoomOut.addEventListener('click', function () {
-          self.tickWidth = Math.max(8, self.tickWidth - 4);
-          self.renderAll();
-        });
+        zoomOut.addEventListener('click', function () { self.zoomOut(); });
       }
       if (zoomFit) {
-        zoomFit.addEventListener('click', function () {
-          self.scrollToNotes();
-        });
+        zoomFit.addEventListener('click', function () { self.scrollToNotes(); });
+      }
+
+      // Mouse wheel zoom (Ctrl + wheel or Alt + wheel on grid)
+      var gridScroll = document.getElementById('roll-grid-scroll');
+      if (gridScroll) {
+        gridScroll.addEventListener('wheel', function (e) {
+          if (e.ctrlKey || e.altKey || e.metaKey) {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+              self.zoomIn(2);
+            } else if (e.deltaY > 0) {
+              self.zoomOut(2);
+            }
+          }
+        }, { passive: false });
       }
 
       // Maximize toggle
@@ -1800,6 +1807,45 @@
         var viewH = scrollEl.clientHeight || 400;
         scrollEl.scrollTop = Math.max(0, rowTop - viewH / 2);
       }
+    },
+
+    zoomIn: function (step) {
+      step = step || 4;
+      return this.setZoom(this.tickWidth + step);
+    },
+
+    zoomOut: function (step) {
+      step = step || 4;
+      return this.setZoom(this.tickWidth - step);
+    },
+
+    setZoom: function (newTickWidth) {
+      newTickWidth = Math.max(6, Math.min(48, Math.round(newTickWidth)));
+      if (newTickWidth === this.tickWidth) { return this.tickWidth; }
+
+      var gridScroll = (typeof document !== 'undefined') ? document.getElementById('roll-grid-scroll') : null;
+      var anchorTick = (this.playheadTick !== undefined) ? this.playheadTick : 0;
+
+      if (gridScroll) {
+        var viewW = gridScroll.clientWidth || 600;
+        var centerPixel = gridScroll.scrollLeft + viewW / 2;
+        var playheadPixel = (this.playheadTick || 0) * this.tickWidth;
+        if (playheadPixel >= gridScroll.scrollLeft && playheadPixel <= gridScroll.scrollLeft + viewW) {
+          anchorTick = this.playheadTick || 0;
+        } else {
+          anchorTick = centerPixel / Math.max(1, this.tickWidth);
+        }
+      }
+
+      this.tickWidth = newTickWidth;
+      this.renderAll();
+
+      if (gridScroll) {
+        var viewW = gridScroll.clientWidth || 600;
+        var newAnchorPixel = anchorTick * newTickWidth;
+        gridScroll.scrollLeft = Math.max(0, Math.round(newAnchorPixel - viewW / 2));
+      }
+      return this.tickWidth;
     },
 
     toggleMetronome: function (forceState) {

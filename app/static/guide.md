@@ -214,6 +214,9 @@ Press <kbd>Space</kbd> or click **▶ Play** to start playback from the playhead
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Redo edit |
 | <kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Cmd</kbd>+<kbd>A</kbd> | Select all notes across both voices |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> / <kbd>Alt</kbd>+<kbd>A</kbd> | Select all notes from playhead cursor to end across both voices |
+| <kbd>+</kbd> or <kbd>=</kbd> | Zoom in timeline horizontal scale |
+| <kbd>-</kbd> or <kbd>_</kbd> | Zoom out timeline horizontal scale |
+| <kbd>F</kbd> or <kbd>0</kbd> | Scroll to notes (Fit view) |
 | <kbd>L</kbd> | Edit lyric for selected vocal note |
 | <kbd>Escape</kbd> | Clear note selection, or close score window |
 

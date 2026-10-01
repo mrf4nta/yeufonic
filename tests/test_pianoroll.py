@@ -1356,6 +1356,53 @@ def test_piano_roll_unified_multi_voice_deletion():
     assert score.problems(data["outAbc"]) == []
 
 
+def test_piano_roll_zoom_in_and_out():
+    """Verify zooming in (+) and out (-) adjusts tickWidth within bounds."""
+    raw_abc = "X:1\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\n\"C\"c4 d4 e4 f4 | \"G\"g16 |\n"
+
+    js = f"""
+    const input = {json.dumps(raw_abc)};
+    PianoRoll.model = parseAbc(input);
+    PianoRoll.tickWidth = 12;
+
+    // Zoom in by default step (4)
+    PianoRoll.zoomIn();
+    const zoomedIn1 = PianoRoll.tickWidth; // 16
+
+    // Zoom in again
+    PianoRoll.zoomIn(8);
+    const zoomedIn2 = PianoRoll.tickWidth; // 24
+
+    // Zoom out by 4
+    PianoRoll.zoomOut();
+    const zoomedOut1 = PianoRoll.tickWidth; // 20
+
+    // Zoom out to lower clamp bound (min 6)
+    for (let i = 0; i < 10; i++) {{ PianoRoll.zoomOut(); }}
+    const minClamped = PianoRoll.tickWidth;
+
+    // Zoom in to upper clamp bound (max 48)
+    for (let i = 0; i < 20; i++) {{ PianoRoll.zoomIn(); }}
+    const maxClamped = PianoRoll.tickWidth;
+
+    console.log(JSON.stringify({{
+        zoomedIn1,
+        zoomedIn2,
+        zoomedOut1,
+        minClamped,
+        maxClamped
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert data["zoomedIn1"] == 16
+    assert data["zoomedIn2"] == 24
+    assert data["zoomedOut1"] == 20
+    assert data["minClamped"] == 6
+    assert data["maxClamped"] == 48
+
+
+
 
 
 
