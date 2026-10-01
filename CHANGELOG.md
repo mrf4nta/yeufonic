@@ -36,6 +36,14 @@ cannot creep back in.
 
 ## Unreleased
 
+### Added
+
+- **Themed confirmation and input dialogs.** Destructive actions (deleting takes, stems, recordings,
+  corpora, LoRAs, spaces, or checkpoints, and discarding unsaved score changes) use an in-app modal
+  styled to match the application theme, with focus initially on Cancel for safety, replacing
+  browser popups. Creating and renaming spaces and takes use in-app text prompts with Enter
+  submission, Escape dismissal, and focus trapping.
+
 ### Changed
 
 - **The external model's words win.** With an external LLM set to hear a recording's lyrics, a reply
@@ -53,6 +61,10 @@ cannot creep back in.
 
 ### Fixed
 
+- **Corpora badge status scoped to the active corpus.** The top bar badge previously accumulated
+  failed tracks across all corpora in the library, causing it to remain red and report errors in its
+  tooltip even after switching to a corpus whose tracks had all succeeded. The badge now reflects the
+  failure count and working state of the shown corpus.
 - A plan that looped could run for ten minutes or more, mostly rests, and the render then ran to the length cap with long repeated intros and sometimes no vocal. It happened with a style LoRA, a short style and Calm plan variety together. A written plan far longer than a song (over 8 minutes, or well past a longer cap), or a song whose vocal line has no notes at all, is now written once more with a new seed, like any unreadable plan, and the take fails with advice if the second comes out the same: describe the style in more detail, or use Normal plan variety with a LoRA.
 
 ## 0.0.13 (2026-09-30)
