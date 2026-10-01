@@ -2769,6 +2769,7 @@ function paintSource() {
   paintHearButton();
   paintAudition();
 
+  var pickerLabel = $('source-picker-label');
   var isMidi = Boolean(source && source.filename && source.filename.match(/\.midi?$/i));
   if (pickerLabel) {
     pickerLabel.textContent = source
