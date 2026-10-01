@@ -932,7 +932,7 @@ label .lora-value:disabled { opacity: 0.6; }
 .roll-container {
   display: grid;
   grid-template-columns: 68px 1fr;
-  grid-template-rows: 44px 1fr;
+  grid-template-rows: 66px 1fr;
   flex: 1 1 auto;
   min-height: 380px;
   background: var(--panel);
@@ -948,14 +948,28 @@ label .lora-value:disabled { opacity: 0.6; }
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  flex-direction: column;
   z-index: 10;
+}
+.roll-corner-labels {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+.roll-corner-row {
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px dashed rgb(var(--line) / 0.4);
+}
+.roll-corner-row:last-child {
+  border-bottom: none;
 }
 .roll-timeline-header {
   grid-column: 2;
@@ -964,7 +978,7 @@ label .lora-value:disabled { opacity: 0.6; }
   background: var(--card-2);
   border-bottom: 1px solid var(--line);
   position: relative;
-  height: 44px;
+  height: 66px;
   z-index: 5;
 }
 .roll-ruler {
@@ -1032,6 +1046,78 @@ label .lora-value:disabled { opacity: 0.6; }
 }
 .roll-chord-tag:hover {
   background: rgb(var(--accent-a-rgb) / 0.45);
+}
+.roll-lyrics-track {
+  height: 22px;
+  position: relative;
+  border-top: 1px dashed rgb(var(--line) / 0.4);
+  background: rgb(var(--song-rgb, 120 180 255) / 0.03);
+}
+.roll-lyric-slot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed rgb(var(--line) / 0.3);
+  pointer-events: none;
+}
+.roll-lyric-tag {
+  position: absolute;
+  top: 2px;
+  height: 18px;
+  line-height: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgb(var(--song-rgb, 120 180 255) / 0.22);
+  color: var(--text-strong);
+  border: 1px solid rgb(var(--song-rgb, 120 180 255) / 0.5);
+  cursor: pointer;
+  z-index: 3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  box-sizing: border-box;
+}
+.roll-lyric-tag:hover {
+  background: rgb(var(--song-rgb, 120 180 255) / 0.45);
+  border-color: var(--song);
+  z-index: 10;
+  transform: scale(1.04);
+}
+.roll-lyric-tag.empty {
+  background: transparent;
+  color: var(--muted);
+  border: 1px dashed rgb(var(--line) / 0.6);
+  opacity: 0.35;
+  font-size: 10px;
+  padding: 0 3px;
+  min-width: 14px;
+  text-align: center;
+}
+.roll-lyrics-track:hover .roll-lyric-tag.empty {
+  opacity: 0.75;
+}
+.roll-lyric-tag.empty:hover {
+  opacity: 1;
+  background: rgb(var(--card-rgb, 255 255 255) / 0.15);
+  border-color: var(--song);
+  color: var(--song);
+}
+.roll-lyric-tag.highlight-from-note {
+  background: rgb(var(--song-rgb, 120 180 255) / 0.65) !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 6px rgb(var(--song-rgb, 120 180 255) / 0.85);
+  z-index: 11;
+}
+.roll-note.highlight-from-lyric {
+  box-shadow: 0 0 8px 2px rgb(var(--song-rgb, 120 180 255) / 0.9) !important;
+  border-color: #ffffff !important;
+  z-index: 10 !important;
+}
+.roll-note.has-lyric {
+  border-color: #bbf2f6;
 }
 .roll-keys-col {
   grid-column: 1;

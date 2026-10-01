@@ -9666,6 +9666,13 @@ function wire() {
           if (window.PianoRoll) { window.PianoRoll.selectAll(); }
           return;
         }
+        if (event.key.toLowerCase() === 'l' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          if (window.PianoRoll && (window.PianoRoll.hasSelection ? window.PianoRoll.hasSelection() : window.PianoRoll.selectedNoteId)) {
+            event.preventDefault();
+            window.PianoRoll.editSelectedNoteLyric();
+            return;
+          }
+        }
       }
     }
 

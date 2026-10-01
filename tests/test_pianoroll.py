@@ -11,7 +11,7 @@ PIANOROLL_JS = Path(__file__).resolve().parent.parent / "app" / "static" / "pian
 def run_node_script(js_code: str) -> dict:
     """Run a small JS snippet importing pianoroll.js and return parsed JSON result."""
     script = f"""
-    const {{ parseAbc, serializeToAbc, PianoRoll }} = require({json.dumps(str(PIANOROLL_JS))});
+    const {{ parseAbc, serializeToAbc, PianoRoll, extractLyricsSections, tokenizeLyricLines, matchScoreSectionToLyricSection }} = require({json.dumps(str(PIANOROLL_JS))});
     {js_code}
     """
     res = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
@@ -389,6 +389,177 @@ def test_piano_roll_group_moving_and_gap_filling():
     data = run_node_script(js)
 
     assert data["newStartTicks"] == [0, 4, 8, 12, 16, 20]
+    assert score.problems(data["outAbc"]) == []
+
+
+def test_abc_lyrics_parsing_and_serialization_roundtrip():
+    """Verify that ABC with w: lyric lines parses syllables onto Vocal notes and roundtrips cleanly."""
+    raw_abc = (
+        "X:1\n"
+        "T:Lyrics Test\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"C\"C4 D4 E4 G4 | \"G\"G4 F4 E4 D4 | \"Am\"A4 G4 E4 D4 | \"F\"C16 |\n"
+        "w: Hel- lo beau- ti- | ful morn- ing light | shin- ing so bright | _ |\n"
+        "V: Ins\n"
+        "\"C\"C16 | \"G\"G16 | \"Am\"A16 | \"F\"F16 |\n"
+    )
+    js = f"""
+    const model = parseAbc({json.dumps(raw_abc)});
+    const vocalNotes = model.notes.filter(n => n.voice === 'Vocal');
+    const lyrics = vocalNotes.map(n => n.lyric);
+    const outputAbc = serializeToAbc(model);
+    const reparsed = parseAbc(outputAbc);
+    const reparsedLyrics = reparsed.notes.filter(n => n.voice === 'Vocal').map(n => n.lyric);
+
+    console.log(JSON.stringify({{
+        lyrics,
+        reparsedLyrics,
+        outputAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    expected = ["Hel-", "lo", "beau-", "ti-", "ful", "morn-", "ing", "light", "shin-", "ing", "so", "bright", ""]
+    assert data["lyrics"] == expected
+    assert data["reparsedLyrics"] == expected
+    assert "w: Hel- lo beau- ti- | ful morn- ing light | shin- ing so bright |" in data["outputAbc"]
+    assert score.problems(data["outputAbc"]) == []
+
+
+def test_piano_roll_edit_lyrics_and_distribution():
+    """Verify editLyricForNote updates single notes or distributes multiple words across notes."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"C\"C4 D4 E4 G4 | \"G\"G4 F4 E4 D4 |\n"
+        "V: Ins\n"
+        "z16 | z16 |\n"
+    )
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.currentVoice = "Vocal";
+    const vocalNotes = PianoRoll.model.notes.filter(n => n.voice === 'Vocal');
+
+    // 1. Single syllable edit
+    global.window = {{ prompt: () => "Sing" }};
+    PianoRoll.editLyricForNote(vocalNotes[0].id);
+
+    // 2. Multi-syllable distribution starting at note 1
+    global.window = {{ prompt: () => "to the morn- ing sun" }};
+    PianoRoll.editLyricForNote(vocalNotes[1].id);
+
+    const resultingLyrics = PianoRoll.model.notes.filter(n => n.voice === 'Vocal').map(n => n.lyric);
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    console.log(JSON.stringify({{
+        resultingLyrics,
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert data["resultingLyrics"][:6] == ["Sing", "to", "the", "morn-", "ing", "sun"]
+    assert "w: Sing to the morn- | ing sun |" in data["outAbc"]
+    assert score.problems(data["outAbc"]) == []
+
+
+def test_piano_roll_match_song_lyrics():
+    """Verify auto-matching song lyrics text to vocal melody notes section by section."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"C\"C4 D4 E4 G4 | \"G\"G4 F4 E4 D4 |\n"
+        "V: Ins\n"
+        "z16 | z16 |\n"
+        "% chorus\n"
+        "V: Vocal\n"
+        "\"F\"A4 B4 c4 d4 | \"C\"e16 |\n"
+        "V: Ins\n"
+        "z16 | z16 |\n"
+    )
+    song_lyrics = (
+        "[Verse]\n"
+        "Walk-ing down the lone-ly ave-nue\n\n"
+        "[Chorus]\n"
+        "We are fly-ing high\n"
+    )
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.matchSongLyrics({json.dumps(song_lyrics)});
+
+    const verseNotes = PianoRoll.model.notes.filter(n => n.voice === 'Vocal' && n.startTick < 32);
+    const chorusNotes = PianoRoll.model.notes.filter(n => n.voice === 'Vocal' && n.startTick >= 32);
+    const outAbc = serializeToAbc(PianoRoll.model);
+
+    console.log(JSON.stringify({{
+        verseLyrics: verseNotes.map(n => n.lyric),
+        chorusLyrics: chorusNotes.map(n => n.lyric),
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert data["verseLyrics"][:6] == ["Walk-", "ing", "down", "the", "lone-", "ly"]
+    assert data["chorusLyrics"][:4] == ["We", "are", "fly-", "ing"]
+    assert "w: Walk- ing down the | lone- ly ave- nue |" in data["outAbc"]
+    assert "w: We are fly- ing | high |" in data["outAbc"]
+    assert score.problems(data["outAbc"]) == []
+
+
+def test_lyrics_move_and_delete_with_notes():
+    """Verify moving or deleting notes updates lyric alignment and ABC serialization."""
+    raw_abc = (
+        "X:1\n"
+        "M:4/4\n"
+        "L:1/16\n"
+        "Q:1/4=120\n"
+        "K:C\n"
+        "% verse\n"
+        "V: Vocal\n"
+        "\"C\"C4 D4 E4 G4 | \"G\"G4 F4 E4 D4 |\n"
+        "w: Hel- lo beau- ti- | ful morn- ing light |\n"
+        "V: Ins\n"
+        "z16 | z16 |\n"
+    )
+    js = f"""
+    PianoRoll.model = parseAbc({json.dumps(raw_abc)});
+    PianoRoll.currentVoice = "Vocal";
+
+    // Delete note with lyric 'beau-' (3rd note, index 2)
+    const delId = PianoRoll.model.notes[2].id;
+    PianoRoll.deleteNote(delId);
+
+    // Move first note from tick 0 to tick 2
+    PianoRoll.model.notes[0].startTick = 2;
+
+    const outAbc = serializeToAbc(PianoRoll.model);
+    const reparsed = parseAbc(outAbc);
+    const remainingLyrics = reparsed.notes.filter(n => n.voice === 'Vocal').map(n => n.lyric);
+
+    console.log(JSON.stringify({{
+        remainingLyrics,
+        outAbc
+    }}));
+    """
+    data = run_node_script(js)
+
+    assert "beau-" not in data["remainingLyrics"]
+    assert data["remainingLyrics"] == ["Hel-", "lo", "ti-", "ful", "morn-", "ing", "light"]
     assert score.problems(data["outAbc"]) == []
 
 

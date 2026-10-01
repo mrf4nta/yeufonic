@@ -580,21 +580,27 @@
           <button id="roll-zoom-fit" class="ghost compact" title="Scroll to notes">Fit</button>
         </div>
         <div class="roll-extra">
+          <button id="roll-match-lyrics" class="ghost compact" title="Auto-match lyrics from song text to vocal melody notes">Match Lyrics</button>
           <button id="roll-maximize" class="ghost compact" title="Maximize to full browser width">Maximize</button>
           <button id="roll-toggle-text" class="ghost compact" title="Toggle ABC text area">Show ABC</button>
           <span id="roll-meta" class="muted small"></span>
         </div>
       </div>
       <div class="roll-hint-bar">
-        <span>Click to add note • Drag note to move • Drag edge to resize • Drag empty grid to marquee select • Del to remove selected • Left/Right to step bar • Space to play</span>
+        <span>Click to add note • Drag note to move • Drag edge to resize • Drag empty grid to marquee select • L or click lyric to edit words • Del to delete • Left/Right to step bar • Space to play</span>
       </div>
       <div class="roll-container" id="roll-container">
         <div class="roll-corner">
-          <span>Pitch</span>
+          <div class="roll-corner-labels">
+            <span class="roll-corner-row" title="Bar timeline">Bar</span>
+            <span class="roll-corner-row" title="Chord track">Chd</span>
+            <span class="roll-corner-row" title="Vocal lyrics">Lyr</span>
+          </div>
         </div>
         <div class="roll-timeline-header" id="roll-timeline-header">
           <div class="roll-ruler" id="roll-ruler"></div>
           <div class="roll-chords-track" id="roll-chords-track"></div>
+          <div class="roll-lyrics-track" id="roll-lyrics-track"></div>
           <div class="roll-ruler-playhead" id="roll-ruler-playhead"></div>
         </div>
         <div class="roll-keys-col">
