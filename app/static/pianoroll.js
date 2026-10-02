@@ -2841,44 +2841,122 @@
       var ticksPerBar = this.model.ticksPerBar || 16;
       var assignedCount = 0;
 
+      // Group vocal notes by score section
       var scoreSections = this.model.sections.slice().sort(function (a, b) { return a.barIndex - b.barIndex; });
+      var vocalScoreSections = [];
 
-      if (scoreSections.length > 1 && lyricSections.length > 1) {
-        var usedLyricIndices = [];
-        for (var si = 0; si < scoreSections.length; si++) {
-          var sSec = scoreSections[si];
-          var nextBar = (si + 1 < scoreSections.length) ? scoreSections[si + 1].barIndex : Infinity;
-          var startTick = sSec.barIndex * ticksPerBar;
-          var endTick = nextBar * ticksPerBar;
+      for (var si = 0; si < scoreSections.length; si++) {
+        var sSec = scoreSections[si];
+        var nextBar = (si + 1 < scoreSections.length) ? scoreSections[si + 1].barIndex : Infinity;
+        var startTick = sSec.barIndex * ticksPerBar;
+        var endTick = nextBar * ticksPerBar;
 
-          var secVocalNotes = vocalNotes.filter(function (n) {
-            return n.startTick >= startTick && n.startTick < endTick;
+        var secNotes = vocalNotes.filter(function (n) {
+          return n.startTick >= startTick && n.startTick < endTick;
+        });
+        if (secNotes.length > 0) {
+          vocalScoreSections.push({
+            barIndex: sSec.barIndex,
+            text: sSec.text,
+            notes: secNotes
           });
-          if (secVocalNotes.length === 0) { continue; }
-
-          var matchedIdx = matchScoreSectionToLyricSection(sSec.text, lyricSections, usedLyricIndices);
-          if (matchedIdx !== null) {
-            usedLyricIndices.push(matchedIdx);
-            assignedCount += assignLyricsToVocalNotes(lyricSections[matchedIdx].lines, secVocalNotes, ticksPerBar);
-          }
         }
+      }
 
-        // Fill remaining unassigned vocal notes from unused lyric sections
-        var unassignedNotes = vocalNotes.filter(function (n) { return !n.lyric; });
-        if (unassignedNotes.length > 0) {
-          var unusedLines = [];
-          for (var li = 0; li < lyricSections.length; li++) {
-            if (usedLyricIndices.indexOf(li) === -1) {
-              unusedLines = unusedLines.concat(lyricSections[li].lines);
+      // If the score has fewer vocal sections than the lyrics, subdivide coarse sections at vocal pauses
+      if (vocalScoreSections.length > 0 && vocalScoreSections.length < lyricSections.length) {
+        var refinedSections = [];
+        for (var vi = 0; vi < vocalScoreSections.length; vi++) {
+          var secItem = vocalScoreSections[vi];
+          var notes = secItem.notes;
+          var splits = [0];
+          var lastB = Math.floor(notes[0].startTick / ticksPerBar);
+          for (var ni = 0; ni < notes.length - 1; ni++) {
+            var e1 = notes[ni].startTick + notes[ni].durationTicks;
+            var s2 = notes[ni + 1].startTick;
+            var gap = s2 - e1;
+            var b2 = Math.floor(s2 / ticksPerBar);
+            if ((gap >= 5 || (b2 - lastB) >= 14) && (b2 - lastB) >= 6) {
+              splits.push(ni + 1);
+              lastB = b2;
             }
           }
-          if (unusedLines.length > 0) {
-            assignedCount += assignLyricsToVocalNotes(unusedLines, unassignedNotes, ticksPerBar);
+          splits.push(notes.length);
+          if (splits.length > 2) {
+            for (var sp = 0; sp < splits.length - 1; sp++) {
+              var subNotes = notes.slice(splits[sp], splits[sp + 1]);
+              if (subNotes.length > 0) {
+                var subBar = Math.floor(subNotes[0].startTick / ticksPerBar);
+                refinedSections.push({
+                  barIndex: subBar,
+                  text: sp === 0 ? secItem.text : "% verse",
+                  notes: subNotes
+                });
+              }
+            }
+          } else {
+            refinedSections.push(secItem);
+          }
+        }
+        if (refinedSections.length > vocalScoreSections.length) {
+          vocalScoreSections = refinedSections;
+          // Reflect refined sections in model
+          var newSecMap = {};
+          for (var rsi = 0; rsi < refinedSections.length; rsi++) {
+            newSecMap[refinedSections[rsi].barIndex] = refinedSections[rsi].text;
+          }
+          for (var osi = 0; osi < this.model.sections.length; osi++) {
+            newSecMap[this.model.sections[osi].barIndex] = this.model.sections[osi].text;
+          }
+          this.model.sections = Object.keys(newSecMap).map(function (b) {
+            return { barIndex: parseInt(b, 10), text: newSecMap[b] };
+          }).sort(function (a, b) { return a.barIndex - b.barIndex; });
+        }
+      }
+
+      // Chronological alignment: assign lyric sections monotonically to vocal score sections
+      if (vocalScoreSections.length > 0 && lyricSections.length > 0) {
+        var currLyricIdx = 0;
+        var numScore = vocalScoreSections.length;
+        var numLyric = lyricSections.length;
+
+        for (var vsi = 0; vsi < numScore; vsi++) {
+          var targetSec = vocalScoreSections[vsi];
+          var targetNotes = targetSec.notes;
+          if (!targetNotes || targetNotes.length === 0) { continue; }
+
+          var remScore = numScore - vsi;
+          var remLyric = numLyric - currLyricIdx;
+
+          if (remLyric <= 0) {
+            for (var ek = 0; ek < targetNotes.length; ek++) { targetNotes[ek].lyric = "_"; }
+            continue;
+          }
+
+          var linesToAssign = [];
+          if (remScore <= 1) {
+            for (var li = currLyricIdx; li < numLyric; li++) {
+              linesToAssign = linesToAssign.concat(lyricSections[li].lines);
+            }
+            currLyricIdx = numLyric;
+          } else if (remScore <= remLyric) {
+            var takeCount = Math.floor(remLyric / remScore);
+            for (var li2 = currLyricIdx; li2 < currLyricIdx + takeCount; li2++) {
+              linesToAssign = linesToAssign.concat(lyricSections[li2].lines);
+            }
+            currLyricIdx += takeCount;
+          } else {
+            linesToAssign = lyricSections[currLyricIdx].lines;
+            currLyricIdx++;
+          }
+
+          if (linesToAssign.length > 0) {
+            assignedCount += assignLyricsToVocalNotes(linesToAssign, targetNotes, ticksPerBar);
           }
         }
       }
 
-      // If section-by-section didn't assign any notes or only 1 section existed, do phrase-aware global match
+      // If section-by-section didn't assign any notes, do phrase-aware global match
       if (assignedCount === 0) {
         var allLines = [];
         for (var lsi = 0; lsi < lyricSections.length; lsi++) {
@@ -2928,11 +3006,21 @@
       var tagMatch = line.match(/^(?:(?:\*{1,2}\s*)?\[([^\]]+)\](?:\s*\*{1,2})?|(?:#{1,6}|\*{1,2})\s*([A-Za-z]+(?:\s+[A-Za-z0-9_-]+)*)\s*(?:\*{1,2})?)$/);
       if (tagMatch) {
         skippingScraper = false;
+        var secName = (tagMatch[1] || tagMatch[2]).trim();
+        var pendingDanglingLine = null;
+        if (currentSec.lines.length > 0) {
+          var lastLine = currentSec.lines[currentSec.lines.length - 1];
+          if (/\b(?:the|a|an|and|to|it|of|in|that|with|for|or|as|by|on|at|so)\s*$/i.test(lastLine)) {
+            pendingDanglingLine = currentSec.lines.pop();
+          }
+        }
         if (currentSec.name || currentSec.lines.length > 0) {
           sections.push(currentSec);
         }
-        var secName = (tagMatch[1] || tagMatch[2]).trim();
         currentSec = { name: secName, lines: [] };
+        if (pendingDanglingLine) {
+          currentSec.pendingPrefix = pendingDanglingLine;
+        }
       } else {
         if (/^(\d+\s+Contributors?|Embed|\d+\s+Translations?)$/i.test(line)) {
           continue;
@@ -2944,8 +3032,21 @@
         if (skippingScraper) {
           continue;
         }
+        if (currentSec.pendingPrefix) {
+          var prefix = currentSec.pendingPrefix;
+          delete currentSec.pendingPrefix;
+          if (/^[a-z]/.test(line)) {
+            line = prefix + ' ' + line;
+          } else {
+            currentSec.lines.push(prefix);
+          }
+        }
         currentSec.lines.push(line);
       }
+    }
+    if (currentSec.pendingPrefix) {
+      currentSec.lines.unshift(currentSec.pendingPrefix);
+      delete currentSec.pendingPrefix;
     }
     if (currentSec.name || currentSec.lines.length > 0) {
       sections.push(currentSec);

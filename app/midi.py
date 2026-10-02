@@ -675,8 +675,6 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
             sections = [(0, "verse")]
             last_b = 0
 
-        sec_names = ["chorus", "verse", "bridge", "verse", "chorus", "verse"]
-        sec_idx = 0
         outro_threshold = max(total_bars - 8, total_bars - 4) if total_bars > 16 else total_bars
 
         for i in range(len(qv) - 1):
@@ -686,9 +684,7 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
             b_next = s2 // ticks_per_bar
             # Break into musical section if vocal rests for >= 6 sixteenths (1.5 beats) or after 16 bars
             if (gap >= 6 or (b_next - last_b) >= 16) and (b_next - last_b) >= 6 and b_next < outro_threshold:
-                name = sec_names[sec_idx % len(sec_names)]
-                sections.append((b_next, name))
-                sec_idx += 1
+                sections.append((b_next, "verse"))
                 last_b = b_next
 
         if total_bars > 24 and total_bars - 4 > last_b:
