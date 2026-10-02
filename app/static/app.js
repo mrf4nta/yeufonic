@@ -2621,10 +2621,10 @@ function paintPlanJob(current, queue) {
   }
 }
 
-/* And a render of the take the editor shows, say one opened from its card while it
-   renders: the editor's bottom bar carries its progress, in the status line's place. */
+/* And a plan or render of the take the editor shows, say one opened from its card while it
+   plans or renders: the editor's bottom bar carries its progress, in the status line's place. */
 function paintRenderJob(current, queue) {
-  var target = Selection.formTakeId;
+  var target = Selection.formTakeId || awaitingPlanId();
   var box = $('render-job');
   if (!box) {
     var status = $('render-status');
@@ -2636,21 +2636,24 @@ function paintRenderJob(current, queue) {
       '<div class="hear-job-line"><span id="render-stage" class="muted">Waiting</span><span id="render-time" class="muted"></span></div>';
     status.parentNode.insertBefore(box, status);
   }
-  var mine = function (item) { return item && item.kind === 'render' && target && item.id === target; };
+  var mine = function (item) {
+    return item && (item.kind === 'render' || item.kind === 'plan') && target && item.id === target;
+  };
   var running = mine(current) ? current : null;
-  var waiting = !running && (queue || []).some(mine);
-  var shown = Boolean(running || waiting);
+  var waitingItem = !running && (queue || []).find(mine);
+  var shown = Boolean(running || waitingItem);
   box.classList.toggle('hidden', !shown);
   if ($('render-status')) { $('render-status').classList.toggle('hidden', shown); }
   if (running) {
     $('render-bar').style.width = Math.max(3, Math.round((running.progress || 0) * 100)) + '%';
-    var label = running.label || 'Rendering';
+    var defaultLabel = running.kind === 'plan' ? 'Writing the score plan' : 'Rendering';
+    var label = running.label || defaultLabel;
     if (running.value && running.max) { label += ' \u00b7 ' + running.value + '/' + running.max; }
     $('render-stage').textContent = label;
     $('render-time').textContent = secs(running.elapsed || 0);
-  } else if (waiting) {
+  } else if (waitingItem) {
     $('render-bar').style.width = '0%';
-    $('render-stage').textContent = 'Render queued behind another job';
+    $('render-stage').textContent = (waitingItem.kind === 'plan' ? 'Score plan' : 'Render') + ' queued behind another job';
     $('render-time').textContent = '';
   }
 }
