@@ -757,6 +757,12 @@ async def cancel_current() -> dict | None:
         return {"kind": "train", "id": run_id}
 
     if not CURRENT:
+        active_train = one("SELECT id FROM lora_runs WHERE state IN ('queued', 'running') ORDER BY started_at IS NULL, started_at DESC LIMIT 1")
+        if active_train:
+            run_id = active_train["id"]
+            log.info("Cancelling LoRA training run %s", run_id)
+            await cancel_train(run_id)
+            return {"kind": "train", "id": run_id}
         return None
     log.info("Cancelling current %s job %s", CURRENT.get("kind"), CURRENT.get("id"))
     CANCELLED.add(CURRENT["id"])

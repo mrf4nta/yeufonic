@@ -69,3 +69,14 @@ def test_cancelling_a_waiting_take(client):
 
 def test_an_unknown_kind_is_not_cancelled(client):
     assert client.post("/api/queue/train/whatever/cancel").json() == {"cancelled": False}
+
+
+def test_cancelling_current_job_stops_active_training_run(client):
+    execute("""INSERT INTO lora_runs(id, identity_id, lora_name, steps, rank, state, started_at)
+               VALUES('run-1', 'id-1', 'test_lora', 500, 64, 'running', 10.0)""")
+    assert client.get("/api/state").json()["training"]["lora_name"] == "test_lora"
+    res = client.post("/api/jobs/current/cancel").json()
+    assert res == {"cancelled": True, "job": {"kind": "train", "id": "run-1"}}
+    run = one("SELECT state, error FROM lora_runs WHERE id = 'run-1'")
+    assert run["state"] == "cancelled"
+    assert client.get("/api/state").json()["training"] is None

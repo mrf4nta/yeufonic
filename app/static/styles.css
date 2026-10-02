@@ -1439,6 +1439,9 @@ label .lora-value:disabled { opacity: 0.6; }
 .status { font-size: 12.5px; color: var(--muted); min-height: 18px; margin-top: 8px; }
 .status.bad { color: var(--bad); }
 .status.good { color: var(--good); }
+.status.wait { color: var(--warn); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.status .link { color: inherit; text-decoration: underline; font: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
+.status .status-training-msg strong { color: var(--text); }
 
 /* ---------- library ---------- */
 .library { min-width: 0; }

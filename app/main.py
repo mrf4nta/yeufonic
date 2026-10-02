@@ -321,6 +321,7 @@ async def lifespan(app: FastAPI):
     execute("UPDATE takes SET status = 'failed', error = 'interrupted by a restart' WHERE status = 'running'")
     execute("UPDATE sources SET transcribe_state = 'failed', transcribe_error = 'interrupted by a restart' WHERE transcribe_state = 'running'")
     execute("UPDATE stem_sets SET status = 'failed', error = 'interrupted by a restart' WHERE status = 'running'")
+    execute("UPDATE lora_runs SET state = 'failed', error = 'interrupted by a restart', finished_at = ? WHERE state IN ('queued', 'running')", (time.time(),))
     await requeue_waiting()
     # Before relayout, which names each take's file, and before the levels are read.
     await asyncio.to_thread(library.convert_old_normalised)

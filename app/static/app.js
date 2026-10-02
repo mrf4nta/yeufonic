@@ -386,8 +386,17 @@ async function pollState() {
       pill.textContent = 'Engine needs a restart';
       pill.title = 'A job ran out of GPU memory and the engine stopped running jobs. Restart the engine; jobs wait until then.';
     } else if (engine.online && engine.compat && engine.compat.ok) {
-      pill.className = 'pill pill-on';
-      pill.textContent = 'Engine ready' + (engine.gpu ? ' \u00b7 ' + Math.round(engine.gpu.vram_free / 1073741824) + ' GB free' : '');
+      if (State.training) {
+        pill.className = 'pill pill-wait';
+        var pct = State.training.progress ? ' ' + Math.round(State.training.progress * 100) + '%' : '';
+        pill.textContent = 'Training LoRA' + pct;
+        pill.title = 'LoRA \u201c' + (State.training.lora_name || 'custom') + '\u201d is training and holds the GPU. Click to view in Corpora.';
+        pill.style.cursor = 'pointer';
+      } else {
+        pill.className = 'pill pill-on';
+        pill.textContent = 'Engine ready' + (engine.gpu ? ' \u00b7 ' + Math.round(engine.gpu.vram_free / 1073741824) + ' GB free' : '');
+        pill.style.cursor = '';
+      }
     } else if (engine.starting) {
       // Up before the engine: the page opens early, and a job asked for now waits.
       pill.className = 'pill pill-wait';
@@ -2320,16 +2329,57 @@ var JOB_KINDS = { render: 'Render', plan: 'Score plan', transcribe: 'Transcripti
    refuses them too; this is so nobody has to find out that way. */
 function lockGpuControls() {
   var training = Boolean(State.training);
-  ['create-song', 'create-cover', 'render-take', 'steps-go'].forEach(function (id) {
+  var loraName = (State.training && State.training.lora_name) || 'a LoRA';
+  var title = training
+    ? 'LoRA \u201c' + loraName + '\u201d is currently training and holds the GPU. Planning and rendering are paused until training finishes or is stopped.'
+    : '';
+
+  ['create-song', 'create-cover', 'create-inst', 'render-take', 'steps-go'].forEach(function (id) {
     var button = $(id);
-    if (button) { button.disabled = training; }
+    if (button) {
+      button.disabled = training;
+      button.title = title;
+    }
   });
   Array.prototype.forEach.call(document.querySelectorAll('.takes [data-act]'), function (button) {
     var act = button.dataset.act || '';
     if (['render', 'again', 'variations', 'tries', 'revoice', 'replan', 'reroll'].indexOf(act) >= 0) {
       button.disabled = training;
+      button.title = title;
     }
   });
+
+  paintEditorTrainingNotice(training);
+}
+
+function paintEditorTrainingNotice(training) {
+  var status = $('render-status');
+  if (!status) { return; }
+  if (training && State.training) {
+    var name = State.training.lora_name || 'custom';
+    var pct = State.training.progress ? Math.round(State.training.progress * 100) + '%' : '';
+    status.dataset.training = '1';
+    status.className = 'status wait';
+    var html = '<span class="status-training-msg">LoRA <strong>' + esc(name) + '</strong> is training' +
+      (pct ? ' (' + pct + ')' : '') + ' \u2014 GPU is reserved</span> ' +
+      '<button type="button" class="link status-training-view" id="ed-training-view">View / Stop</button>';
+    if (status.innerHTML !== html) {
+      status.innerHTML = html;
+      var viewBtn = $('ed-training-view');
+      if (viewBtn) {
+        viewBtn.addEventListener('click', function () {
+          if (State.training && State.training.identity_id) {
+            openIdentities();
+            showIdentity(State.training.identity_id);
+          }
+        });
+      }
+    }
+  } else if (status.dataset.training) {
+    delete status.dataset.training;
+    status.className = 'status';
+    status.innerHTML = '';
+  }
 }
 
 function weakRender(take) {
@@ -2462,6 +2512,22 @@ function paintJob(current, queue, options) {
   paintRenderJob(current, queue);
   var card = $('job-card');
   if (!current && !queue.length) {
+    if (State.training) {
+      State.busy = true;
+      card.className = 'job';
+      $('job-stop').style.display = '';
+      $('job-title').textContent = 'Training LoRA: ' + (State.training.lora_name || 'custom');
+      var p = State.training.progress || 0;
+      var elapsed = State.training.elapsed || 0;
+      var eta = p > 0.02 && elapsed ? Math.max(0, (elapsed / p) - elapsed) : 0;
+      $('job-time').textContent = secs(elapsed) + (eta ? ' / about ' + secs(elapsed + eta) : '');
+      $('job-bar').style.width = Math.max(3, Math.round(p * 100)) + '%';
+      var stageText = State.training.stage || 'Training';
+      if (State.training.steps) { stageText += ' \u00b7 ' + State.training.steps + ' steps'; }
+      $('job-stage').textContent = stageText;
+      $('job-next').classList.add('hidden');
+      return;
+    }
     if (State.busy) { State.busy = false; loadTakes(); loadSources(); }
     card.className = 'job hidden';
     return;
@@ -8753,6 +8819,14 @@ function wireLogs() {
 /* ------------------------------------------------------------------ wiring */
 function wire() {
   wireLogs();
+  if ($('engine-pill')) {
+    $('engine-pill').addEventListener('click', function () {
+      if (State.training && State.training.identity_id) {
+        openIdentities();
+        showIdentity(State.training.identity_id);
+      }
+    });
+  }
   paintPresets();
   if ($('lora-presets')) {
     $('lora-presets').addEventListener('click', function (event) {
@@ -10075,7 +10149,11 @@ function paintEditorReview() {
   rows.push(['Score', keepTune() ? 'this take\'s, sung with the new words as a new take'
     : ($('abc').value.trim().length > 50 && !wordsChanged() ? 'ready, as it stands on the Score step'
     : (mode === 'cover' ? 'from the recording' : 'written first, then sung'))]);
-  if (problem) { rows.push(['Before it can be made', '<span class="bad">' + esc(problem) + '</span>']); }
+  if (State.training) {
+    rows.push(['GPU status', '<span class="bad">Reserved for training LoRA \u201c' + esc(State.training.lora_name || 'custom') + '\u201d</span>']);
+  } else if (problem) {
+    rows.push(['Before it can be made', '<span class="bad">' + esc(problem) + '</span>']);
+  }
   $('ed-review').innerHTML = rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>'; }).join('');
 }
 
