@@ -100,7 +100,7 @@ function boxShowsSource(sourceId) {
 var State = { normalising: {}, sources: [], takes: [], options: {}, filter: 'all', playing: null, busy: false, mode: 'cover',
   layout: 'compact',
   takesRaw: '', takesTotal: 0, takeLimit: 300, takesAt: 0, paintedAt: 0, draft: null, audition: null,
-  picked: {}, showEdTransport: false,
+  picked: {},
   formEdited: false, spaces: [], spaceId: 'default', moveTakeId: null, search: '', searchAll: false };
 var LAYOUT_KEY = 'yue2.layout';
 var SHEET_KEY = 'yue2.sheet';   // the take panel folded away, or not
@@ -7717,7 +7717,6 @@ async function startFresh() {
     return false;
   }
   if (formIsDraft()) { stashDraft(); }
-  State.showEdTransport = false;
   var cover = State.mode === 'cover';
   setSelection({});
   $('title').value = '';
@@ -8246,6 +8245,14 @@ function nudge(seconds) {
   updateTimes();
 }
 
+function editorTake() {
+  if (State.formTake && State.formTake.id) {
+    return takeById(State.formTake.id) || State.formTake;
+  }
+  var id = selectedTakeId();
+  return id ? takeById(id) : null;
+}
+
 function updateTimes() {
   var audio = $('audio');
   var cur = audio.currentTime || 0;
@@ -8253,13 +8260,16 @@ function updateTimes() {
   var hasDur = dur && isFinite(dur);
   $('t-now').textContent = secs(cur);
   $('t-total').textContent = hasDur ? secs(dur) : '--:--';
-  var edNow = $('ed-t-now');
-  if (edNow) { edNow.textContent = secs(cur); }
-  var edTotal = $('ed-t-total');
-  if (edTotal) { edTotal.textContent = hasDur ? secs(dur) : '--:--'; }
-  var edSeek = $('ed-seek');
-  if (edSeek && !edSeek.dataset.dragging) {
-    edSeek.value = (hasDur && dur > 0) ? Math.round((cur / dur) * 1000) : 0;
+  var edTake = editorTake();
+  if (edTake && State.loadedId === edTake.id) {
+    var edNow = $('ed-t-now');
+    if (edNow) { edNow.textContent = secs(cur); }
+    var edTotal = $('ed-t-total');
+    if (edTotal) { edTotal.textContent = hasDur ? secs(dur) : '--:--'; }
+    var edSeek = $('ed-seek');
+    if (edSeek && !edSeek.dataset.dragging) {
+      edSeek.value = (hasDur && dur > 0) ? Math.round((cur / dur) * 1000) : 0;
+    }
   }
 }
 
@@ -8283,15 +8293,6 @@ function paintTransport() {
       playBtn.setAttribute('aria-label', playTitle);
     }
   }
-  var edPlayBtn = $('ed-btn-play');
-  if (edPlayBtn) {
-    if (edPlayBtn.dataset.state !== playState) {
-      edPlayBtn.dataset.state = playState;
-      edPlayBtn.innerHTML = playSvg;
-      edPlayBtn.title = playTitle;
-      edPlayBtn.setAttribute('aria-label', playTitle);
-    }
-  }
   $('btn-repeat').classList.toggle('on', Boolean(audio.loop));
   var take = currentTake();
   $('btn-star').disabled = !take;
@@ -8308,11 +8309,28 @@ function paintTransport() {
 function paintEdTransport() {
   var box = $('ed-transport');
   if (!box) { return; }
-  var shouldShow = Boolean(State.showEdTransport);
+  var take = editorTake();
+  var shouldShow = Boolean(editorOpen() && take && take.has_audio);
   box.classList.toggle('hidden', !shouldShow);
   if (!shouldShow) { return; }
+
   var audio = $('audio');
-  var take = currentTake();
+  var isPlaying = Boolean(take && State.playing === take.id && audio && !audio.paused && !audio.ended);
+  var isLoaded = Boolean(take && State.loadedId === take.id && audio && (audio.currentSrc || audio.src));
+
+  var edPlayBtn = $('ed-btn-play');
+  if (edPlayBtn) {
+    var playState = isPlaying ? 'pause' : 'play';
+    if (edPlayBtn.dataset.state !== playState) {
+      edPlayBtn.dataset.state = playState;
+      edPlayBtn.innerHTML = isPlaying
+        ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 5h2.6v14H9zM13.4 5H16v14h-2.6z"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.4v13.2L19 12z"/></svg>';
+      edPlayBtn.title = isPlaying ? 'Pause' : 'Play';
+      edPlayBtn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
+    }
+  }
+
   var titleEl = $('ed-np-title');
   if (titleEl && take) {
     var pos = takePosition(take.id);
@@ -8321,9 +8339,10 @@ function paintEdTransport() {
     titleEl.textContent = label;
     titleEl.title = label;
   }
-  var cur = audio.currentTime || 0;
-  var dur = audio.duration;
-  var hasDur = dur && isFinite(dur);
+
+  var cur = (isLoaded && audio) ? (audio.currentTime || 0) : 0;
+  var dur = (isLoaded && audio && audio.duration && isFinite(audio.duration)) ? audio.duration : (take.duration || 0);
+  var hasDur = dur && isFinite(dur) && dur > 0;
   var edNow = $('ed-t-now');
   if (edNow) { edNow.textContent = secs(cur); }
   var edTotal = $('ed-t-total');
@@ -8586,27 +8605,94 @@ function wireTransport() {
   $('btn-next').addEventListener('click', function () { stepTake(1); });
   $('btn-back').addEventListener('click', function () { nudge(-10); });
   $('btn-fwd').addEventListener('click', function () { nudge(10); });
-  if ($('ed-btn-play')) { $('ed-btn-play').addEventListener('click', function () { $('btn-play').click(); }); }
-  if ($('ed-btn-prev')) { $('ed-btn-prev').addEventListener('click', function () { $('btn-prev').click(); }); }
-  if ($('ed-btn-next')) { $('ed-btn-next').addEventListener('click', function () { $('btn-next').click(); }); }
-  if ($('ed-btn-back')) { $('ed-btn-back').addEventListener('click', function () { $('btn-back').click(); }); }
-  if ($('ed-btn-fwd')) { $('ed-btn-fwd').addEventListener('click', function () { $('btn-fwd').click(); }); }
+  if ($('ed-btn-play')) {
+    $('ed-btn-play').addEventListener('click', function () {
+      var take = editorTake();
+      if (!take || !take.has_audio) { return; }
+      var audio = $('audio');
+      if (State.playing === take.id && audio && !audio.paused && !audio.ended) {
+        audio.pause();
+        State.playing = null;
+        paintTransport();
+        paintTakes();
+        return;
+      }
+      playTake(take.id);
+    });
+  }
+  if ($('ed-btn-prev')) {
+    $('ed-btn-prev').addEventListener('click', function () {
+      var list = playableTakes();
+      if (list.length < 2) { return; }
+      var take = editorTake();
+      var currentId = (take && take.has_audio) ? take.id : currentTakeId();
+      var index = -1;
+      for (var i = 0; i < list.length; i++) { if (list[i].id === currentId) { index = i; } }
+      var prev = index === -1 ? 0 : (index - 1 + list.length) % list.length;
+      selectTake(list[prev]);
+      playTake(list[prev].id);
+      paintEditor();
+    });
+  }
+  if ($('ed-btn-next')) {
+    $('ed-btn-next').addEventListener('click', function () {
+      var list = playableTakes();
+      if (list.length < 2) { return; }
+      var take = editorTake();
+      var currentId = (take && take.has_audio) ? take.id : currentTakeId();
+      var index = -1;
+      for (var i = 0; i < list.length; i++) { if (list[i].id === currentId) { index = i; } }
+      var next = index === -1 ? 0 : (index + 1) % list.length;
+      selectTake(list[next]);
+      playTake(list[next].id);
+      paintEditor();
+    });
+  }
+  if ($('ed-btn-back')) {
+    $('ed-btn-back').addEventListener('click', function () {
+      var take = editorTake();
+      if (!take || !take.has_audio) { return; }
+      if (State.loadedId === take.id) { nudge(-10); }
+    });
+  }
+  if ($('ed-btn-fwd')) {
+    $('ed-btn-fwd').addEventListener('click', function () {
+      var take = editorTake();
+      if (!take || !take.has_audio) { return; }
+      if (State.loadedId === take.id) { nudge(10); }
+    });
+  }
   var edSeek = $('ed-seek');
   if (edSeek) {
     edSeek.addEventListener('input', function () {
       edSeek.dataset.dragging = '1';
+      var take = editorTake();
       var a = $('audio');
-      if (a && a.duration && isFinite(a.duration) && a.duration > 0) {
-        var pos = (Number(edSeek.value) / 1000) * a.duration;
+      var dur = (take && State.loadedId === take.id && a && a.duration && isFinite(a.duration) && a.duration > 0)
+        ? a.duration
+        : (take ? (take.duration || 0) : 0);
+      if (dur > 0) {
+        var pos = (Number(edSeek.value) / 1000) * dur;
         var edNow = $('ed-t-now');
         if (edNow) { edNow.textContent = secs(pos); }
       }
     });
     edSeek.addEventListener('change', function () {
       delete edSeek.dataset.dragging;
+      var take = editorTake();
+      if (!take || !take.has_audio) { return; }
       var a = $('audio');
-      if (a && a.duration && isFinite(a.duration) && a.duration > 0) {
-        a.currentTime = (Number(edSeek.value) / 1000) * a.duration;
+      var dur = (State.loadedId === take.id && a && a.duration && isFinite(a.duration) && a.duration > 0)
+        ? a.duration
+        : (take.duration || 0);
+      if (dur <= 0) { return; }
+      var targetTime = (Number(edSeek.value) / 1000) * dur;
+      if (State.loadedId === take.id && a) {
+        a.currentTime = targetTime;
+        updateTimes();
+      } else {
+        playTake(take.id);
+        if (a) { a.currentTime = targetTime; }
         updateTimes();
       }
     });
@@ -9454,10 +9540,8 @@ function wire() {
       var take = card && takeById(card.dataset.id);
       if (!take || typeof openEditor !== 'function' || !$('editor-modal')) { return; }
       if (window.getSelection) { window.getSelection().removeAllRanges(); }   // the word the double-click picked
-      var audio = $('audio');
-      var isPlaying = Boolean(take && State.playing === take.id && audio && !audio.paused && !audio.ended);
       selectTake(take);
-      openEditor(take.status === 'planned' ? 'score' : 'song', isPlaying);
+      openEditor(take.status === 'planned' ? 'score' : 'song');
       return;
     }
     var id = titleEl.dataset.id || (titleEl.closest('.take') && titleEl.closest('.take').dataset.id);
@@ -10511,9 +10595,8 @@ function paintSheet() {
 function editorLayout() { return setting('editor.layout', 'columns') === 'steps' ? 'steps' : 'columns'; }
 function editorOpen() { return Boolean($('editor-modal')) && !$('editor-modal').classList.contains('hidden'); }
 
-function openEditor(where, showTransport) {
+function openEditor(where) {
   if (!$('editor-modal')) { return; }
-  State.showEdTransport = Boolean(showTransport);
   Editor.page = where === 'score' ? 'score' : 'song';
   Editor.step = { words: 1, sound: 2, score: 3 }[where] || 0;
   $('editor-modal').classList.remove('hidden');
@@ -10524,7 +10607,6 @@ function openEditor(where, showTransport) {
 
 function closeEditor() {
   if (!editorOpen()) { return; }
-  State.showEdTransport = false;
   notationStop();
   $('editor-modal').classList.add('hidden');
   document.body.style.overflow = '';
