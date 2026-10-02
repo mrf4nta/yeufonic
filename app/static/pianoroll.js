@@ -3086,6 +3086,7 @@
       indices.push({ start: m.index, end: m.index + m[0].length, str: m[0] });
     }
 
+    var forcedCut = null;
     if (indices.length > 1) {
       var lastVowel = indices[indices.length - 1];
       var lowerCore = core.toLowerCase();
@@ -3103,30 +3104,48 @@
           indices.pop();
         }
       }
+      // Silent 'e' before suffixes -ment, -ful, -less, -ly, -ness (e.g. movement, lovely, careful, hopeless)
+      else {
+        var sufMatch = lowerCore.match(/^([a-z]+[aeiouy][a-z]*e)(ment|ful|less|ly|ness)$/);
+        if (sufMatch) {
+          var ePos = sufMatch[1].length - 1;
+          for (var vi = 0; vi < indices.length; vi++) {
+            if (indices[vi].start === ePos && indices[vi].str.toLowerCase() === 'e') {
+              indices.splice(vi, 1);
+              forcedCut = ePos + 1;
+              break;
+            }
+          }
+        }
+      }
     }
 
     if (indices.length <= 1) { return [word]; }
 
     // Cut points between consecutive vowel nuclei
     var cuts = [];
-    for (var i = 0; i < indices.length - 1; i++) {
-      var v1End = indices[i].end;
-      var v2Start = indices[i + 1].start;
-      var numConsonants = v2Start - v1End;
+    if (forcedCut !== null) {
+      cuts.push(forcedCut);
+    } else {
+      for (var i = 0; i < indices.length - 1; i++) {
+        var v1End = indices[i].end;
+        var v2Start = indices[i + 1].start;
+        var numConsonants = v2Start - v1End;
 
-      if (numConsonants <= 0) {
-        cuts.push(v1End);
-      } else if (numConsonants === 1) {
-        cuts.push(v1End);
-      } else if (numConsonants === 2) {
-        var pair = core.slice(v1End, v2Start).toLowerCase();
-        if (/^(th|ch|sh|ph|wh|ck|qu)$/.test(pair)) {
+        if (numConsonants <= 0) {
           cuts.push(v1End);
+        } else if (numConsonants === 1) {
+          cuts.push(v1End);
+        } else if (numConsonants === 2) {
+          var pair = core.slice(v1End, v2Start).toLowerCase();
+          if (/^(th|ch|sh|ph|wh|ck|qu)$/.test(pair)) {
+            cuts.push(v1End);
+          } else {
+            cuts.push(v1End + 1);
+          }
         } else {
           cuts.push(v1End + 1);
         }
-      } else {
-        cuts.push(v1End + 1);
       }
     }
 
@@ -3234,7 +3253,7 @@
       } else if (M > T) {
         diffCost = (M - T) * 2;
       } else {
-        diffCost = (T - M) * 6;
+        diffCost = (T - M) * 35;
       }
       var boundaryBonus = (j > 0) ? bScore[j] : 0;
       return diffCost - boundaryBonus;
