@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Stems.  CPU build of torch on purpose: the GPU belongs to YuE2, and demucs runs
 # at about 1.3x realtime on four CPU threads, so a four minute song takes roughly
 # three minutes with no VRAM contention at all.
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fluidsynth \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir "torch==2.9.1" "torchaudio==2.9.1" \
          --index-url https://download.pytorch.org/whl/cpu \

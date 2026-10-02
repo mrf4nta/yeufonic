@@ -17,13 +17,16 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
+import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import httpx
 
-from . import config
+from . import config, db, library
 
 log = logging.getLogger("yue2.soundfonts")
 
@@ -161,3 +164,121 @@ def download(instrument: str) -> int:
              len(missing) - len(absent), instrument, len(here),
              here[0] if here else "-", here[-1] if here else "-", len(absent))
     return len(missing) - len(absent)
+
+
+# ---------------------------------------------------------------- SF2 SoundFonts
+def sf2_folder() -> Path:
+    """The directory where .sf2 SoundFont files are stored."""
+    p = folder() / "sf2"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def available_sf2() -> list[dict[str, Any]]:
+    """List all available .sf2 SoundFont files in data/models/soundfonts/sf2."""
+    sf2_dir = sf2_folder()
+    results = []
+    for f in sorted(sf2_dir.glob("*.sf2")):
+        size_bytes = f.stat().st_size
+        size_mb = round(size_bytes / (1024 * 1024), 1)
+        stem = f.stem
+        if "Arachno" in stem:
+            name = "Arachno SoundFont 1.0"
+        elif "DSoundFont" in stem:
+            name = "DSoundFont V4"
+        elif "Musyng" in stem:
+            name = "Musyng Kite"
+        elif "Jnsgm2" in stem or "github" in stem:
+            name = "Jnsgm2 GM"
+        else:
+            name = stem.replace("_", " ")
+
+        results.append({
+            "id": f.name,
+            "filename": f.name,
+            "name": name,
+            "size_bytes": size_bytes,
+            "size_mb": size_mb,
+        })
+    return results
+
+
+def get_active_sf2() -> str | None:
+    """The filename of the SoundFont currently chosen for MIDI synthesis."""
+    saved = db.get_setting("midi.soundfont")
+    sf2_dir = sf2_folder()
+    if saved and (sf2_dir / saved).is_file():
+        return saved
+    # Default priority
+    candidates = ["Arachno_SoundFont_Version_1.0.sf2", "Musyng_Kite.sf2", "DSoundFontV4.sf2", "github_Jnsgm2.sf2"]
+    for c in candidates:
+        if (sf2_dir / c).is_file():
+            return c
+    found = list(sf2_dir.glob("*.sf2"))
+    return found[0].name if found else None
+
+
+def set_active_sf2(filename: str) -> None:
+    sf2_dir = sf2_folder()
+    target = sf2_dir / filename
+    if not target.is_file():
+        raise ValueError(f"SoundFont not found: {filename}")
+    db.set_setting("midi.soundfont", filename)
+
+
+def render_midi_to_audio(
+    midi_path: Path,
+    output_path: Path,
+    sf2_filename: str | None = None,
+    gain: float = 0.8,
+) -> Path:
+    """Render a MIDI file to high-quality audio using fluidsynth and ffmpeg."""
+    sf2_name = sf2_filename or get_active_sf2()
+    if not sf2_name:
+        raise RuntimeError("No .sf2 SoundFont available to render MIDI")
+    sf2_path = sf2_folder() / sf2_name
+    if not sf2_path.is_file():
+        raise FileNotFoundError(f"SoundFont file not found: {sf2_path}")
+
+    fluidsynth_bin = shutil.which("fluidsynth")
+    if not fluidsynth_bin:
+        raise RuntimeError("fluidsynth executable not found on system")
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
+        wav_path = Path(tmp_wav.name)
+
+    try:
+        cmd_synth = [
+            fluidsynth_bin,
+            "-ni",
+            "-g", str(gain),
+            "-F", str(wav_path),
+            str(sf2_path),
+            str(midi_path),
+        ]
+        res = subprocess.run(cmd_synth, capture_output=True, text=True)
+        if res.returncode != 0:
+            log.warning("fluidsynth non-zero return code %d: %s", res.returncode, res.stderr)
+        if not wav_path.is_file() or wav_path.stat().st_size == 0:
+            raise RuntimeError(f"fluidsynth produced empty audio: {res.stderr}")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd_enc = [
+            "ffmpeg", "-y",
+            "-i", str(wav_path),
+            "-c:a", "flac" if output_path.suffix == ".flac" else "libopus",
+            str(output_path),
+        ]
+        subprocess.run(cmd_enc, capture_output=True, text=True, check=True)
+    finally:
+        if wav_path.exists():
+            wav_path.unlink()
+
+    # Pre-generate waveform peaks
+    try:
+        library.ensure_peaks(output_path)
+    except Exception as exc:
+        log.warning("peaks generation failed for rendered audio %s: %s", output_path, exc)
+
+    return output_path
+

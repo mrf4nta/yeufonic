@@ -217,6 +217,19 @@ SETTINGS_SPEC: list[dict] = [
         "requires_note": "Choose External LLM as the provider to use this.",
         "help": "The LLM must accept audio, as Gemini does. Whisper still times the lines, and is used instead if the LLM can't hear it.",
     },
+    {
+        "key": "midi.soundfont",
+        "label": "MIDI SoundFont (.sf2)",
+        "type": "select",
+        "default": "Arachno_SoundFont_Version_1.0.sf2",
+        "options": [
+            {"value": "Arachno_SoundFont_Version_1.0.sf2", "label": "Arachno SoundFont 1.0 (148.2 MB)"},
+            {"value": "Musyng_Kite.sf2", "label": "Musyng Kite (1020.6 MB)"},
+            {"value": "DSoundFontV4.sf2", "label": "DSoundFont V4 (553.3 MB)"},
+            {"value": "github_Jnsgm2.sf2", "label": "Jnsgm2 GM (31.7 MB)"},
+        ],
+        "help": "SoundFont used for high-fidelity MIDI audio rendering and audition in data/models/soundfonts/sf2.",
+    },
 ]
 
 SETTINGS_BY_KEY = {item["key"]: item for item in SETTINGS_SPEC}
@@ -233,6 +246,16 @@ def settings_payload() -> list[dict]:
     page never needs it back, since the server uses the one on file."""
     out = []
     for spec in SETTINGS_SPEC:
+        if spec["key"] == "midi.soundfont":
+            sf_list = soundfonts.available_sf2()
+            if sf_list:
+                spec = {
+                    **spec,
+                    "options": [
+                        {"value": sf["id"], "label": f"{sf['name']} ({sf['size_mb']} MB)"}
+                        for sf in sf_list
+                    ],
+                }
         value = setting_value(spec["key"])
         if spec["type"] == "password":
             out.append({**spec, "value": "", "saved": bool(value)})
@@ -248,6 +271,10 @@ def save_setting(key: str, value: str) -> None:
     value = (value or "").strip()
     if spec["type"] == "select":
         allowed = [option["value"] for option in spec["options"]]
+        if key == "midi.soundfont":
+            sf_list = soundfonts.available_sf2()
+            if sf_list:
+                allowed = [sf["id"] for sf in sf_list]
         if value not in allowed:
             raise HTTPException(400, f"{key} must be one of {', '.join(allowed)}")
     if key == "stems.folder":
@@ -1108,6 +1135,12 @@ async def upload_source(file: UploadFile = File(...), title: str = Form("", max_
                           :abc, :abc_updated_at, :transcribe_state, :lyrics, :lyrics_state, :lyrics_method)""",
                 record,
             )
+            # Render audio preview with active SoundFont
+            try:
+                flac_p = dest.with_suffix(".flac")
+                await asyncio.to_thread(soundfonts.render_midi_to_audio, dest, flac_p)
+            except Exception as exc:
+                log.warning("Could not pre-render MIDI audio %s: %s", dest.name, exc)
             dur_str = f", {record['duration']:.1f}s" if record.get("duration") else ""
             log.info("Uploaded MIDI source '%s' (%s%s, converted to ABC)", record["title"], record["id"], dur_str)
             return {**record, "duplicate": False}
@@ -2038,6 +2071,27 @@ async def soundfonts_download(instrument: str) -> dict:
         log.warning("Could not fetch the %s samples: %s", instrument, exc)
         raise HTTPException(502, f"could not fetch the sounds ({exc.__class__.__name__}). Check the connection and try again.") from exc
     return {"fetched": fetched, "installed": soundfonts.installed()}
+
+
+class SoundFontSelectIn(BaseModel):
+    filename: str
+
+
+@app.get("/api/soundfonts/sf2")
+def list_soundfonts_sf2() -> dict:
+    return {
+        "soundfonts": soundfonts.available_sf2(),
+        "selected": soundfonts.get_active_sf2(),
+    }
+
+
+@app.post("/api/soundfonts/sf2/select")
+def select_soundfont_sf2(body: SoundFontSelectIn) -> dict:
+    soundfonts.set_active_sf2(body.filename)
+    return {
+        "status": "ok",
+        "selected": soundfonts.get_active_sf2(),
+    }
 
 
 class TriesIn(BaseModel):
@@ -3284,21 +3338,78 @@ def source_peaks(source_id: str) -> dict:
     source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
     if not source or not Path(source["stored_path"]).exists():
         raise HTTPException(404, "no audio for this recording")
+    stored_p = Path(source["stored_path"])
     if (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        flac_p = stored_p.with_suffix(".flac")
+        if flac_p.exists():
+            peaks = ensure_peaks(flac_p)
+            if peaks:
+                return peaks
+        try:
+            soundfonts.render_midi_to_audio(stored_p, flac_p)
+            peaks = ensure_peaks(flac_p)
+            if peaks:
+                return peaks
+        except Exception as exc:
+            log.warning("Could not render peaks for MIDI %s: %s", source_id, exc)
         return {"columns": 128, "peaks": [0.0] * 128, "rms": [0.0] * 128}
-    result = ensure_peaks(Path(source["stored_path"]))
+    result = ensure_peaks(stored_p)
     if not result:
         raise HTTPException(500, "could not read the waveform")
     return result
 
 
 @app.get("/api/sources/{source_id}/audio")
-def source_audio(source_id: str) -> FileResponse:
+def source_audio(source_id: str, format: str | None = None) -> FileResponse:
     source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
     if not source or not Path(source["stored_path"]).exists():
         raise HTTPException(404, "no audio for this source")
-    media_type = "audio/midi" if (source.get("filename") or "").lower().endswith((".mid", ".midi")) else None
-    return FileResponse(source["stored_path"], filename=source["filename"], media_type=media_type)
+    stored_p = Path(source["stored_path"])
+    is_midi = (source.get("filename") or "").lower().endswith((".mid", ".midi"))
+    if is_midi and format == "audio":
+        flac_p = stored_p.with_suffix(".flac")
+        if not flac_p.exists():
+            soundfonts.render_midi_to_audio(stored_p, flac_p)
+        return FileResponse(flac_p, filename=Path(source["filename"]).stem + ".flac", media_type="audio/flac")
+    media_type = "audio/midi" if is_midi else None
+    return FileResponse(stored_p, filename=source["filename"], media_type=media_type)
+
+
+@app.get("/api/sources/{source_id}/rendered-audio")
+def source_rendered_audio(source_id: str, sf2: str | None = None) -> FileResponse:
+    """The high-fidelity SoundFont-rendered audio for a MIDI source, or native audio for non-MIDI."""
+    source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
+    if not source or not Path(source["stored_path"]).exists():
+        raise HTTPException(404, "no audio for this source")
+    stored_p = Path(source["stored_path"])
+    if not (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        return FileResponse(stored_p, filename=source["filename"])
+
+    flac_p = stored_p.with_suffix(".flac")
+    active_sf2 = sf2 or soundfonts.get_active_sf2()
+    if not flac_p.exists() or flac_p.stat().st_size == 0 or sf2 is not None:
+        try:
+            soundfonts.render_midi_to_audio(stored_p, flac_p, sf2_filename=active_sf2)
+        except Exception as exc:
+            log.exception("Failed to render MIDI audio for %s", source_id)
+            raise HTTPException(500, f"Failed to render MIDI audio: {exc}")
+    rendered_filename = Path(source["filename"]).stem + ".flac"
+    return FileResponse(flac_p, filename=rendered_filename, media_type="audio/flac")
+
+
+@app.post("/api/sources/{source_id}/render-audio")
+async def render_source_audio(source_id: str, sf2: str | None = None) -> dict:
+    source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
+    if not source or not Path(source["stored_path"]).exists():
+        raise HTTPException(404, "no audio for this source")
+    stored_p = Path(source["stored_path"])
+    if not (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        raise HTTPException(400, "source is not a MIDI file")
+    flac_p = stored_p.with_suffix(".flac")
+    active_sf2 = sf2 or soundfonts.get_active_sf2()
+    await asyncio.to_thread(soundfonts.render_midi_to_audio, stored_p, flac_p, active_sf2)
+    peaks = library.ensure_peaks(flac_p)
+    return {"status": "ok", "audio_path": str(flac_p), "soundfont": active_sf2, "has_peaks": peaks is not None}
 
 
 # ---------------------------------------------------------------------- jobs

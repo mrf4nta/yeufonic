@@ -125,11 +125,90 @@
     return 440 * Math.pow(2, (pitch - 69) / 12);
   }
 
+  var sampleCache = {};
+  var pendingFetches = {};
+  var FLATS_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+  function midiToSampleName(pitch) {
+    if (typeof pitch !== 'number' || pitch < 21 || pitch > 108) return null;
+    var name = FLATS_NAMES[pitch % 12];
+    var octave = Math.floor(pitch / 12) - 1;
+    return name + octave;
+  }
+
+  function getOrPreloadSample(instrument, noteName) {
+    if (!instrument || !noteName) return null;
+    var key = instrument + '_' + noteName;
+    if (sampleCache[key]) { return sampleCache[key]; }
+    if (pendingFetches[key]) { return null; }
+    var ctx = getAudioContext();
+    if (!ctx || typeof fetch === 'undefined') { return null; }
+    pendingFetches[key] = true;
+    var url = '/soundfonts/' + instrument + '-mp3/' + encodeURIComponent(noteName) + '.mp3';
+    fetch(url)
+      .then(function (res) { return res && res.ok ? res.arrayBuffer() : null; })
+      .then(function (buf) {
+        if (!buf) return null;
+        return ctx.decodeAudioData(buf);
+      })
+      .then(function (decoded) {
+        if (decoded) { sampleCache[key] = decoded; }
+      })
+      .catch(function () {})
+      .finally(function () { delete pendingFetches[key]; });
+    return null;
+  }
+
+  function preloadSamplesForNotes(notes) {
+    if (!notes || !notes.length) return;
+    var seen = {};
+    for (var i = 0; i < notes.length; i++) {
+      var n = notes[i];
+      var name = midiToSampleName(n.pitch);
+      if (name && !seen[name]) {
+        seen[name] = true;
+        getOrPreloadSample('acoustic_grand_piano', name);
+      }
+    }
+  }
+
   function playTone(pitch, durationSec, voiceType, startTime) {
     var ctx = getAudioContext();
     if (!ctx) { return null; }
     var now = startTime !== undefined ? startTime : ctx.currentTime;
     var dur = durationSec || 0.25;
+
+    var sampleName = midiToSampleName(pitch);
+    var instrument = 'acoustic_grand_piano';
+    var cachedBuf = sampleName ? (sampleCache[instrument + '_' + sampleName] || getOrPreloadSample(instrument, sampleName)) : null;
+
+    if (cachedBuf) {
+      try {
+        var src = ctx.createBufferSource();
+        src.buffer = cachedBuf;
+        var gain = ctx.createGain();
+        var peakVol = (voiceType === 'Vocal') ? 0.35 : 0.26;
+        gain.gain.setValueAtTime(peakVol, now);
+        if (dur < cachedBuf.duration) {
+          gain.gain.setValueAtTime(peakVol, now + dur);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + dur + 0.08);
+        } else {
+          gain.gain.setValueAtTime(peakVol, now + cachedBuf.duration - 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + cachedBuf.duration);
+        }
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        src.start(now);
+        src.stop(now + Math.min(cachedBuf.duration, dur + 0.1));
+        activeOscillators.push(src);
+        src.onended = function () {
+          var idx = activeOscillators.indexOf(src);
+          if (idx !== -1) { activeOscillators.splice(idx, 1); }
+        };
+        return src;
+      } catch (err) {}
+    }
+
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
     var filter = ctx.createBiquadFilter();
@@ -253,11 +332,39 @@
     if (!ctx || !pitches || pitches.length === 0) { return []; }
     var now = startTime !== undefined ? startTime : ctx.currentTime;
     var dur = durationSec || 1.0;
-    var oscs = [];
+    var nodes = [];
 
     for (var i = 0; i < pitches.length; i++) {
       var pitch = pitches[i];
       var isBass = (i === 0);
+      var sampleName = midiToSampleName(pitch);
+      var cachedBuf = sampleName ? (sampleCache['acoustic_grand_piano_' + sampleName] || getOrPreloadSample('acoustic_grand_piano', sampleName)) : null;
+
+      if (cachedBuf) {
+        try {
+          var src = ctx.createBufferSource();
+          src.buffer = cachedBuf;
+          var gainNode = ctx.createGain();
+          var pVol = isBass ? 0.22 : (0.16 / Math.max(1, pitches.length - 1));
+          gainNode.gain.setValueAtTime(pVol, now);
+          gainNode.gain.setValueAtTime(pVol, now + dur);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + dur + 0.12);
+          src.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          src.start(now);
+          src.stop(now + Math.min(cachedBuf.duration, dur + 0.15));
+          activeOscillators.push(src);
+          nodes.push(src);
+          (function (s) {
+            s.onended = function () {
+              var idx = activeOscillators.indexOf(s);
+              if (idx !== -1) { activeOscillators.splice(idx, 1); }
+            };
+          })(src);
+          continue;
+        } catch (err) {}
+      }
+
       var osc = ctx.createOscillator();
       var gain = ctx.createGain();
       var filter = ctx.createBiquadFilter();
@@ -282,7 +389,7 @@
       osc.stop(now + dur + 0.05);
 
       activeOscillators.push(osc);
-      oscs.push(osc);
+      nodes.push(osc);
       (function (o) {
         o.onended = function () {
           var idx = activeOscillators.indexOf(o);
@@ -290,7 +397,7 @@
         };
       })(osc);
     }
-    return oscs;
+    return nodes;
   }
 
   /* ---------------------------------------------------- ABC Parser */
@@ -1012,6 +1119,9 @@
 
     loadAbc: function (abcText) {
       this.model = parseAbc(abcText);
+      if (this.model && this.model.notes) {
+        preloadSamplesForNotes(this.model.notes);
+      }
       this.selectedNoteIds = [];
       this.selectedNoteId = null;
       if (this.model && this.model.voices) {

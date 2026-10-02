@@ -4047,52 +4047,31 @@ function playRecording() {
   var audio = $('audio');
 
   if (isMidi) {
-    if (State.audition === source.id && window.PianoRoll && window.PianoRoll.isPlaying) {
+    if (window.PianoRoll && window.PianoRoll.isPlaying) {
       window.PianoRoll.stop();
+    }
+    if (State.audition === source.id && !audio.paused) {
+      audio.pause();
       State.audition = null;
       paintAudition();
       return;
     }
-    audio.pause();
+    var url = '/api/sources/' + source.id + '/rendered-audio';
     State.loadedId = null;
     State.playing = null;
     State.audition = source.id;
     State.playRequestedAt = Date.now();
+    audio.src = url;
+    audio.play().catch(function (err) {
+      console.warn("MIDI audio audition play failed:", err);
+    });
     $('np-title').textContent = source.title;
-    $('np-meta').textContent = 'the MIDI score being covered';
+    $('np-meta').textContent = 'the MIDI recording being covered (SoundFont)';
     $('np-cover').className = 'np-cover grad-cover';
-    updateMediaSession({ title: source.title, style: 'the MIDI score being covered' });
-
-    var startMidiPlay = function (abcText) {
-      if (window.PianoRoll && abcText) {
-        window.PianoRoll.loadAbc(abcText);
-        window.PianoRoll.metronomeEnabled = false;
-        window.PianoRoll.play();
-        var checkTimer = setInterval(function () {
-          if (!window.PianoRoll || !window.PianoRoll.isPlaying) {
-            clearInterval(checkTimer);
-            if (State.audition === source.id) {
-              State.audition = null;
-              paintAudition();
-            }
-          }
-        }, 250);
-      }
-      paintTakes();
-      paintAudition();
-    };
-
-    if (source.abc) {
-      startMidiPlay(source.abc);
-    } else {
-      api('/api/sources/' + source.id).then(function (full) {
-        source.abc = full.abc;
-        startMidiPlay(full.abc);
-      }).catch(function () {
-        State.audition = null;
-        paintAudition();
-      });
-    }
+    updateMediaSession({ title: source.title, style: 'the MIDI recording being covered' });
+    loadWave(url, '/api/sources/' + source.id + '/peaks');
+    paintTakes();
+    paintAudition();
     return;
   }
 
@@ -4125,12 +4104,10 @@ function paintAudition() {
   var button = $('audition');
   if (!button) { return; }
   var source = currentSource();
-  var isMidi = Boolean(source && source.filename && source.filename.match(/\.midi?$/i));
-  var playing = Boolean(source && State.audition === source.id &&
-    (isMidi ? (window.PianoRoll && window.PianoRoll.isPlaying) : !$('audio').paused));
+  var playing = Boolean(source && State.audition === source.id && !$('audio').paused);
   button.disabled = !source;
   button.title = !source ? 'Choose a recording first'
-    : (isMidi ? 'Play this MIDI score' : 'Play this recording through the player, to hear what you are covering');
+    : 'Play this recording through the player, to hear what you are covering';
   button.classList.toggle('on', playing);
 }
 

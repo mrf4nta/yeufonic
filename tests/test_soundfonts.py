@@ -80,3 +80,75 @@ def test_a_failed_fetch_says_so_and_leaves_no_half_files(client, monkeypatch, tm
     folder = tmp_path / "models" / "soundfonts" / "acoustic_grand_piano-mp3"
     assert not list(folder.glob("*.part")) and not (folder / "C5.mp3").exists()
     assert client.get("/api/soundfonts").json()["ready"] is False        # a partial set is not ready
+
+
+
+def test_sf2_soundfonts_discovery_and_selection(client, monkeypatch, tmp_path):
+    """Verify available .sf2 soundfonts are listed and can be selected."""
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    sf2_dir = tmp_path / "models" / "soundfonts" / "sf2"
+    sf2_dir.mkdir(parents=True, exist_ok=True)
+    (sf2_dir / "Arachno_SoundFont_Version_1.0.sf2").write_bytes(b"RIFFdummy1")
+    (sf2_dir / "github_Jnsgm2.sf2").write_bytes(b"RIFFdummy2")
+
+    res = client.get("/api/soundfonts/sf2")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["soundfonts"]) == 2
+    assert data["selected"] == "Arachno_SoundFont_Version_1.0.sf2"
+
+    sel_res = client.post("/api/soundfonts/sf2/select", json={"filename": "github_Jnsgm2.sf2"})
+    assert sel_res.status_code == 200
+    assert sel_res.json()["selected"] == "github_Jnsgm2.sf2"
+
+    res2 = client.get("/api/soundfonts/sf2")
+    assert res2.json()["selected"] == "github_Jnsgm2.sf2"
+
+
+def test_midi_rendered_audio_and_peaks(client, monkeypatch):
+    """Verify MIDI source provides rendered audio and waveform peaks."""
+    import io
+    from tests.test_midi import create_smf
+    from tests.conftest import tone
+    from app import library
+
+    def fake_render(midi_path, output_path, sf2_filename=None, gain=0.8):
+        tone(output_path, 1.0)
+        library.ensure_peaks(output_path)
+        return output_path
+
+    monkeypatch.setattr(soundfonts, "render_midi_to_audio", fake_render)
+
+    events = [
+        (0, b"\xFF\x51\x03\x07\xA1\x20"),  # 120 bpm
+        (0, b"\xFF\x58\x04\x04\x02\x18\x08"),
+        (0, bytes([0x90, 60, 80])),
+        (480, bytes([0x80, 60, 0])),
+        (0, b"\xFF\x2F\x00"),
+    ]
+    midi_data = create_smf([events], division=480, fmt=0)
+    upload_res = client.post(
+        "/api/sources",
+        files={"file": ("mini.mid", io.BytesIO(midi_data), "audio/midi")},
+        data={"title": "Mini MIDI"},
+    )
+    assert upload_res.status_code == 200
+    src_id = upload_res.json()["id"]
+
+    # Test rendered-audio
+    aud_res = client.get(f"/api/sources/{src_id}/rendered-audio")
+    assert aud_res.status_code == 200
+    assert aud_res.headers["content-type"] == "audio/flac"
+
+    # Test peaks
+    peaks_res = client.get(f"/api/sources/{src_id}/peaks")
+    assert peaks_res.status_code == 200
+    assert "peaks" in peaks_res.json()
+    assert len(peaks_res.json()["peaks"]) > 0
+
+    # Test render-audio trigger
+    re_res = client.post(f"/api/sources/{src_id}/render-audio")
+    assert re_res.status_code == 200
+    assert re_res.json()["status"] == "ok"
+
+
