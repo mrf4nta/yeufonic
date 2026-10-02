@@ -2918,17 +2918,32 @@
     var sections = [];
     var currentSec = { name: '', lines: [] };
     var rawLines = (lyricsText || '').split(/\r?\n/);
+    var skippingScraper = false;
     for (var i = 0; i < rawLines.length; i++) {
       var line = rawLines[i].trim();
-      if (!line) { continue; }
+      if (!line) {
+        if (skippingScraper) { skippingScraper = false; }
+        continue;
+      }
       var tagMatch = line.match(/^(?:(?:\*{1,2}\s*)?\[([^\]]+)\](?:\s*\*{1,2})?|(?:#{1,6}|\*{1,2})\s*([A-Za-z]+(?:\s+[A-Za-z0-9_-]+)*)\s*(?:\*{1,2})?)$/);
       if (tagMatch) {
+        skippingScraper = false;
         if (currentSec.name || currentSec.lines.length > 0) {
           sections.push(currentSec);
         }
         var secName = (tagMatch[1] || tagMatch[2]).trim();
         currentSec = { name: secName, lines: [] };
       } else {
+        if (/^(\d+\s+Contributors?|Embed|\d+\s+Translations?)$/i.test(line)) {
+          continue;
+        }
+        if (/^You might also like/i.test(line)) {
+          skippingScraper = true;
+          continue;
+        }
+        if (skippingScraper) {
+          continue;
+        }
         currentSec.lines.push(line);
       }
     }
@@ -3070,6 +3085,11 @@
         return j;
       }
     }
+    // Fallback: if name differs (e.g. score has "chorus" or generic section), match next available unused section
+    for (var k = 0; k < lyricSections.length; k++) {
+      if (usedIndices && usedIndices.indexOf(k) !== -1) { continue; }
+      return k;
+    }
     return null;
   }
 
@@ -3181,7 +3201,7 @@
         count++;
       }
       for (var ek = limit; ek < segNotes.length; ek++) {
-        delete segNotes[ek].lyric;
+        segNotes[ek].lyric = "_";
       }
     }
     return count;

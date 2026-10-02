@@ -670,16 +670,28 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
     if not sections:
         if first_vocal_bar > 0:
             sections = [(0, "intro"), (first_vocal_bar, "verse")]
-            verse_bar = first_vocal_bar
+            last_b = first_vocal_bar
         else:
             sections = [(0, "verse")]
-            verse_bar = 0
+            last_b = 0
 
-        if total_bars > verse_bar + 16:
-            chorus_bar = verse_bar + 8
-            if chorus_bar < total_bars - 4:
-                sections.append((chorus_bar, "chorus"))
-        if total_bars > 24:
+        sec_names = ["chorus", "verse", "bridge", "verse", "chorus", "verse"]
+        sec_idx = 0
+        outro_threshold = max(total_bars - 8, total_bars - 4) if total_bars > 16 else total_bars
+
+        for i in range(len(qv) - 1):
+            e1 = qv[i]["end_tick"]
+            s2 = qv[i + 1]["start_tick"]
+            gap = s2 - e1
+            b_next = s2 // ticks_per_bar
+            # Break into musical section if vocal rests for >= 6 sixteenths (1.5 beats) or after 16 bars
+            if (gap >= 6 or (b_next - last_b) >= 16) and (b_next - last_b) >= 6 and b_next < outro_threshold:
+                name = sec_names[sec_idx % len(sec_names)]
+                sections.append((b_next, name))
+                sec_idx += 1
+                last_b = b_next
+
+        if total_bars > 24 and total_bars - 4 > last_b:
             sections.append((total_bars - 4, "outro"))
     else:
         if sections[0][0] > 0:
