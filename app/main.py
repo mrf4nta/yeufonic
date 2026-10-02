@@ -3420,8 +3420,33 @@ def fill_source_durations() -> None:
             execute("UPDATE sources SET duration = ? WHERE id = ?", (seconds, source["id"]))
 
 
+_active_sf2_renders: dict[str, asyncio.Task] = {}
+_sf2_render_lock = asyncio.Lock()
+
+
+async def _ensure_source_midi_rendered(stored_p: Path, flac_p: Path, active_sf2: str) -> None:
+    if flac_p.exists() and flac_p.stat().st_size > 0:
+        return
+    key = str(flac_p)
+    async with _sf2_render_lock:
+        if flac_p.exists() and flac_p.stat().st_size > 0:
+            return
+        task = _active_sf2_renders.get(key)
+        if not task:
+            task = asyncio.create_task(
+                asyncio.to_thread(soundfonts.render_midi_to_audio, stored_p, flac_p, active_sf2)
+            )
+            _active_sf2_renders[key] = task
+    try:
+        await task
+    finally:
+        async with _sf2_render_lock:
+            if _active_sf2_renders.get(key) is task:
+                _active_sf2_renders.pop(key, None)
+
+
 @app.get("/api/sources/{source_id}/peaks")
-def source_peaks(source_id: str, sf2: str | None = None) -> dict:
+async def source_peaks(source_id: str, sf2: str | None = None) -> dict:
     """The waveform for a recording, cached beside it the way a take's is."""
     source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
     if not source or not Path(source["stored_path"]).exists():
@@ -3441,7 +3466,7 @@ def source_peaks(source_id: str, sf2: str | None = None) -> dict:
             if peaks:
                 return peaks
         try:
-            soundfonts.render_midi_to_audio(stored_p, flac_p, sf2_filename=active_sf2)
+            await _ensure_source_midi_rendered(stored_p, flac_p, active_sf2)
             peaks = ensure_peaks(flac_p)
             if peaks:
                 return peaks
@@ -3474,7 +3499,7 @@ def source_audio(source_id: str, format: str | None = None) -> FileResponse:
 
 
 @app.get("/api/sources/{source_id}/rendered-audio")
-def source_rendered_audio(source_id: str, sf2: str | None = None) -> FileResponse:
+async def source_rendered_audio(source_id: str, sf2: str | None = None) -> FileResponse:
     """The high-fidelity SoundFont-rendered audio for a MIDI source, or native audio for non-MIDI."""
     source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
     if not source or not Path(source["stored_path"]).exists():
@@ -3490,7 +3515,7 @@ def source_rendered_audio(source_id: str, sf2: str | None = None) -> FileRespons
     flac_p = stored_p.parent / f"{stored_p.stem}-{active_sf2}.flac"
     if not flac_p.exists() or flac_p.stat().st_size == 0:
         try:
-            soundfonts.render_midi_to_audio(stored_p, flac_p, sf2_filename=active_sf2)
+            await _ensure_source_midi_rendered(stored_p, flac_p, active_sf2)
         except Exception as exc:
             log.exception("Failed to render MIDI audio for %s with %s", source_id, active_sf2)
             raise HTTPException(500, f"Failed to render MIDI audio: {exc}")

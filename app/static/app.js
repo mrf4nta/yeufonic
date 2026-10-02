@@ -4202,6 +4202,7 @@ function playRecording() {
     if (State.audition === source.id && !audio.paused) {
       audio.pause();
       State.audition = null;
+      State.auditionLoading = false;
       paintAudition();
       return;
     }
@@ -4209,22 +4210,27 @@ function playRecording() {
     var activeSf2 = sel && sel.value ? sel.value : '';
     var sf2Param = activeSf2 ? '?sf2=' + encodeURIComponent(activeSf2) : '';
     var url = '/api/sources/' + source.id + '/rendered-audio' + sf2Param;
+    var sfLabel = (sel && sel.selectedOptions && sel.selectedOptions[0])
+      ? sel.selectedOptions[0].textContent
+      : (activeSf2 ? activeSf2.replace(/_/g, ' ').replace(/\.sf2$/i, '') : 'SoundFont');
+
     State.loadedId = null;
     State.playing = null;
     State.audition = source.id;
+    State.auditionLoading = true;
     State.playRequestedAt = Date.now();
     audio.src = url;
     audio.play().catch(function (err) {
       console.warn("MIDI audio audition play failed:", err);
+      State.auditionLoading = false;
+      paintAudition();
       statusLine("Could not play MIDI audio: " + (err.message || err), "bad");
     });
-    var sfLabel = (sel && sel.selectedOptions && sel.selectedOptions[0])
-      ? sel.selectedOptions[0].textContent
-      : (activeSf2 ? activeSf2.replace(/_/g, ' ').replace(/\.sf2$/i, '') : 'SoundFont');
     $('np-title').textContent = source.title;
-    $('np-meta').textContent = 'MIDI Recording (SoundFont: ' + sfLabel + ')';
+    $('np-meta').textContent = 'Synthesizing with ' + sfLabel + '…';
     $('np-cover').className = 'np-cover grad-cover';
     updateMediaSession({ title: source.title, style: 'MIDI Recording (' + sfLabel + ')' });
+    statusLine('Preparing MIDI audio with ' + sfLabel + '…', 'hint');
     loadWave(url, '/api/sources/' + source.id + '/peaks' + sf2Param);
     paintTakes();
     paintAudition();
@@ -4237,6 +4243,7 @@ function playRecording() {
   if (State.audition === source.id && !audio.paused) {
     audio.pause();
     State.audition = null;
+    State.auditionLoading = false;
     paintAudition();
     return;
   }
@@ -4244,6 +4251,7 @@ function playRecording() {
   State.loadedId = null;      // a recording is not a take, so Play must not resume one
   State.playing = null;
   State.audition = source.id;
+  State.auditionLoading = false;
   State.playRequestedAt = Date.now();
   audio.src = url;
   audio.play().catch(function () {});
@@ -4261,10 +4269,21 @@ function paintAudition() {
   if (!button) { return; }
   var source = currentSource();
   var playing = Boolean(source && State.audition === source.id && !$('audio').paused);
-  button.disabled = !source;
+  var loading = Boolean(source && State.audition === source.id && $('audio').paused && State.auditionLoading);
+  button.disabled = !source || loading;
   button.title = !source ? 'Choose a recording first'
+    : loading ? 'Synthesizing studio MIDI audio with SoundFont...'
+    : playing ? 'Pause this recording'
     : 'Play this recording through the player, to hear what you are covering';
   button.classList.toggle('on', playing);
+  button.classList.toggle('loading', loading);
+  if (loading) {
+    button.textContent = '⏳ Preparing…';
+  } else if (playing) {
+    button.textContent = '⏸ Audition';
+  } else {
+    button.textContent = 'Audition';
+  }
 }
 
 function paintHearJob(state) {
@@ -8394,8 +8413,20 @@ function wireTransport() {
     });
   }
 
-  ['play', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'seeking'].forEach(function (name) {
-    audio.addEventListener(name, function () { updateTimes(); paintTransport(); paintAudition(); });
+  ['play', 'playing', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'seeking', 'error'].forEach(function (name) {
+    audio.addEventListener(name, function () {
+      if (name === 'playing' && State.auditionLoading) {
+        State.auditionLoading = false;
+        var sel = $('score-sf2-select');
+        var sfLabel = (sel && sel.selectedOptions && sel.selectedOptions[0]) ? sel.selectedOptions[0].textContent : 'SoundFont';
+        $('np-meta').textContent = 'MIDI Recording (SoundFont: ' + sfLabel + ')';
+        statusLine('Playing MIDI audio (' + sfLabel + ')', 'ok');
+      }
+      if (name === 'error' || name === 'ended' || name === 'pause') {
+        State.auditionLoading = false;
+      }
+      updateTimes(); paintTransport(); paintAudition();
+    });
   });
   audio.addEventListener('timeupdate', updateTimes);
   paintTransport();

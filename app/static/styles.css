@@ -353,6 +353,13 @@ textarea.lyrics { min-height: 200px; font-family: ui-monospace, SFMono-Regular, 
   border-color: rgb(var(--accent-a-rgb) / 0.8);
   background: rgb(var(--accent-a-rgb) / 0.18);
 }
+.source-row .ghost.loading {
+  color: var(--accent-a);
+  border-color: rgb(var(--accent-a-rgb) / 0.5);
+  background: rgb(var(--accent-a-rgb) / 0.1);
+  opacity: 0.85;
+  cursor: wait;
+}
 
 /* The score button when there is something to save. */
 #save-score.needs-save {
