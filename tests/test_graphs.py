@@ -23,6 +23,9 @@ def test_render_graph():
     assert graph["11"]["inputs"]["abc"] == "X:1"
     assert graph["11"]["inputs"]["max_duration"] == 120.0
     assert graph["14"]["inputs"]["seed"] == 42
+    assert graph["15"]["class_type"] == "VAEDecodeAudioTiled"
+    assert graph["15"]["inputs"]["tile_size"] == 512
+    assert graph["15"]["inputs"]["overlap"] == 64
     # A new prefix every run, so the engine never answers from its output cache.
     assert graph["16"]["inputs"]["filename_prefix"].startswith("yeufonic/t1-")
 
