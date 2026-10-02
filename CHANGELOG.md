@@ -38,7 +38,7 @@ cannot creep back in.
 
 ### Fixed
 
-- **Windows installer update reliability.** Fixed an issue where running the installer to update an existing installation from within the application window was terminated prematurely by Windows Job Object cleanup when closing the previous version.
+- **Windows installer update reliability.** Fixed an issue where updating an existing installation from within the application window was terminated prematurely by Windows Job Object cleanup when closing the previous version. You will be instructed to close any open Yeufonic window prior to running the updater.
 
 ## 0.0.18 (2026-10-02)
 

@@ -3692,7 +3692,7 @@ function copyForTerminal(text) {
 
 /* Acting on it: a Windows install runs the installer, and a Docker copy gets the commands
    to paste.  Neither updates itself, so this is as far as the app can take anyone. */
-function actOnUpdate() {
+async function actOnUpdate() {
   var info = State.update || {};
   if (info.install !== 'windows' && info.line) {
     copyForTerminal(info.line).then(function () {
@@ -3710,6 +3710,23 @@ function actOnUpdate() {
   }
   var url = updateLink();
   if (!url) { return; }
+
+  if (info.install === 'windows') {
+    var version = info.latest || '';
+    var proceed = await confirmModal({
+      title: 'Update to Yeufonic ' + version,
+      message: 'The installer will download to your Downloads folder.\n\n' +
+               'To complete the update:\n' +
+               '1. Download the installer\n' +
+               '2. Close this Yeufonic window\n' +
+               '3. Run Yeufonic-Setup-' + version + '.exe from your Downloads folder\n\n' +
+               'Your library, settings, LoRAs and models will all be kept.',
+      confirmText: 'Download installer',
+      cancelText: 'Cancel'
+    });
+    if (!proceed) { return; }
+  }
+
   openExternal(url);
   seenUpdate();
 }
