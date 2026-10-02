@@ -2593,38 +2593,6 @@ function paintTranscribeJob(current, queue) {
   }
 }
 
-/* The same for a score plan being written for the take in the editor: the Score
-   page says "writing a new plan", and this shows how far it has got. */
-function paintPlanJob(current, queue) {
-  var target = awaitingPlanId();
-  var box = $('plan-job');
-  if (!box) {
-    var summary = $('score-box') ? $('score-box').querySelector('summary') : null;
-    if (!summary) { return; }
-    box = document.createElement('div');
-    box.id = 'plan-job';
-    box.className = 'hear-job hidden';
-    box.innerHTML = '<div class="bar"><div id="plan-bar"></div></div>' +
-      '<div class="hear-job-line"><span id="plan-stage" class="muted">Waiting</span><span id="plan-time" class="muted"></span></div>';
-    summary.parentNode.insertBefore(box, summary.nextSibling);
-  }
-  var mine = function (item) { return item && item.kind === 'plan' && target && item.id === target; };
-  var running = mine(current) ? current : null;
-  var waiting = !running && (queue || []).some(mine);
-  box.classList.toggle('hidden', !running && !waiting);
-  if (running) {
-    $('plan-bar').style.width = Math.max(3, Math.round((running.progress || 0) * 100)) + '%';
-    var label = running.label || 'Writing the score plan';
-    if (running.value && running.max) { label += ' \u00b7 ' + running.value + '/' + running.max; }
-    $('plan-stage').textContent = label;
-    $('plan-time').textContent = secs(running.elapsed || 0);
-  } else if (waiting) {
-    $('plan-bar').style.width = '0%';
-    $('plan-stage').textContent = 'Queued behind another job';
-    $('plan-time').textContent = '';
-  }
-}
-
 /* And a plan or render of the take the editor shows, say one opened from its card while it
    plans or renders: the editor's bottom bar carries its progress, in the status line's place. */
 function paintRenderJob(current, queue) {
@@ -2754,8 +2722,9 @@ function showWriteError(message) {
 }
 
 function paintJob(current, queue, options) {
+  var oldPlanBox = $('plan-job');
+  if (oldPlanBox) { oldPlanBox.remove(); }
   paintTranscribeJob(current, queue);
-  paintPlanJob(current, queue);
   paintRenderJob(current, queue);
   paintWriteJob(current, queue);
   var card = $('job-card');
