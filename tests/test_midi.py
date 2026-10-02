@@ -391,3 +391,61 @@ def test_instrumental_from_midi_source(client):
     assert inst_data["status"] == "queued"
     # Tune was moved from Vocal to Ins for instrumental
     assert "V: Ins" in inst_data["abc"]
+
+
+def test_multi_track_vocal_selection_and_polyphony_reduction():
+    """Verify multiple vocal tracks (vox, choir) are merged monophonically, and lead guitar is not treated as vocal."""
+    # Track 0: Lead Vox
+    t0 = [
+        (0, b"\xFF\x01\x08Lead Vox"),
+        (0, b"\xFF\x58\x04\x04\x02\x18\x08"),  # 4/4
+        (0, b"\xFF\x51\x03\x07\xA1\x20"),  # 120 bpm
+        (0, bytes([0x90, 60, 80])), (480, bytes([0x80, 60, 0])),
+        (480, bytes([0x90, 62, 80])), (480, bytes([0x80, 62, 0])),
+        (0, b"\xFF\x2F\x00"),
+    ]
+    # Track 1: Choir (overlapping vocal)
+    t1 = [
+        (0, b"\xFF\x01\x05Choir"),
+        (480, bytes([0x91, 72, 80])), (480, bytes([0x81, 72, 0])),
+        (0, b"\xFF\x2F\x00"),
+    ]
+    # Track 2: Lead Guitr (should NOT be treated as vocal)
+    t2 = [
+        (0, b"\xFF\x01\x0ALead Guitr"),
+        (0, bytes([0x92, 76, 80])), (960, bytes([0x82, 76, 0])),
+        (0, b"\xFF\x2F\x00"),
+    ]
+    # Track 3: Piano (accompaniment)
+    t3 = [
+        (0, b"\xFF\x01\x05Piano"),
+        (0, bytes([0x93, 48, 80, 0x00, 0x93, 52, 80, 0x00, 0x93, 55, 80])),
+        (960, bytes([0x83, 48, 0, 0x00, 0x83, 52, 0, 0x00, 0x83, 55, 0])),
+        (0, b"\xFF\x2F\x00"),
+    ]
+    data = create_smf([t0, t1, t2, t3], division=480, fmt=1)
+    parsed = midi.parse_midi(data, "Multi Vocal Test")
+    abc = parsed["abc"]
+    assert "V: Vocal" in abc
+    assert "V: Ins" in abc
+    # No score problems
+    assert score.problems(abc) == []
+    # Lyrics should NOT contain track names
+    assert parsed["lyrics"] is None
+
+
+def test_real_bohemian_rhapsody_midi_conversion():
+    """Verify the Bohemian Rhapsody MIDI converts cleanly without score problems or track name pollution."""
+    midi_path = Path("/mnt/c/Users/paul/Downloads/Queen - Bohemian Rhapsody.mid")
+    if not midi_path.exists():
+        pytest.skip("Bohemian Rhapsody MIDI not present in Downloads")
+    data = midi_path.read_bytes()
+    parsed = midi.parse_midi(data, "Queen - Bohemian Rhapsody")
+    assert parsed["lyrics"] is None
+    assert parsed["meter"] == "2/4"
+    assert parsed["tempo"] == 78
+    assert parsed["duration"] > 300
+    abc = parsed["abc"]
+    assert score.problems(abc) == []
+    est = score.estimate(abc)
+    assert est["bars"] > 100

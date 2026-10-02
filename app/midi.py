@@ -217,14 +217,26 @@ class MidiParser:
                     sf = int.from_bytes(meta_bytes[:1], "big", signed=True)
                     mi = meta_bytes[1]
                     self.key_sigs.append((curr_tick, sf, mi))
-                elif meta_type in (0x01, 0x05):  # Text or Lyric
-                    text = meta_bytes.decode("utf-8", errors="replace").strip()
-                    if text:
-                        self.lyrics.append((curr_tick, text))
-                elif meta_type == 0x03:  # Track Name
+                elif meta_type == 0x03 and len(meta_bytes) > 0:  # Sequence / Track Name
                     name = meta_bytes.decode("utf-8", errors="replace").strip()
                     if name:
                         self.track_names[track_idx] = name
+                elif meta_type == 0x04 and len(meta_bytes) > 0:  # Instrument Name
+                    name = meta_bytes.decode("utf-8", errors="replace").strip()
+                    if name and track_idx not in self.track_names:
+                        self.track_names[track_idx] = name
+                elif meta_type == 0x01 and len(meta_bytes) > 0:  # Text Event
+                    text = meta_bytes.decode("utf-8", errors="replace").strip()
+                    if text:
+                        # Many sequencers use text event at tick 0 to name tracks
+                        if track_idx not in self.track_names and curr_tick < 100:
+                            self.track_names[track_idx] = text
+                        else:
+                            self.lyrics.append((curr_tick, text))
+                elif meta_type == 0x05 and len(meta_bytes) > 0:  # Lyric Event
+                    text = meta_bytes.decode("utf-8", errors="replace").strip()
+                    if text:
+                        self.lyrics.append((curr_tick, text))
                 elif meta_type == 0x06:  # Marker
                     marker = meta_bytes.decode("utf-8", errors="replace").strip()
                     if marker:
@@ -407,100 +419,136 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
 
     # Classify into Vocal (lead/melody) and Ins (accompaniment/harmony)
     tracks = sorted(set(n["track"] for n in melodic_notes))
-    vocal_notes: list[dict[str, Any]] = []
-    ins_notes: list[dict[str, Any]] = []
 
-    # Check track names for hints
+    VOCAL_KEYWORDS = ("vocal", "vox", "melody", "lead", "voice", "sing", "choir", "solo")
+    INST_EXCLUSIONS = ("guitar", "guitr", "gtr", "gt", "bass", "drum", "perc", "synth", "brass", "horn", "string", "piano", "organ", "hit", "timpani", "orchestra")
+    ACCOMP_KEYWORDS = ("piano", "keys", "keyboard", "guitar", "acoust", "clean", "strum", "organ", "harp")
+
     vocal_tracks = set()
+    accomp_tracks = set()
+
     for t in tracks:
         name = parser.track_names.get(t, "").lower()
-        if any(w in name for w in ("vocal", "melody", "lead", "voice", "sing", "solo")):
+        is_excl = any(ex in name for ex in INST_EXCLUSIONS)
+        if any(w in name for w in VOCAL_KEYWORDS) and not is_excl:
             vocal_tracks.add(t)
+        elif any(w in name for w in ACCOMP_KEYWORDS):
+            accomp_tracks.add(t)
 
-    if vocal_tracks:
-        for n in melodic_notes:
-            if n["track"] in vocal_tracks:
-                vocal_notes.append(n)
-            else:
-                ins_notes.append(n)
-    elif len(tracks) > 1:
-        # Highest average pitch track is vocal/lead
-        avg_pitches = {}
+    # Fallback if no vocal track names found
+    if not vocal_tracks and len(tracks) > 1:
+        best_vocal_track = None
+        best_vocal_score = -1.0
         for t in tracks:
             t_notes = [n for n in melodic_notes if n["track"] == t]
-            avg_pitches[t] = sum(n["pitch"] for n in t_notes) / len(t_notes) if t_notes else 0
-        lead_track = max(avg_pitches, key=avg_pitches.get)
-        for n in melodic_notes:
-            if n["track"] == lead_track:
-                vocal_notes.append(n)
-            else:
-                ins_notes.append(n)
+            if not t_notes:
+                continue
+            n_count = len(t_notes)
+            in_range = sum(1 for n in t_notes if 50 <= n["pitch"] <= 84) / n_count
+            avg_p = sum(n["pitch"] for n in t_notes) / n_count
+            pitch_penalty = 1.0 - min(1.0, abs(avg_p - 65) / 25.0)
+
+            # Monophonic ratio
+            sorted_t = sorted(t_notes, key=lambda x: x["start_tick"])
+            overlaps = sum(1 for i in range(len(sorted_t) - 1) if sorted_t[i]["end_tick"] > sorted_t[i + 1]["start_tick"])
+            mono_ratio = 1.0 - (overlaps / max(1, len(sorted_t) - 1))
+
+            score = n_count * in_range * pitch_penalty * (0.5 + 0.5 * mono_ratio)
+            if score > best_vocal_score:
+                best_vocal_score = score
+                best_vocal_track = t
+        if best_vocal_track is not None:
+            vocal_tracks.add(best_vocal_track)
+
+    if vocal_tracks:
+        vocal_source = [n for n in melodic_notes if n["track"] in vocal_tracks]
+        if accomp_tracks:
+            ins_source = [n for n in melodic_notes if n["track"] in accomp_tracks]
+        else:
+            ins_source = [n for n in melodic_notes if n["track"] not in vocal_tracks]
     else:
         # Single track: split polyphony
-        # Notes starting at same tick: highest pitch goes to vocal, others to ins
         by_start: dict[int, list[dict[str, Any]]] = {}
         for n in melodic_notes:
             by_start.setdefault(n["start_tick"], []).append(n)
-        for start_t, group in by_start.items():
-            sorted_group = sorted(group, key=lambda x: x["pitch"], reverse=True)
-            vocal_notes.append(sorted_group[0])
-            for lower_note in sorted_group[1:]:
-                ins_notes.append(lower_note)
+        vocal_source = []
+        ins_source = []
+        for start_t in sorted(by_start.keys()):
+            group = sorted(by_start[start_t], key=lambda x: x["pitch"], reverse=True)
+            vocal_source.append(group[0])
+            for lower_note in group[1:]:
+                ins_source.append(lower_note)
 
-    # Quantize notes to 16th grid
-    def quantize_note(n: dict[str, Any], voice_name: str) -> dict[str, Any]:
-        q_start = round(n["start_tick"] / ticks_per_16th)
-        q_end = max(q_start + 1, round(n["end_tick"] / ticks_per_16th))
-        return {
-            "pitch": n["pitch"],
-            "voice": voice_name,
-            "start_tick": q_start,
-            "duration_ticks": q_end - q_start,
-        }
+    # Reduction helpers
+    def make_monophonic(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not notes:
+            return []
+        sorted_notes = sorted(notes, key=lambda x: (x["start_tick"], -x["pitch"]))
+        mono: list[dict[str, Any]] = []
+        for n in sorted_notes:
+            if not mono:
+                mono.append({"start_tick": n["start_tick"], "end_tick": n["end_tick"], "pitches": [n["pitch"]]})
+                continue
+            prev = mono[-1]
+            if n["start_tick"] == prev["start_tick"]:
+                continue
+            if n["start_tick"] < prev["end_tick"]:
+                prev["end_tick"] = n["start_tick"]
+            mono.append({"start_tick": n["start_tick"], "end_tick": n["end_tick"], "pitches": [n["pitch"]]})
+        return mono
 
-    q_vocal = [quantize_note(n, "Vocal") for n in vocal_notes]
-    q_ins = [quantize_note(n, "Ins") for n in ins_notes]
+    def reduce_polyphony(notes: list[dict[str, Any]], max_polyphony: int = 3) -> list[dict[str, Any]]:
+        if not notes:
+            return []
+        by_start: dict[int, list[dict[str, Any]]] = {}
+        for n in sorted(notes, key=lambda x: (x["start_tick"], x["pitch"])):
+            by_start.setdefault(n["start_tick"], []).append(n)
+        start_ticks = sorted(by_start.keys())
+        events: list[dict[str, Any]] = []
+        for i, t in enumerate(start_ticks):
+            group = by_start[t]
+            pitches = sorted(set(n["pitch"] for n in group))
+            if len(pitches) > max_polyphony:
+                pitches = [pitches[0]] + pitches[-(max_polyphony - 1):]
+            min_dur = min(n["duration_ticks"] for n in group)
+            if i + 1 < len(start_ticks):
+                max_allowed = start_ticks[i + 1] - t
+                dur = min(min_dur, max_allowed)
+            else:
+                dur = min_dur
+            dur = max(1, dur)
+            events.append({"start_tick": t, "end_tick": t + dur, "pitches": pitches})
+        return events
+
+    vocal_events = make_monophonic(vocal_source)
+    ins_events = reduce_polyphony(ins_source, max_polyphony=3)
+
+    def quantize_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        q = []
+        for e in events:
+            qs = round(e["start_tick"] / ticks_per_16th)
+            qe = max(qs + 1, round(e["end_tick"] / ticks_per_16th))
+            q.append({"start_tick": qs, "end_tick": qe, "pitches": e["pitches"]})
+        return q
+
+    qv = quantize_events(vocal_events)
+    qi = quantize_events(ins_events)
 
     max_tick = 0
-    for n in q_vocal + q_ins:
-        if n["start_tick"] + n["duration_ticks"] > max_tick:
-            max_tick = n["start_tick"] + n["duration_ticks"]
+    for e in qv + qi:
+        if e["end_tick"] > max_tick:
+            max_tick = e["end_tick"]
 
     total_bars = max(4, math.ceil(max_tick / ticks_per_bar)) if ticks_per_bar > 0 else 4
 
-    # Segment notes into bars and handle ties across bar boundaries
-    # bar_segments[voice][bar_idx] -> list of {tick_in_bar, duration_ticks, pitch, tied}
-    bar_segments: dict[str, dict[int, list[dict[str, Any]]]] = {"Vocal": {}, "Ins": {}}
-    for b in range(total_bars):
-        bar_segments["Vocal"][b] = []
-        bar_segments["Ins"][b] = []
-
-    for n in q_vocal + q_ins:
-        voice = n["voice"]
-        cur_tick = n["start_tick"]
-        rem_dur = n["duration_ticks"]
-        while rem_dur > 0:
-            b_idx = cur_tick // ticks_per_bar
-            if b_idx >= total_bars:
-                break
-            t_in_bar = cur_tick % ticks_per_bar
-            space = ticks_per_bar - t_in_bar
-            seg_dur = min(rem_dur, space)
-            is_tied = rem_dur > seg_dur
-            bar_segments[voice][b_idx].append({
-                "tick_in_bar": t_in_bar,
-                "duration_ticks": seg_dur,
-                "pitch": n["pitch"],
-                "tied": is_tied,
-            })
-            rem_dur -= seg_dur
-            cur_tick += seg_dur
-
-    # Identify chords for each bar
     bar_chords: list[str] = []
     last_chord = key.replace("m", "m") if key.endswith("m") else key
     for b in range(total_bars):
-        sounding_pitches = [seg["pitch"] for seg in bar_segments["Vocal"][b] + bar_segments["Ins"][b]]
+        sounding_pitches = [
+            p for e in qv + qi
+            if e["end_tick"] > b * ticks_per_bar and e["start_tick"] < (b + 1) * ticks_per_bar
+            for p in e["pitches"]
+        ]
         ch = detect_bar_chord(sounding_pitches, key, last_chord)
         bar_chords.append(ch)
         last_chord = ch
@@ -519,7 +567,6 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
     if not sections or sections[0][0] > 0:
         sections.insert(0, (0, "intro"))
 
-    # If no markers or only intro, divide naturally
     if len(sections) == 1:
         if total_bars > 8:
             sections = [(0, "intro"), (4, "verse")]
@@ -530,10 +577,8 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
         else:
             sections = [(0, "verse")]
 
-    # Deduplicate and sort sections by barIndex
     sections = sorted(dict(sections).items(), key=lambda x: x[0])
 
-    # Build ABC score string
     lines: list[str] = [
         "X:1",
         f"T:{title}",
@@ -545,51 +590,50 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
         f"K:{key}",
     ]
 
-    # Render bar helper
-    def render_bar(segs: list[dict[str, Any]], chord_name: str | None) -> str:
+    def render_bar(events: list[dict[str, Any]], b_idx: int, chord_name: str | None) -> str:
+        b_start = b_idx * ticks_per_bar
+        b_end = (b_idx + 1) * ticks_per_bar
+        segs = []
+        for e in events:
+            if e["end_tick"] <= b_start or e["start_tick"] >= b_end:
+                continue
+            ts = max(b_start, e["start_tick"]) - b_start
+            te = min(b_end, e["end_tick"]) - b_start
+            tied = e["end_tick"] > b_end
+            segs.append({"start": ts, "dur": te - ts, "pitches": e["pitches"], "tied": tied})
+
         if not segs:
             prefix = f'"{chord_name}"' if chord_name else ""
             return f"{prefix}z{ticks_per_bar}"
 
-        # Group notes by tick_in_bar
-        segs_by_tick: dict[int, list[dict[str, Any]]] = {}
-        for s in segs:
-            segs_by_tick.setdefault(s["tick_in_bar"], []).append(s)
-
-        sorted_ticks = sorted(segs_by_tick.keys())
         cur_t = 0
-        tokens: list[str] = []
+        tokens = []
+        for idx, s in enumerate(segs):
+            if s["start"] > cur_t:
+                gap = s["start"] - cur_t
+                prefix = f'"{chord_name}"' if (chord_name and idx == 0 and cur_t == 0) else ""
+                gap_str = str(gap) if gap > 1 else ""
+                tokens.append(f"{prefix}z{gap_str}")
+                cur_t = s["start"]
 
-        for idx, t in enumerate(sorted_ticks):
-            if t > cur_t:
-                gap = t - cur_t
-                chord_prefix = f'"{chord_name}"' if (chord_name and idx == 0 and cur_t == 0) else ""
-                tokens.append(f"{chord_prefix}z{gap if gap > 1 else ''}")
-                cur_t = t
-
-            chord_prefix = f'"{chord_name}"' if (chord_name and idx == 0 and cur_t == 0) else ""
-            group = segs_by_tick[t]
-            dur = group[0]["duration_ticks"]
-            dur_str = str(dur) if dur > 1 else ""
-            is_tied = group[0]["tied"]
-            tie_str = "-" if is_tied else ""
-
-            if len(group) == 1:
-                n_str = midi_to_abc_pitch(group[0]["pitch"], key)
-                tokens.append(f"{chord_prefix}{n_str}{dur_str}{tie_str}")
+            prefix = f'"{chord_name}"' if (chord_name and idx == 0 and cur_t == 0) else ""
+            if len(s["pitches"]) == 1:
+                n_str = midi_to_abc_pitch(s["pitches"][0], key)
             else:
-                chord_pitches = "".join(midi_to_abc_pitch(g["pitch"], key) for g in group)
-                tokens.append(f"{chord_prefix}[{chord_pitches}]{dur_str}{tie_str}")
-
+                n_str = "[" + "".join(midi_to_abc_pitch(p, key) for p in s["pitches"]) + "]"
+            dur = s["dur"]
+            dur_str = str(dur) if dur > 1 else ""
+            tie_str = "-" if s["tied"] else ""
+            tokens.append(f"{prefix}{n_str}{dur_str}{tie_str}")
             cur_t += dur
 
         if cur_t < ticks_per_bar:
             gap = ticks_per_bar - cur_t
-            tokens.append(f"z{gap if gap > 1 else ''}")
+            gap_str = str(gap) if gap > 1 else ""
+            tokens.append(f"z{gap_str}")
 
         return "".join(tokens)
 
-    # Render section by section
     for s_idx, (s_bar, s_name) in enumerate(sections):
         next_s_bar = sections[s_idx + 1][0] if s_idx + 1 < len(sections) else total_bars
         end_bar = min(total_bars, next_s_bar)
@@ -601,12 +645,12 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
         for voice in ("Vocal", "Ins"):
             lines.append(f"V: {voice}")
             bar_strs = []
+            evs = qv if voice == "Vocal" else qi
             for b in range(s_bar, end_bar):
                 chord_to_emit = bar_chords[b] if voice == "Vocal" else None
-                bar_str = render_bar(bar_segments[voice][b], chord_to_emit)
+                bar_str = render_bar(evs, b, chord_to_emit)
                 bar_strs.append(bar_str)
 
-            # Group up to 4 bars per line
             for chunk_start in range(0, len(bar_strs), 4):
                 chunk = bar_strs[chunk_start:chunk_start + 4]
                 lines.append("|".join(chunk) + "|")
