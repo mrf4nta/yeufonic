@@ -2846,8 +2846,14 @@ function paintSource() {
   items.forEach(function (el) {
     el.classList.toggle('selected', el.dataset.id === (source ? source.id : ''));
   });
-  if ($('transcribe')) { $('transcribe').disabled = !source || isMidi; }
-  if ($('source-lyrics')) { $('source-lyrics').disabled = !source || isMidi; }
+  if ($('transcribe')) {
+    $('transcribe').disabled = !source || isMidi;
+    $('transcribe').title = isMidi ? 'MIDI files are converted to score on upload and do not need transcription' : '';
+  }
+  if ($('source-lyrics')) {
+    $('source-lyrics').disabled = !source || isMidi;
+    $('source-lyrics').title = isMidi ? 'MIDI files do not have audio vocals for lyric extraction' : 'Write down the words this recording sings';
+  }
   if ($('audition')) { $('audition').disabled = !source; }
   if ($('source-delete')) { $('source-delete').disabled = !source; }
 

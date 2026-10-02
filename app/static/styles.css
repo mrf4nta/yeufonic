@@ -537,6 +537,7 @@ button.ghost {
   background: var(--card); color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer;
 }
 button.ghost:hover { background: var(--card-2); }
+button.ghost:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
 button.icon { width: 42px; padding: 8px 0; text-align: center; }
 
 .modes { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin-bottom: 18px; }
