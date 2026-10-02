@@ -540,11 +540,12 @@ def test_hey_jude_synth_lead_melody_classification():
     assert vocal_track["track"] == 8
     assert "Synth" in vocal_track["name"]
 
-    # Verify Vocal melody contains the authentic Hey Jude melody (C4, A, G, Bb, F)
+    # Verify Vocal melody contains the authentic Hey Jude melody normalized to vocal singing register
     abc = parsed["abc"]
     assert score.problems(abc) == []
+    assert parsed.get("octave_shift") == 1
     vocal_bars = score.vocal_bars(abc)
-    assert "C4A,10A,2" in vocal_bars[0]  # Hey, Jude, don't
+    assert "c4A10A2" in vocal_bars[0]  # Hey, Jude, don't (normalized +1 octave)
 
 
 def test_source_tracks_and_retrack_api(client):
@@ -568,14 +569,22 @@ def test_source_tracks_and_retrack_api(client):
     t8 = next(t for t in tracks if t["track"] == 8)
     assert t8["role"] == "vocal"
 
-    # Retrack: switch vocal to Track 8 explicitly
+    # Retrack: switch vocal to Track 8 explicitly with auto-octave
     retrack_res = client.post(
         f"/api/sources/{src_id}/retrack",
         json={"vocal_track": 8, "ins_track": 2},
     )
     assert retrack_res.status_code == 200
     retrack_data = retrack_res.json()
-    assert "C4A,10A,2" in retrack_data["abc"]
+    assert "c4A10A2" in retrack_data["abc"]
+
+    # Retrack: switch vocal to Track 8 explicitly with octave_shift=0 (original low baritone)
+    retrack_res_0 = client.post(
+        f"/api/sources/{src_id}/retrack",
+        json={"vocal_track": 8, "ins_track": 2, "octave_shift": 0},
+    )
+    assert retrack_res_0.status_code == 200
+    assert "C4A,10A,2" in retrack_res_0.json()["abc"]
 
 
 def test_take_auto_embeds_lyrics_in_abc(client):

@@ -34,37 +34,29 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## Unreleased
+## 0.0.18 (2026-10-02)
 
 ### Added
 
-- **Themed confirmation and input dialogs.** Destructive actions (deleting takes, stems, recordings,
-  corpora, LoRAs, spaces, or checkpoints, and discarding unsaved score changes) use an in-app modal
-  styled to match the application theme, with focus initially on Cancel for safety, replacing
-  browser popups. Creating and renaming spaces and takes use in-app text prompts with Enter
-  submission, Escape dismissal, and focus trapping.
+- **MIDI import and audition (Experimental).** Drop Standard MIDI files (`.mid`, `.midi`) into Cover mode to generate different, often off-the-wall takes of original tunes. Auto-transcription separates lead vocal melody, accompaniment, and chord progressions into ABC notation and the interactive Piano Roll.
+- **Embedded MIDI lyrics extraction & phrase alignment.** Lyrics and text events inside MIDI files are extracted and aligned to the vocal melody across breath pauses and rests.
+- **Automatic vocal octave normalization.** MIDI lead melody tracks sequenced in lower registers (such as synth leads or guitar tracks) are automatically transposed to a natural singing register.
+- **High-fidelity SoundFont audition.** MIDI files can be auditioned in-browser using FluidSynth and General MIDI SoundFonts (`.sf2`). Audio rendering includes automatic peak volume detection and normalisation with true-peak limiting, ensuring multi-track MIDI recordings audition loudly and clearly without clipping.
+- **Default SoundFonts installation.** Setup scripts on both Linux/Docker (`scripts/fetch-models.sh`) and Windows (`windows/setup.ps1`) automatically download `Arachno_SoundFont_Version_1.0.sf2` and `github_Jnsgm2.sf2` into `data/models/soundfonts/sf2/`. Active SoundFont can be selected in Settings.
+- **FluidSynth on Windows.** The Windows setup and launcher now automatically download and configure official FluidSynth binaries in `tools/fluidsynth/bin`.
+- **Themed confirmation and input dialogs.** Destructive actions (deleting takes, stems, recordings, corpora, LoRAs, spaces, or checkpoints, and discarding unsaved score changes) use an in-app modal styled to match the application theme, with focus initially on Cancel for safety, replacing browser popups. Creating and renaming spaces and takes use in-app text prompts with Enter submission, Escape dismissal, and focus trapping.
 
 ### Changed
 
-- **The external model's words win.** With an external LLM set to hear a recording's lyrics, a reply
-  that looks like lyrics is now always used, even where it differs a good deal from what Whisper
-  heard, which had been refused when it had fewer than 60% of Whisper's words or when under 30% of
-  its words matched. Whisper can miss a vocal buried in a mix, and a held syllable it loops on
-  inflated its word count. A reply that refuses, cuts lines short, writes a notice, or is almost
-  nothing, or an error, still falls back to Whisper. When the words cannot be matched to Whisper's
-  times, the lines are spread over the song instead.
-- **Both versions of a corpus song's words are kept,** and its Review panel has a **Words from**
-  switch to put either in use, the external model's by default. Songs analysed before this have
-  Whisper's or the model's lines only; analyse again to get both.
-- Whisper's lines no longer hold a word repeated more than eight times in a row: a vocalise it
-  looped on ("la" written 237 times) is cut back.
+- **Prompt token sanitization.** Section structure markers and prompts sent to YuE2 are cleaned of embedded `w:` lyric headers, ensuring the causal language model does not suffer token collisions or skip subsequent verses.
+- **Removed "Free engine" test item.** The internal memory deallocation menu button has been removed from the main dropdown menu.
+- **The external model's words win.** With an external LLM set to hear a recording's lyrics, a reply that looks like lyrics is now always used, even where it differs a good deal from what Whisper heard, which had been refused when it had fewer than 60% of Whisper's words or when under 30% of its words matched. Whisper can miss a vocal buried in a mix, and a held syllable it loops on inflated its word count. A reply that refuses, cuts lines short, writes a notice, or is almost nothing, or an error, still falls back to Whisper. When the words cannot be matched to Whisper's times, the lines are spread over the song instead.
+- **Both versions of a corpus song's words are kept,** and its Review panel has a **Words from** switch to put either in use, the external model's by default. Songs analysed before this have Whisper's or the model's lines only; analyse again to get both.
+- Whisper's lines no longer hold a word repeated more than eight times in a row: a vocalise it looped on ("la" written 237 times) is cut back.
 
 ### Fixed
 
-- **Corpora badge status scoped to the active corpus.** The top bar badge previously accumulated
-  failed tracks across all corpora in the library, causing it to remain red and report errors in its
-  tooltip even after switching to a corpus whose tracks had all succeeded. The badge now reflects the
-  failure count and working state of the shown corpus.
+- **Corpora badge status scoped to the active corpus.** The top bar badge previously accumulated failed tracks across all corpora in the library, causing it to remain red and report errors in its tooltip even after switching to a corpus whose tracks had all succeeded. The badge now reflects the failure count and working state of the shown corpus.
 - A plan that looped could run for ten minutes or more, mostly rests, and the render then ran to the length cap with long repeated intros and sometimes no vocal. It happened with a style LoRA, a short style and Calm plan variety together. A written plan far longer than a song (over 8 minutes, or well past a longer cap), or a song whose vocal line has no notes at all, is now written once more with a new seed, like any unreadable plan, and the take fails with advice if the second comes out the same: describe the style in more detail, or use Normal plan variety with a LoRA.
 
 ## 0.0.13 (2026-09-30)

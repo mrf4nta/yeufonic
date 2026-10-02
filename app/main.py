@@ -505,6 +505,7 @@ class ScoreIn(BaseModel):
 class RetrackIn(BaseModel):
     vocal_track: int
     ins_track: int | None = None
+    octave_shift: int | None = None
 
 
 class SongIn(BaseModel):
@@ -1395,7 +1396,13 @@ def retrack_source(source_id: str, body: RetrackIn) -> dict:
     try:
         data = stored_path.read_bytes()
         title = source.get("title") or stored_path.stem
-        parsed = midi.parse_midi(data, title=title, vocal_track=body.vocal_track, ins_track=body.ins_track)
+        parsed = midi.parse_midi(
+            data,
+            title=title,
+            vocal_track=body.vocal_track,
+            ins_track=body.ins_track,
+            octave_shift=body.octave_shift,
+        )
         new_abc = parsed["abc"]
         if source.get("lyrics"):
             try:
@@ -2019,7 +2026,7 @@ async def new_words(take_id: str, body: WordsIn) -> dict:
     abc = take["abc"] if body.abc is None else body.abc
     if not (abc or "").strip():
         raise HTTPException(400, "this take has no score to sing. Write a plan first.")
-    if words and abc and ("V: Vocal" in abc or "V:Vocal" in abc):
+    if body.abc is None and words and abc and ("\nw: " in abc or "\nw:" in abc or "\nW: " in abc) and ("V: Vocal" in abc or "V:Vocal" in abc):
         try:
             abc = aligner.align_lyrics_to_abc(abc, words)
         except Exception as exc:

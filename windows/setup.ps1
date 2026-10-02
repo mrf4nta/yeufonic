@@ -59,8 +59,10 @@ $Files = @{
                   Sha = 'ad4c82fadcbdf93c03b4fc440f300509c7d60c5c2f4d183e35d9d70d6957037d'; Size = 602624 }
     Uv       = @{ Url = 'https://github.com/astral-sh/uv/releases/download/0.12.18/uv-x86_64-pc-windows-msvc.zip'
                   Sha = 'cae6a3bc25239f83dffb467a4b180508d9da23986c04639ebfa44e43e6a84bff'; Size = 17891221 }
-    Ffmpeg   = @{ Url = 'https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip'
+    Ffmpeg     = @{ Url = 'https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip'
                   Sha = '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'; Size = 114768076 }
+    Fluidsynth = @{ Url = 'https://github.com/FluidSynth/fluidsynth/releases/download/v2.6.1/fluidsynth-v2.6.1-win10-x64-cpp11.zip'
+                  Sha = 'fab7a2e4b85675b66970f97a39bbc239729c5e0f237198b5922a6a73cbc8677c'; Size = 2727529 }
 }
 $HF = 'https://huggingface.co'
 $ModelFiles = @(
@@ -87,6 +89,14 @@ $ModelFiles = @(
        Sha = '587631eec5946f9f87d4b422abcda7e35dee43299efb7b7d2fcba4cd8752c475'; Size = 296098847 }
 )
 if ($NoLyrics) { $ModelFiles = @($ModelFiles | Where-Object { -not $_.Lyrics }) }
+$SoundFontFiles = @(
+    @{ Name = 'Jnsgm2 GM SoundFont'; File = 'github_Jnsgm2.sf2'
+       Url = 'https://raw.githubusercontent.com/wrightflyer/SF2_SoundFonts/master/Jnsgm2.sf2'
+       Sha = 'dc48cb5c322cab23fce1b18442066be30ccc49a184603c7a3bf7615003ee137d'; Size = 33187490 }
+    @{ Name = 'Arachno SoundFont 1.0'; File = 'Arachno_SoundFont_Version_1.0.sf2'
+       Url = 'https://archive.org/download/free-soundfonts-sf2-2019-04/Arachno_SoundFont_Version_1.0.sf2'
+       Sha = '9a57fb3b6714e69dda12390e351b087e81fc3b1eca15c6b4bbe172799f4cf3cd'; Size = 155405818 }
+)
 
 # ------------------------------------------------------------------- helpers
 function Say([string]$text, [string]$colour = 'Gray') { Write-Host $text -ForegroundColor $colour }
@@ -260,6 +270,15 @@ if (-not (Test-Path (Join-Path $Tools 'ffmpeg\bin\ffmpeg.exe'))) {
     Move-Item (Get-ChildItem $tmp | Select-Object -First 1).FullName (Join-Path $Tools 'ffmpeg')
     Remove-Item -Recurse -Force $tmp
 }
+$fsZip = Join-Path $Downloads 'fluidsynth.zip'
+Get-Verified $Files.Fluidsynth $fsZip
+if (-not (Test-Path (Join-Path $Tools 'fluidsynth\bin\fluidsynth.exe'))) {
+    $tmp = Join-Path $Downloads 'fluidsynth-unpack'
+    Expand-Zip $fsZip $tmp
+    if (Test-Path (Join-Path $Tools 'fluidsynth')) { Remove-Item -Recurse -Force (Join-Path $Tools 'fluidsynth') }
+    Move-Item (Get-ChildItem $tmp | Select-Object -First 1).FullName (Join-Path $Tools 'fluidsynth')
+    Remove-Item -Recurse -Force $tmp
+}
 $uv = Join-Path $Tools 'uv\uv.exe'
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $InstallDir 'python'
 $env:UV_CACHE_DIR = Join-Path $Downloads 'uv-cache'
@@ -366,18 +385,19 @@ if (-not $SkipModels) {
 }
 
 # ------------------------------------------------------ the app's own models
+$dataDir = Join-Path $InstallDir 'data'
+$ini = Join-Path $InstallDir 'settings.ini'
+if (Test-Path $ini) {
+    $line = Get-Content $ini | Where-Object { $_ -match '^\s*data_dir\s*=\s*(.+?)\s*$' } | Select-Object -First 1
+    if ($line -and $Matches[1]) { $dataDir = $Matches[1] }
+}
+
 # Whisper (times the lyric lines of a cover) and demucs (separates the vocal) would
 # otherwise download the first time a cover or stems are made, and leave that first
 # go sitting on a 1.6 GB download.  Fetched with the app's own Python, by the same
 # calls the app makes, so they land where it looks.
 if (-not $SkipModels -and -not (IsDone 'app-models')) {
     Step "The app's own models (lyric timing and stems)"
-    $dataDir = Join-Path $InstallDir 'data'
-    $ini = Join-Path $InstallDir 'settings.ini'
-    if (Test-Path $ini) {
-        $line = Get-Content $ini | Where-Object { $_ -match '^\s*data_dir\s*=\s*(.+?)\s*$' } | Select-Object -First 1
-        if ($line -and $Matches[1]) { $dataDir = $Matches[1] }
-    }
     # As the launcher sets them for the app: demucs 4.1 fetches from Hugging Face, so
     # its model goes where HF_HOME says, and Whisper is given its folder directly.
     $env:TORCH_HOME = Join-Path $dataDir 'models\torch'
@@ -389,6 +409,18 @@ if (-not $SkipModels -and -not (IsDone 'app-models')) {
     Say 'demucs htdemucs (about 80 MB)'
     Invoke-Checked 'demucs' $appPy @('-c', "from demucs.pretrained import get_model; get_model('htdemucs')")
     Done 'app-models'
+}
+
+# ---------------------------------------------------------------- soundfonts
+if (-not $SkipModels) {
+    Step "SoundFonts for MIDI playback"
+    $sf2Dir = Join-Path $dataDir 'models\soundfonts\sf2'
+    New-Item -ItemType Directory -Force -Path $sf2Dir | Out-Null
+    foreach ($sf in $SoundFontFiles) {
+        Say ''
+        Say $sf.Name 'White'
+        Get-Verified $sf (Join-Path $sf2Dir $sf.File)
+    }
 }
 
 # -------------------------------------------------------------------- done

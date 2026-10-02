@@ -358,6 +358,20 @@ it finished, and if that one ends early too, the card says so: **Render** again 
 A cover follows the original's melody and chords while the style decides everything else, which is
 what makes it a cover rather than a copy.
 
+### MIDI files and covers (Experimental)
+
+> [!NOTE]
+> **Experimental:** Using MIDI files is designed for generating different, often off-the-wall takes of original tunes.
+
+In addition to recorded audio files, you can drop or upload Standard MIDI files (`.mid`, `.midi`) directly into **Cover** mode.
+
+When a MIDI file is uploaded:
+- **Automatic score transcription:** Yeufonic analyses tracks and channels to identify the lead vocal melody, accompaniment, and harmonic chord progression, transcribing them into ABC notation and loading them directly into the Piano Roll. Synth leads or vocal melodies sequenced in lower registers are automatically transposed to a natural singing octave.
+- **Embedded lyrics:** Any lyric or text events embedded within the MIDI sequence are extracted and aligned to the melody syllables.
+- **Full audio audition with SoundFonts:** The audition player synthesizes the MIDI arrangement into high-fidelity audio using **FluidSynth** and General MIDI SoundFonts (`.sf2`). The output is peak-normalised so that quiet multi-track MIDI recordings audition with full presence and clarity without distortion.
+- **Select SoundFonts:** In **Settings**, you can choose your preferred active `.sf2` SoundFont bank (such as *Arachno SoundFont 1.0* or *JNS-GM 2.0*). Additional `.sf2` files placed in `data/models/soundfonts/sf2/` are picked up automatically.
+- **Piano Roll refinement:** Open the **Piano Roll** to inspect or modify notes, choose which track acts as the lead vocal melody, harmonize accompaniment gaps with **Fill Gaps**, or align newly pasted lyrics with **Match Lyrics**.
+
 ### Covering a song from a corpus
 
 A corpus's analysis has already done what a cover needs: the score, the words heard in the song, and

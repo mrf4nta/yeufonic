@@ -610,6 +610,7 @@ def parse_midi(
     title: str = "",
     vocal_track: int | None = None,
     ins_track: int | None = None,
+    octave_shift: int | None = None,
 ) -> dict[str, Any]:
     """Parse MIDI data into ABC score, duration, tempo, meter, key, and lyrics."""
     parser = MidiParser(data)
@@ -655,16 +656,16 @@ def parse_midi(
     )
 
     if vocal_tracks:
-        vocal_source = [n for n in melodic_notes if n["track"] in vocal_tracks]
+        vocal_source = [dict(n) for n in melodic_notes if n["track"] in vocal_tracks]
         if accomp_tracks:
-            ins_source = [n for n in melodic_notes if n["track"] in accomp_tracks]
+            ins_source = [dict(n) for n in melodic_notes if n["track"] in accomp_tracks]
         else:
-            ins_source = [n for n in melodic_notes if n["track"] not in vocal_tracks]
+            ins_source = [dict(n) for n in melodic_notes if n["track"] not in vocal_tracks]
     else:
         # Single track: split polyphony
         by_start: dict[int, list[dict[str, Any]]] = {}
         for n in melodic_notes:
-            by_start.setdefault(n["start_tick"], []).append(n)
+            by_start.setdefault(n["start_tick"], []).append(dict(n))
         vocal_source = []
         ins_source = []
         for start_t in sorted(by_start.keys()):
@@ -672,6 +673,32 @@ def parse_midi(
             vocal_source.append(group[0])
             for lower_note in group[1:]:
                 ins_source.append(lower_note)
+
+    # Intelligent vocal register normalization:
+    # Standard lead pop singing register is centered around C4-D5 (MIDI 65-76).
+    # When sequenced an octave lower (e.g. synth or guitar lead in low 50s/60s),
+    # average pitch is < 65 and max <= 78.
+    applied_octave_shift = 0
+    if vocal_source:
+        vp = [n["pitch"] for n in vocal_source]
+        avg_vocal_pitch = sum(vp) / len(vp)
+        max_vocal_pitch = max(vp)
+        min_vocal_pitch = min(vp)
+
+        if octave_shift is not None:
+            applied_octave_shift = octave_shift
+        else:
+            if avg_vocal_pitch < 64 and min_vocal_pitch < 58 and max_vocal_pitch <= 78:
+                applied_octave_shift = 1
+            elif avg_vocal_pitch > 80 and min_vocal_pitch >= 65:
+                applied_octave_shift = -1
+            else:
+                applied_octave_shift = 0
+
+        if applied_octave_shift != 0:
+            shift_semitones = applied_octave_shift * 12
+            for n in vocal_source:
+                n["pitch"] = max(12, min(108, n["pitch"] + shift_semitones))
 
     # Reduction helpers
     def make_monophonic(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -789,14 +816,9 @@ def parse_midi(
     first_vocal_bar = (min((e["start_tick"] for e in qv), default=0) // ticks_per_bar) if qv else 0
 
     if not sections:
-        if first_vocal_bar > 0:
-            sections = [(0, "intro"), (first_vocal_bar, "verse")]
-            last_b = first_vocal_bar
-        else:
-            sections = [(0, "verse")]
-            last_b = 0
-
         outro_threshold = max(total_bars - 8, total_bars - 4) if total_bars > 16 else total_bars
+        sec_bars = [first_vocal_bar]
+        last_b = first_vocal_bar
 
         for i in range(len(qv) - 1):
             e1 = qv[i]["end_tick"]
@@ -805,8 +827,50 @@ def parse_midi(
             b_next = s2 // ticks_per_bar
             # Break into musical section if vocal rests for >= 6 sixteenths (1.5 beats) or after 16 bars
             if (gap >= 6 or (b_next - last_b) >= 16) and (b_next - last_b) >= 6 and b_next < outro_threshold:
-                sections.append((b_next, "verse"))
+                sec_bars.append(b_next)
                 last_b = b_next
+
+        # Musical section naming:
+        # Alternating verse / chorus / bridge based on section position and harmonic progression
+        vocal_sec_names = []
+        v1_chords = None
+        for s_i, sb in enumerate(sec_bars):
+            eb = sec_bars[s_i + 1] if s_i + 1 < len(sec_bars) else total_bars
+            chords_in_sec = set(bar_chords[sb:eb])
+            if s_i == 0:
+                vocal_sec_names.append("verse")
+                v1_chords = chords_in_sec
+            elif s_i == 1:
+                # If section 2 has very similar chords to section 1, it's verse 2
+                overlap = len(v1_chords.intersection(chords_in_sec)) / max(1, len(v1_chords.union(chords_in_sec))) if v1_chords else 1.0
+                if overlap >= 0.4:
+                    vocal_sec_names.append("verse")
+                else:
+                    vocal_sec_names.append("chorus")
+            elif s_i == 2:
+                if vocal_sec_names[-1] == "verse":
+                    vocal_sec_names.append("chorus")
+                else:
+                    vocal_sec_names.append("verse")
+            elif s_i == 3:
+                if vocal_sec_names[-1] == "chorus":
+                    vocal_sec_names.append("verse")
+                else:
+                    vocal_sec_names.append("chorus")
+            elif s_i == 4:
+                vocal_sec_names.append("bridge")
+            elif s_i == 5:
+                vocal_sec_names.append("verse")
+            else:
+                vocal_sec_names.append("chorus" if s_i % 2 == 0 else "outro")
+
+        if first_vocal_bar > 0:
+            sections = [(0, "intro")]
+        else:
+            sections = []
+
+        for sb, sname in zip(sec_bars, vocal_sec_names):
+            sections.append((sb, sname))
 
         if total_bars > 24 and total_bars - 4 > last_b:
             sections.append((total_bars - 4, "outro"))
@@ -934,5 +998,6 @@ def parse_midi(
         "lyrics": extracted_lyrics,
         "sections": [s_name for _, s_name in sections],
         "tracks": track_info,
+        "octave_shift": applied_octave_shift,
     }
 

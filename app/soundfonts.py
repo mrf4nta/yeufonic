@@ -230,7 +230,7 @@ def render_midi_to_audio(
     midi_path: Path,
     output_path: Path,
     sf2_filename: str | None = None,
-    gain: float = 0.3,
+    gain: float = 0.5,
 ) -> Path:
     """Render a MIDI file to high-quality audio using fluidsynth and ffmpeg."""
     sf2_name = sf2_filename or get_active_sf2()
@@ -251,6 +251,7 @@ def render_midi_to_audio(
         cmd_synth = [
             fluidsynth_bin,
             "-ni",
+            "-o", "audio.file.format=float",
             "-g", str(gain),
             "-F", str(wav_path),
             str(sf2_path),
@@ -262,11 +263,29 @@ def render_midi_to_audio(
         if not wav_path.is_file() or wav_path.stat().st_size == 0:
             raise RuntimeError(f"fluidsynth produced empty audio: {res.stderr}")
 
+        # Detect peak level to normalize quiet or loud MIDIs to standard listening level
+        audio_filter = "alimiter=limit=0.95"
+        try:
+            res_vol = subprocess.run(
+                ["ffmpeg", "-nostats", "-i", str(wav_path), "-af", "volumedetect", "-f", "null", "-"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            max_vol_match = re.search(r"max_volume:\s*(-?[\d.]+)\s*dB", res_vol.stderr)
+            if max_vol_match:
+                max_vol = float(max_vol_match.group(1))
+                target_peak = -1.0
+                boost_db = min(30.0, max(-24.0, target_peak - max_vol))
+                audio_filter = f"volume={boost_db:.2f}dB,alimiter=limit=0.95"
+        except Exception as exc:
+            log.warning("volumedetect failed on rendered MIDI: %s", exc)
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cmd_enc = [
             "ffmpeg", "-y",
             "-i", str(wav_path),
-            "-af", "alimiter=limit=0.95",
+            "-af", audio_filter,
             "-c:a", "flac" if output_path.suffix == ".flac" else "libopus",
             str(output_path),
         ]

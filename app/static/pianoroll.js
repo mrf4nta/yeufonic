@@ -2929,7 +2929,7 @@
           var remLyric = numLyric - currLyricIdx;
 
           if (remLyric <= 0) {
-            for (var ek = 0; ek < targetNotes.length; ek++) { targetNotes[ek].lyric = "_"; }
+            for (var ek = 0; ek < targetNotes.length; ek++) { delete targetNotes[ek].lyric; }
             continue;
           }
 
@@ -3321,7 +3321,7 @@
         count++;
       }
       for (var ek = limit; ek < segNotes.length; ek++) {
-        segNotes[ek].lyric = "_";
+        delete segNotes[ek].lyric;
       }
     }
     return count;

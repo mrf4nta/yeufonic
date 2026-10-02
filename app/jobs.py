@@ -262,7 +262,14 @@ def build_render_graph(take: dict) -> dict:
     node.update(interpretation_sampling(take.get("interpretation")))
     node["style"] = take["style"]
     node["lyrics"] = take["lyrics"]
-    node["abc"] = take["abc"] or ""
+    # Strip embedded w: lyric lines from ABC before sending to YuE2.
+    # The UI uses w: lines for piano roll display, but YuE2's language model
+    # expects standard score notation and gets token pollution from w: lines.
+    abc_raw = take["abc"] or ""
+    node["abc"] = "\n".join(
+        line for line in abc_raw.splitlines()
+        if not line.strip().startswith(("w:", "W:"))
+    )
     node["seed"] = int(take["seed"])
     node["mode"] = take["mode"]
     node["max_duration"] = float(take.get("max_duration") or 360)

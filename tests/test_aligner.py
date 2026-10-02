@@ -122,3 +122,64 @@ V: Ins
 """
     assert aligner.align_lyrics_to_abc(abc, "") == abc
     assert aligner.align_lyrics_to_abc(abc, "   \n\n  ") == abc
+
+
+def test_align_lyrics_updates_abc_section_tags():
+    """Verify that structured lyrics update ABC section comments to % chorus, % bridge, etc."""
+    abc = """X:1
+T:Multi Section Test
+M:4/4
+L:1/16
+Q:1/4=100
+K:C
+% verse
+V: Vocal
+C4D4E4F4|G4A4B4c4|
+V: Ins
+[CEG]16|[CEG]16|
+% verse
+V: Vocal
+c4B4A4G4|F4E4D4C4|
+V: Ins
+[G,B,D]16|[CEG]16|
+% verse
+V: Vocal
+E4F4G4A4|B4c4d4e4|
+V: Ins
+[A,CE]16|[CEG]16|
+"""
+    lyrics = """[Verse 1]
+Here comes the sun
+It is alright
+
+[Chorus]
+Sun, sun, sun
+Here it comes
+
+[Outro]
+Yeah yeah yeah
+"""
+    aligned = aligner.align_lyrics_to_abc(abc, lyrics)
+    assert "% verse" in aligned
+    assert "% chorus" in aligned
+    assert "% outro" in aligned
+
+
+def test_build_render_graph_strips_w_lines():
+    """Verify that build_render_graph strips embedded w: lines from the score sent to YuE2."""
+    from app import jobs
+    take = {
+        "id": "t123",
+        "style": "indie rock",
+        "lyrics": "[Verse 1]\nHello world",
+        "abc": "X:1\nK:C\n% verse\nV: Vocal\nC4D4E4F4|\nw: Hel- lo world _ |\nV: Ins\n[CEG]16|\n",
+        "seed": 42,
+        "mode": "melody",
+        "max_duration": 180,
+    }
+    graph = jobs.build_render_graph(take)
+    submitted_abc = graph["11"]["inputs"]["abc"]
+    assert "w: " not in submitted_abc
+    assert "Hel- lo" not in submitted_abc
+    assert "C4D4E4F4" in submitted_abc
+

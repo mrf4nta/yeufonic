@@ -111,6 +111,32 @@ differ, the publisher's terms apply.
   [app/static/marked.LICENSE.md](app/static/marked.LICENSE.md). It renders `app/static/guide.md` in
   the browser, so the guide stays readable markdown and the image gains no dependency.
 
+### FluidSynth (MIDI synthesis)
+
+- **LGPL-2.1-or-later**. Source: [FluidSynth/fluidsynth](https://github.com/FluidSynth/fluidsynth).
+- Used for high-fidelity offline audio rendering of MIDI files. Installed via system package manager
+  in the Docker image, and fetched as official Windows x64 release binaries during Windows setup.
+
+### SoundFonts (.sf2)
+
+The application uses General MIDI SoundFonts (`.sf2`) for rendering and auditioning imported MIDI files.
+None of the SoundFont binaries are part of this repository: setup scripts download them into
+`data/models/soundfonts/sf2/`.
+
+#### Arachno SoundFont 1.0
+
+- By Maxime Abbey (Arachnosoft).
+- Source: [Arachnosoft Arachno SoundFont](http://www.arachnosoft.com/main/soundfont.php) /
+  [Internet Archive](https://archive.org/download/free-soundfonts-sf2-2019-04/Arachno_SoundFont_Version_1.0.sf2).
+- Terms: Freeware for personal, non-commercial use. Maxime Abbey retains copyright over the SoundFont bank compilation, configuration, and custom sound design. Samples from third-party authors remain their respective property. Any commercial use or commercial redistribution requires authorization from the respective original sample authors.
+
+#### JNS-GM 2.0 (`github_Jnsgm2.sf2`)
+
+- By Jordi Navarro Subirana (JNS).
+- Source: [wrightflyer/SF2_SoundFonts](https://github.com/wrightflyer/SF2_SoundFonts/blob/master/Jnsgm2.sf2) /
+  Jordi Navarro Subirana.
+- Terms: Freely distributed General MIDI soundfont bank for personal, creative, and educational musical playback.
+
 ### Python packages
 
 - The app's packages are listed, with pinned versions, in `requirements.txt`. Each is used under

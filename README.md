@@ -106,6 +106,10 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   names — a guitar, a piano, strings, a synth — and drums when the style asks for them. **Download
   MIDI** saves the score for a DAW with the same instruments, the chord symbols included as a part
   of their own.
+- **MIDI import and audition (Experimental).** Drop a Standard MIDI file (`.mid`, `.midi`) into Cover
+  mode to generate different, often off-the-wall takes of original tunes. The app parses tracks into
+  vocal melody, accompaniment, and chords, extracts embedded lyrics, and provides high-fidelity audio
+  audition via FluidSynth and bundled General MIDI SoundFonts (`.sf2`).
 - **Stems.** Extract vocals, drums, bass, other, and optionally guitar and piano, on CPU, while
   the GPU stays free. Or split into just the vocals and the instruments, for a backing track.
   Download them singly or as a zip.

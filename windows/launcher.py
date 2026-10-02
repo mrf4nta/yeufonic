@@ -616,7 +616,7 @@ class Launcher:
         env = dict(os.environ)
         tools = HERE / "tools"
         env.update({
-            "PATH": os.pathsep.join([str(HERE / "venv" / "Scripts"), str(tools / "ffmpeg" / "bin"), env.get("PATH", "")]),
+            "PATH": os.pathsep.join([str(HERE / "venv" / "Scripts"), str(tools / "ffmpeg" / "bin"), str(tools / "fluidsynth" / "bin"), env.get("PATH", "")]),
             "DATA_DIR": str(data),
             "MODELS_DIR": str(COMFY / "models"),
             "VERSION_FILE": str(HERE / "studio" / "VERSION"),

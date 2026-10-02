@@ -45,7 +45,8 @@ def test_the_guide_says_how_to_switch_training_off():
     text = GUIDE.read_text(encoding="utf-8")
     assert "TRAINING_ENABLED=0" in text, "the app half"
     assert "WITH_TRAINER=0" in text, "and the engine half"
-    assert "experimental" not in text.lower()
+    training_section = re.search(r"## Corpora and training a LoRA.*?(?=## |\Z)", text, re.S)
+    assert training_section and "experimental" not in training_section.group(0).lower()
 
 
 def test_the_guide_names_the_corpus_buttons():

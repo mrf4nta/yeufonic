@@ -194,27 +194,26 @@ def align_lines_to_notes(
         rest = curr["start_tick"] - (prev["start_tick"] + prev["dur"])
         s = 0.0
         if rest >= 16:
-            s += 100
+            s += 80
         elif rest >= 8:
-            s += 60
+            s += 50
         elif rest >= 4:
-            s += 40
+            s += 30
         elif rest >= 2:
             s += 20
         elif rest > 0:
             s += 8
 
-        if prev["dur"] >= 8:
-            s += 15
+        # In vocal melody, a breath/rest after a sustained note (dur >= 6) is the strongest phrase boundary
+        if prev["dur"] >= 6 and rest >= 2:
+            s += 45
         elif prev["dur"] >= 6:
-            s += 8
+            s += 15
 
         prev_bar = prev["start_tick"] // ticks_per_bar
         curr_bar = curr["start_tick"] // ticks_per_bar
-        if curr_bar > prev_bar:
-            s += 10 * (curr_bar - prev_bar)
-        if (curr["start_tick"] % ticks_per_bar) == 0:
-            s += 8
+        if curr_bar > prev_bar and (curr["start_tick"] % ticks_per_bar) == 0:
+            s += 10
         b_score[i] = s
 
     def seg_cost(l: int, j: int, i: int) -> float:
@@ -225,9 +224,9 @@ def align_lines_to_notes(
         if M == T:
             diff_cost = 0.0
         elif M > T:
-            diff_cost = (M - T) * 2.0
+            diff_cost = (M - T) * 12.0  # Penalize extra empty notes to avoid eating pickup phrases
         else:
-            diff_cost = (T - M) * 35.0  # High penalty against dropping lyric words
+            diff_cost = (T - M) * 40.0  # High penalty against dropping lyric words
         boundary_bonus = b_score[j] if j > 0 else 0.0
         return diff_cost - boundary_bonus
 
@@ -257,6 +256,21 @@ def align_lines_to_notes(
     return splits
 
 
+def clean_section_tag(name: str) -> str:
+    """Normalize lyric section header name to clean ABC section comment tag."""
+    if not name:
+        return "verse"
+    low = name.strip().lower()
+    for tag in ("pre-chorus", "chorus", "bridge", "intro", "outro", "verse"):
+        if tag in low:
+            return tag
+    if "hook" in low or "refrain" in low:
+        return "chorus"
+    if "coda" in low:
+        return "outro"
+    return "verse"
+
+
 def assign_lyrics_to_vocal_notes(
     lines: list[str], sec_vocal_notes: list[dict[str, Any]], ticks_per_bar: int = 16
 ) -> int:
@@ -279,12 +293,16 @@ def assign_lyrics_to_vocal_notes(
         seg_notes = sec_vocal_notes[sp["start_idx"] : sp["end_idx"]]
         if not seg_notes:
             continue
-        limit = min(len(seg_notes), len(toks))
-        for k in range(limit):
-            seg_notes[k]["lyric"] = toks[k]
-            count += 1
-        for ek in range(limit, len(seg_notes)):
-            seg_notes[ek]["lyric"] = "_"
+        tok_idx = 0
+        for n in seg_notes:
+            if n.get("tied_from_prev"):
+                n["lyric"] = "_"
+            elif tok_idx < len(toks):
+                n["lyric"] = toks[tok_idx]
+                tok_idx += 1
+                count += 1
+            else:
+                n["lyric"] = "_"
     return count
 
 
@@ -409,6 +427,11 @@ def align_lyrics_to_abc(abc_text: str, lyrics_text: str) -> str:
         return abc_text
 
     vocal_notes.sort(key=lambda n: n["start_tick"])
+    for ni in range(1, len(vocal_notes)):
+        prev_n = vocal_notes[ni - 1]
+        curr_n = vocal_notes[ni]
+        if prev_n.get("tied") and curr_n["start_tick"] == (prev_n["start_tick"] + prev_n["dur"]):
+            curr_n["tied_from_prev"] = True
 
     # Group vocal notes by score section
     if not score_sections:
@@ -462,10 +485,13 @@ def align_lyrics_to_abc(abc_text: str, lyrics_text: str) -> str:
 
     # Assign lyric sections monotonically to vocal score sections
     assigned_count = 0
+    bar_to_section_tag: dict[int, str] = {}
+    has_explicit_lyric_sections = any(bool(s.get("name")) for s in lyric_sections)
     if vocal_score_sections and lyric_sections:
         curr_lyric_idx = 0
         num_score = len(vocal_score_sections)
         num_lyric = len(lyric_sections)
+        last_assigned_tag = "outro"
 
         for vsi in range(num_score):
             target_sec = vocal_score_sections[vsi]
@@ -477,24 +503,33 @@ def align_lyrics_to_abc(abc_text: str, lyrics_text: str) -> str:
             rem_lyric = num_lyric - curr_lyric_idx
 
             if rem_lyric <= 0:
+                if has_explicit_lyric_sections:
+                    bar_to_section_tag[target_sec["bar"]] = f"% {last_assigned_tag}"
                 for n in target_notes:
                     n["lyric"] = "_"
                 continue
 
             lines_to_assign = []
+            assigned_tag = "verse"
             if rem_score <= 1:
+                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""))
                 for li in range(curr_lyric_idx, num_lyric):
                     lines_to_assign.extend(lyric_sections[li]["lines"])
                 curr_lyric_idx = num_lyric
             elif rem_score <= rem_lyric:
                 take_count = rem_lyric // rem_score
+                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""))
                 for li2 in range(curr_lyric_idx, curr_lyric_idx + take_count):
                     lines_to_assign.extend(lyric_sections[li2]["lines"])
                 curr_lyric_idx += take_count
             else:
+                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""))
                 lines_to_assign = lyric_sections[curr_lyric_idx]["lines"]
                 curr_lyric_idx += 1
 
+            last_assigned_tag = assigned_tag
+            if has_explicit_lyric_sections:
+                bar_to_section_tag[target_sec["bar"]] = f"% {assigned_tag}"
             if lines_to_assign:
                 assigned_count += assign_lyrics_to_vocal_notes(lines_to_assign, target_notes, ticks_per_bar)
 
@@ -508,7 +543,14 @@ def align_lyrics_to_abc(abc_text: str, lyrics_text: str) -> str:
     # Reconstruct ABC text with w: lines
     out_lines = []
     for l_type, l_content, l_extra in parsed_lines:
-        if l_type == "music_vocal":
+        if l_type == "section":
+            sec_bar = l_extra
+            new_tag = bar_to_section_tag.get(sec_bar)
+            if new_tag:
+                out_lines.append(new_tag)
+            else:
+                out_lines.append(l_content)
+        elif l_type == "music_vocal":
             out_lines.append(l_content)
             # Build matching w: line for the bars in this line
             bar_indices = l_extra
