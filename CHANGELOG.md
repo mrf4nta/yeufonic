@@ -34,6 +34,12 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## 0.0.19 (2026-10-02)
+
+### Fixed
+
+- **Windows installer update reliability.** Fixed an issue where running the installer to update an existing installation from within the application window was terminated prematurely by Windows Job Object cleanup when closing the previous version.
+
 ## 0.0.18 (2026-10-02)
 
 ### Added

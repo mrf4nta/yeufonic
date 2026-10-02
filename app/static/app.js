@@ -3624,11 +3624,27 @@ function whatsNewItem() {
     item.dataset.wired = '1';
     item.addEventListener('click', function () {
       var url = (State.update || {}).notes;
-      if (url) { window.open(url, '_blank', 'noopener'); }
+      if (url) { openExternal(url); }
       seenUpdate();
     });
   }
   return item;
+}
+
+/* Open a link in the system's default browser rather than inside the launcher's
+   app window, so downloads and SmartScreen prompts appear in the user's regular browser. */
+function openExternal(url) {
+  if (!url) { return; }
+  api('/api/update/open', {
+    method: 'POST',
+    body: JSON.stringify({ url: url })
+  }).then(function (res) {
+    if (!res || !res.opened) {
+      window.open(url, '_blank', 'noopener');
+    }
+  }).catch(function () {
+    window.open(url, '_blank', 'noopener');
+  });
 }
 
 /* Somewhere to go.  A Windows install has an installer to run, which is the whole of its
@@ -3685,7 +3701,7 @@ function actOnUpdate() {
       seenUpdate();
     }).catch(function () {
       var url = updateLink();
-      if (url) { window.open(url, '_blank', 'noopener'); }
+      if (url) { openExternal(url); }
       State.updateAnswer = 'Could not copy \u2014 here is the release page';
       paintUpdateMenuItem();
       seenUpdate();
@@ -3694,7 +3710,7 @@ function actOnUpdate() {
   }
   var url = updateLink();
   if (!url) { return; }
-  window.open(url, '_blank', 'noopener');
+  openExternal(url);
   seenUpdate();
 }
 

@@ -224,6 +224,26 @@ LangString DESC_Lyrics ${LANG_ENGLISH} "Gemma 4, for lyric drafts and song analy
 ; After the sections, so their names can be used here.
 Function .onInit
   !insertmacro FindPowerShell
+
+  ; If launched from within an existing Yeufonic window (e.g. Edge --app), this installer
+  ; inherits the Windows Job Object of the launcher. When the installer terminates Yeufonic.exe,
+  ; Windows kills the Job Object and abruptly terminates this installer mid-flight.
+  ; To break away, relaunch via Windows Explorer (Shell.Application) with /DETACHED and quit.
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/DETACHED" $R1
+  ${If} ${Errors}
+    StrCpy $R2 "/DETACHED"
+    ${If} $R0 != ""
+      StrCpy $R2 "$R0 /DETACHED"
+    ${EndIf}
+    nsExec::Exec '"$PowerShell" -NoProfile -WindowStyle Hidden -Command "& { param($$e, $$a) (New-Object -ComObject Shell.Application).ShellExecute($$e, $$a, $\'$\', $\'open$\', 1) }" "$EXEPATH" "$R2"'
+    Pop $0
+    ${If} $0 == 0
+      Quit
+    ${EndIf}
+  ${EndIf}
+
   StrCpy $Updating 0
   StrCpy $Legacy 0
   StrCpy $R9 "${REGNAME}"     ; where the Gemma choice was remembered

@@ -170,7 +170,8 @@ kernel32.GetTickCount64.restype = ctypes.c_ulonglong
 def join_a_job():
     job = kernel32.CreateJobObjectW(None, None)
     limits = _ExtendedLimits()
-    limits.BasicLimitInformation.LimitFlags = 0x2000   # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE (0x2000) | JOB_OBJECT_LIMIT_BREAKAWAY_OK (0x0800)
+    limits.BasicLimitInformation.LimitFlags = 0x2000 | 0x0800
     kernel32.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits))
     if not kernel32.AssignProcessToJobObject(job, kernel32.GetCurrentProcess()):
         say("(could not tie the programs to this launcher; stop them from Task Manager if they linger)")

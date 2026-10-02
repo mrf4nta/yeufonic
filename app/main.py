@@ -932,6 +932,10 @@ class UpdateSeenIn(BaseModel):
     version: str | None = None
 
 
+class UpdateOpenIn(BaseModel):
+    url: str
+
+
 @app.post("/api/update/check")
 async def update_check() -> dict:
     """Ask now, whatever the daily setting says: this is the menu's Check for updates.
@@ -943,6 +947,23 @@ async def update_check() -> dict:
 def update_seen(body: UpdateSeenIn) -> dict:
     """The notice has been read, so it is not shown again for this release."""
     return update.mark_seen(body.version)
+
+
+@app.post("/api/update/open")
+def update_open(body: UpdateOpenIn) -> dict:
+    """Open an update link in the default desktop browser rather than inside the
+    application's tile-less window, so downloads and SmartScreen prompts are handled
+    by the user's primary browser and detached from the launcher."""
+    url = body.url.strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    if hasattr(os, "startfile"):
+        try:
+            os.startfile(url)
+            return {"opened": True}
+        except Exception as exc:
+            log.warning("Could not open update URL via system shell: %s", exc)
+    return {"opened": False}
 
 
 @app.get("/api/state")
