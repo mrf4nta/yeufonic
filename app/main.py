@@ -3421,20 +3421,27 @@ def fill_source_durations() -> None:
 
 
 @app.get("/api/sources/{source_id}/peaks")
-def source_peaks(source_id: str) -> dict:
+def source_peaks(source_id: str, sf2: str | None = None) -> dict:
     """The waveform for a recording, cached beside it the way a take's is."""
     source = one("SELECT stored_path, filename FROM sources WHERE id = ?", (source_id,))
     if not source or not Path(source["stored_path"]).exists():
         raise HTTPException(404, "no audio for this recording")
     stored_p = Path(source["stored_path"])
     if (source.get("filename") or "").lower().endswith((".mid", ".midi")):
-        flac_p = stored_p.with_suffix(".flac")
+        active_sf2 = sf2 or soundfonts.get_active_sf2()
+        if not active_sf2 or not (soundfonts.sf2_folder() / active_sf2).is_file():
+            return {"columns": 128, "peaks": [0.0] * 128, "rms": [0.0] * 128}
+        flac_p = stored_p.parent / f"{stored_p.stem}-{active_sf2}.flac"
+        if not flac_p.exists() or flac_p.stat().st_size == 0:
+            legacy_p = stored_p.with_suffix(".flac")
+            if legacy_p.exists() and legacy_p.stat().st_size > 0 and sf2 is None:
+                flac_p = legacy_p
         if flac_p.exists():
             peaks = ensure_peaks(flac_p)
             if peaks:
                 return peaks
         try:
-            soundfonts.render_midi_to_audio(stored_p, flac_p)
+            soundfonts.render_midi_to_audio(stored_p, flac_p, sf2_filename=active_sf2)
             peaks = ensure_peaks(flac_p)
             if peaks:
                 return peaks
@@ -3455,9 +3462,12 @@ def source_audio(source_id: str, format: str | None = None) -> FileResponse:
     stored_p = Path(source["stored_path"])
     is_midi = (source.get("filename") or "").lower().endswith((".mid", ".midi"))
     if is_midi and format == "audio":
-        flac_p = stored_p.with_suffix(".flac")
-        if not flac_p.exists():
-            soundfonts.render_midi_to_audio(stored_p, flac_p)
+        active_sf2 = soundfonts.get_active_sf2()
+        if not active_sf2 or not (soundfonts.sf2_folder() / active_sf2).is_file():
+            raise HTTPException(503, "No .sf2 SoundFont available to render MIDI. Place .sf2 files in data/models/soundfonts/sf2.")
+        flac_p = stored_p.parent / f"{stored_p.stem}-{active_sf2}.flac"
+        if not flac_p.exists() or flac_p.stat().st_size == 0:
+            soundfonts.render_midi_to_audio(stored_p, flac_p, sf2_filename=active_sf2)
         return FileResponse(flac_p, filename=Path(source["filename"]).stem + ".flac", media_type="audio/flac")
     media_type = "audio/midi" if is_midi else None
     return FileResponse(stored_p, filename=source["filename"], media_type=media_type)
@@ -3473,17 +3483,18 @@ def source_rendered_audio(source_id: str, sf2: str | None = None) -> FileRespons
     if not (source.get("filename") or "").lower().endswith((".mid", ".midi")):
         return FileResponse(stored_p, filename=source["filename"])
 
-    flac_p = stored_p.with_suffix(".flac")
     active_sf2 = sf2 or soundfonts.get_active_sf2()
     if not active_sf2 or not (soundfonts.sf2_folder() / active_sf2).is_file():
         raise HTTPException(503, "No .sf2 SoundFont available to render MIDI. Place .sf2 files in data/models/soundfonts/sf2.")
-    if not flac_p.exists() or flac_p.stat().st_size == 0 or sf2 is not None:
+
+    flac_p = stored_p.parent / f"{stored_p.stem}-{active_sf2}.flac"
+    if not flac_p.exists() or flac_p.stat().st_size == 0:
         try:
             soundfonts.render_midi_to_audio(stored_p, flac_p, sf2_filename=active_sf2)
         except Exception as exc:
-            log.exception("Failed to render MIDI audio for %s", source_id)
+            log.exception("Failed to render MIDI audio for %s with %s", source_id, active_sf2)
             raise HTTPException(500, f"Failed to render MIDI audio: {exc}")
-    rendered_filename = Path(source["filename"]).stem + ".flac"
+    rendered_filename = f"{Path(source['filename']).stem}-{active_sf2}.flac"
     return FileResponse(flac_p, filename=rendered_filename, media_type="audio/flac")
 
 
@@ -3495,10 +3506,10 @@ async def render_source_audio(source_id: str, sf2: str | None = None) -> dict:
     stored_p = Path(source["stored_path"])
     if not (source.get("filename") or "").lower().endswith((".mid", ".midi")):
         raise HTTPException(400, "source is not a MIDI file")
-    flac_p = stored_p.with_suffix(".flac")
     active_sf2 = sf2 or soundfonts.get_active_sf2()
     if not active_sf2 or not (soundfonts.sf2_folder() / active_sf2).is_file():
         raise HTTPException(503, "No .sf2 SoundFont available to render MIDI. Place .sf2 files in data/models/soundfonts/sf2.")
+    flac_p = stored_p.parent / f"{stored_p.stem}-{active_sf2}.flac"
     await asyncio.to_thread(soundfonts.render_midi_to_audio, stored_p, flac_p, active_sf2)
     peaks = library.ensure_peaks(flac_p)
     return {"status": "ok", "audio_path": str(flac_p), "soundfont": active_sf2, "has_peaks": peaks is not None}

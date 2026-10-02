@@ -345,6 +345,10 @@ function initials(text) {
 }
 
 async function api(path, options) {
+  options = options || {};
+  if (options.body && typeof options.body === 'string' && (!options.headers || !options.headers['Content-Type'])) {
+    options.headers = Object.assign({}, options.headers, { 'Content-Type': 'application/json' });
+  }
   var response = await fetch(path, options);
   if (!response.ok) {
     var detail = await response.text();
@@ -1518,26 +1522,46 @@ function notationPlayable(chordsOff) {
   var fit = notationFitRange();
   var range = function (shift) {
     var flat = NOTATION.tune.setUpAudio({ chordsOff: chordsOff, midiTranspose: shift });
-    var lo = 999, hi = -1, count = 0;
+    var lo = 999, hi = -1, count = 0, inRange = 0;
     flat.tracks.forEach(function (track) {
       track.forEach(function (note) {
         if (typeof note.pitch !== 'number') { return; }
         count += 1;
         lo = Math.min(lo, note.pitch);
         hi = Math.max(hi, note.pitch);
+        if (note.pitch >= fit.low && note.pitch <= fit.high) {
+          inRange += 1;
+        }
       });
     });
-    return { notes: count, lo: lo, hi: hi };
+    return { notes: count, lo: lo, hi: hi, inRange: inRange };
   };
   var plain = range(0);
-  if (!plain.notes) { return { notes: 0, shift: 0, fits: false }; }
-  var shift = null;
-  [0, -12, 12, -24, 24, -36, 36].some(function (candidate) {
-    var found = range(candidate);
-    if (found.lo >= fit.low && found.hi <= fit.high) { shift = candidate; return true; }
-    return false;
-  });
-  return { notes: plain.notes, shift: shift === null ? 0 : shift, fits: shift !== null };
+  if (!plain.notes) { return { notes: 0, shift: 0, fits: false, partial: false }; }
+  var bestShift = 0;
+  var bestInRange = -1;
+  var exactFit = false;
+  var shifts = [0, -12, 12, -24, 24, -36, 36];
+  for (var i = 0; i < shifts.length; i++) {
+    var cand = shifts[i];
+    var found = range(cand);
+    if (found.lo >= fit.low && found.hi <= fit.high) {
+      bestShift = cand;
+      bestInRange = found.inRange;
+      exactFit = true;
+      break;
+    }
+    if (found.inRange > bestInRange) {
+      bestInRange = found.inRange;
+      bestShift = cand;
+    }
+  }
+  return {
+    notes: plain.notes,
+    shift: bestShift,
+    fits: true,
+    partial: !exactFit
+  };
 }
 
 /* The score as it is drawn, and where the lines the preview added went in.  It is drawn
@@ -1694,9 +1718,12 @@ function notationPaintNote() {
   if (NOTATION.preparing) { note.textContent = 'Getting the preview ready…'; return; }
   if (NOTATION.empty) { note.textContent = ''; return; }        // the staves say "No score yet."
   if (!NOTATION.hasScore) { note.textContent = 'This score has no notes in it yet.'; return; }
+  if (NOTATION.playable && NOTATION.partial) {
+    note.textContent = 'Some notes exceed browser piano range. Use Studio Audio (SF2) for complete orchestral playback.';
+    return;
+  }
   if (!NOTATION.playable) {
-    note.textContent = 'This score has notes outside what its instruments can play, so it cannot be ' +
-      'heard here. The staves and the MIDI file are still yours.';
+    note.textContent = 'Some notes exceed browser piano range. Use Studio Audio (SF2) for complete orchestral playback.';
     return;
   }
   if (!notationSoundsReady()) {
@@ -1724,7 +1751,7 @@ function notationPaintBar() {
   // The transport stays on screen from the first look: hiding it until the samples
   // arrive reads as controls that are missing rather than one step still to take.
   var widget = $('notation-audio');
-  if (widget) { widget.classList.toggle('hidden', !NOTATION.hasScore || !NOTATION.playable); }
+  if (widget) { widget.classList.toggle('hidden', !NOTATION.hasScore); }
   notationPaintNote();
 }
 
@@ -1869,7 +1896,12 @@ async function initScoreSf2Select() {
       api('/api/soundfonts/sf2/select', {
         method: 'POST',
         body: JSON.stringify({ filename: sel.value })
-      }).catch(function () {});
+      }).then(function () {
+        var opt = sel.selectedOptions && sel.selectedOptions[0];
+        statusLine('Active SoundFont set to ' + (opt ? opt.textContent : sel.value), 'ok');
+      }).catch(function (err) {
+        statusLine('Could not select SoundFont: ' + err.message, 'bad');
+      });
     };
   } catch (err) {
     sel.innerHTML = '<option value="">(SoundFonts unavailable)</option>';
@@ -2040,10 +2072,11 @@ function notationSetTune() {
     NOTATION.notes = playable.notes;
     NOTATION.transpose = playable.shift;
     NOTATION.playable = playable.fits;
+    NOTATION.partial = playable.partial;
     NOTATION.hasScore = playable.notes > 0;
   }
-  if (!NOTATION.hasScore || !NOTATION.playable) {
-    // Nothing these instruments can reach.  What the line says about it is worked out
+  if (!NOTATION.hasScore) {
+    // Nothing in the score. What the line says about it is worked out
     // in notationPaintNote from the state as it stands, not kept from an earlier look.
     NOTATION.synth.disable(true);
     notationPaintNote();
@@ -4172,7 +4205,10 @@ function playRecording() {
       paintAudition();
       return;
     }
-    var url = '/api/sources/' + source.id + '/rendered-audio';
+    var sel = $('score-sf2-select');
+    var activeSf2 = sel && sel.value ? sel.value : '';
+    var sf2Param = activeSf2 ? '?sf2=' + encodeURIComponent(activeSf2) : '';
+    var url = '/api/sources/' + source.id + '/rendered-audio' + sf2Param;
     State.loadedId = null;
     State.playing = null;
     State.audition = source.id;
@@ -4180,12 +4216,16 @@ function playRecording() {
     audio.src = url;
     audio.play().catch(function (err) {
       console.warn("MIDI audio audition play failed:", err);
+      statusLine("Could not play MIDI audio: " + (err.message || err), "bad");
     });
+    var sfLabel = (sel && sel.selectedOptions && sel.selectedOptions[0])
+      ? sel.selectedOptions[0].textContent
+      : (activeSf2 ? activeSf2.replace(/_/g, ' ').replace(/\.sf2$/i, '') : 'SoundFont');
     $('np-title').textContent = source.title;
-    $('np-meta').textContent = 'the MIDI recording being covered (SoundFont)';
+    $('np-meta').textContent = 'MIDI Recording (SoundFont: ' + sfLabel + ')';
     $('np-cover').className = 'np-cover grad-cover';
-    updateMediaSession({ title: source.title, style: 'the MIDI recording being covered' });
-    loadWave(url, '/api/sources/' + source.id + '/peaks');
+    updateMediaSession({ title: source.title, style: 'MIDI Recording (' + sfLabel + ')' });
+    loadWave(url, '/api/sources/' + source.id + '/peaks' + sf2Param);
     paintTakes();
     paintAudition();
     return;

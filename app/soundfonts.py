@@ -230,7 +230,7 @@ def render_midi_to_audio(
     midi_path: Path,
     output_path: Path,
     sf2_filename: str | None = None,
-    gain: float = 0.8,
+    gain: float = 0.3,
 ) -> Path:
     """Render a MIDI file to high-quality audio using fluidsynth and ffmpeg."""
     sf2_name = sf2_filename or get_active_sf2()
@@ -266,6 +266,7 @@ def render_midi_to_audio(
         cmd_enc = [
             "ffmpeg", "-y",
             "-i", str(wav_path),
+            "-af", "alimiter=limit=0.95",
             "-c:a", "flac" if output_path.suffix == ".flac" else "libopus",
             str(output_path),
         ]

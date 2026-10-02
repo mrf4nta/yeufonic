@@ -130,10 +130,16 @@
   var pendingFetches = {};
   var FLATS_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
+  function clampPitch(pitch) {
+    if (typeof pitch !== 'number' || isNaN(pitch)) return 60;
+    return Math.max(21, Math.min(108, Math.round(pitch)));
+  }
+
   function midiToSampleName(pitch) {
-    if (typeof pitch !== 'number' || pitch < 21 || pitch > 108) return null;
-    var name = FLATS_NAMES[pitch % 12];
-    var octave = Math.floor(pitch / 12) - 1;
+    if (typeof pitch !== 'number' || isNaN(pitch)) return null;
+    var clamped = clampPitch(pitch);
+    var name = FLATS_NAMES[clamped % 12];
+    var octave = Math.floor(clamped / 12) - 1;
     return name + octave;
   }
 
@@ -173,20 +179,44 @@
     return null;
   }
 
-  function preloadSamplesForNotes(notes, instrument) {
+  function preloadSamplesForNotes(items, instrument) {
     var inst = instrument || currentInstrument;
-    if (inst === 'synth' || !notes || !notes.length) return Promise.resolve();
+    if (inst === 'synth' || !items || !items.length) return Promise.resolve();
     var promises = [];
     var seen = {};
-    for (var i = 0; i < notes.length; i++) {
-      var n = notes[i];
-      var name = midiToSampleName(n.pitch);
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var pitch = (typeof item === 'number') ? item : (item ? item.pitch : null);
+      if (typeof pitch !== 'number' || isNaN(pitch)) continue;
+      var clamped = clampPitch(pitch);
+      var name = midiToSampleName(clamped);
       if (name && !seen[name]) {
         seen[name] = true;
         promises.push(loadSamplePromise(inst, name));
       }
     }
     return Promise.all(promises);
+  }
+
+  function getAllModelPitches(model) {
+    if (!model) return [];
+    var pitches = [];
+    if (model.notes) {
+      for (var i = 0; i < model.notes.length; i++) {
+        if (typeof model.notes[i].pitch === 'number') {
+          pitches.push(model.notes[i].pitch);
+        }
+      }
+    }
+    if (model.chords) {
+      for (var c = 0; c < model.chords.length; c++) {
+        var chPitches = chordToMidiPitches(model.chords[c].name);
+        for (var p = 0; p < chPitches.length; p++) {
+          pitches.push(chPitches[p]);
+        }
+      }
+    }
+    return pitches;
   }
 
   function playTone(pitch, durationSec, voiceType, startTime, instrumentOverride) {
@@ -196,7 +226,8 @@
     var dur = durationSec || 0.25;
 
     var inst = instrumentOverride || currentInstrument;
-    var sampleName = midiToSampleName(pitch);
+    var clamped = clampPitch(pitch);
+    var sampleName = midiToSampleName(clamped);
     var cachedBuf = (inst !== 'synth' && sampleName)
       ? (sampleCache[inst + '_' + sampleName] || getOrPreloadSample(inst, sampleName))
       : null;
@@ -205,6 +236,9 @@
       try {
         var src = ctx.createBufferSource();
         src.buffer = cachedBuf;
+        if (pitch !== clamped) {
+          src.playbackRate.setValueAtTime(Math.pow(2, (pitch - clamped) / 12), now);
+        }
         var gain = ctx.createGain();
         var peakVol = (voiceType === 'Vocal') ? 0.35 : 0.26;
         gain.gain.setValueAtTime(peakVol, now);
@@ -358,7 +392,8 @@
     for (var i = 0; i < pitches.length; i++) {
       var pitch = pitches[i];
       var isBass = (i === 0);
-      var sampleName = midiToSampleName(pitch);
+      var clamped = clampPitch(pitch);
+      var sampleName = midiToSampleName(clamped);
       var cachedBuf = (inst !== 'synth' && sampleName)
         ? (sampleCache[inst + '_' + sampleName] || getOrPreloadSample(inst, sampleName))
         : null;
@@ -367,6 +402,9 @@
         try {
           var src = ctx.createBufferSource();
           src.buffer = cachedBuf;
+          if (pitch !== clamped) {
+            src.playbackRate.setValueAtTime(Math.pow(2, (pitch - clamped) / 12), now);
+          }
           var gainNode = ctx.createGain();
           var pVol = isBass ? 0.22 : (0.16 / Math.max(1, pitches.length - 1));
           gainNode.gain.setValueAtTime(pVol, now);
@@ -1162,8 +1200,8 @@
       if (select && select.value !== currentInstrument) {
         select.value = currentInstrument;
       }
-      if (currentInstrument !== 'synth' && this.model && this.model.notes) {
-        preloadSamplesForNotes(this.model.notes, currentInstrument);
+      if (currentInstrument !== 'synth' && this.model) {
+        preloadSamplesForNotes(getAllModelPitches(this.model), currentInstrument);
       }
     },
 
@@ -1173,8 +1211,8 @@
 
     loadAbc: function (abcText) {
       this.model = parseAbc(abcText);
-      if (this.model && this.model.notes) {
-        preloadSamplesForNotes(this.model.notes, currentInstrument);
+      if (this.model && currentInstrument !== 'synth') {
+        preloadSamplesForNotes(getAllModelPitches(this.model), currentInstrument);
       }
       this.selectedNoteIds = [];
       this.selectedNoteId = null;
@@ -2175,17 +2213,19 @@
       var playBtn = document.getElementById('roll-play');
 
       // Preload missing samples so playback never falls back to primitive beeps
-      if (currentInstrument !== 'synth' && this.model.notes && this.model.notes.length > 0) {
-        var missingNotes = [];
-        for (var ni = 0; ni < this.model.notes.length; ni++) {
-          var sName = midiToSampleName(this.model.notes[ni].pitch);
+      if (currentInstrument !== 'synth' && this.model) {
+        var allPitches = getAllModelPitches(this.model);
+        var missingPitches = [];
+        for (var ni = 0; ni < allPitches.length; ni++) {
+          var p = allPitches[ni];
+          var sName = midiToSampleName(clampPitch(p));
           if (sName && !sampleCache[currentInstrument + '_' + sName]) {
-            missingNotes.push(this.model.notes[ni]);
+            missingPitches.push(p);
           }
         }
-        if (missingNotes.length > 0) {
+        if (missingPitches.length > 0) {
           if (playBtn) { playBtn.textContent = '⏳ Loading...'; }
-          preloadSamplesForNotes(missingNotes, currentInstrument).then(function () {
+          preloadSamplesForNotes(missingPitches, currentInstrument).then(function () {
             self._startPlayback(ctx);
           }).catch(function () {
             self._startPlayback(ctx);

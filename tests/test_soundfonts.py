@@ -139,13 +139,18 @@ def test_midi_rendered_audio_and_peaks(client, monkeypatch, data_dir):
     assert upload_res.status_code == 200
     src_id = upload_res.json()["id"]
 
-    # Test rendered-audio
+    # Test rendered-audio with active soundfont
     aud_res = client.get(f"/api/sources/{src_id}/rendered-audio")
     assert aud_res.status_code == 200
     assert aud_res.headers["content-type"] == "audio/flac"
 
+    # Test rendered-audio with explicit sf2
+    aud_res_sf2 = client.get(f"/api/sources/{src_id}/rendered-audio?sf2=Arachno_SoundFont_Version_1.0.sf2")
+    assert aud_res_sf2.status_code == 200
+    assert aud_res_sf2.headers["content-type"] == "audio/flac"
+
     # Test peaks
-    peaks_res = client.get(f"/api/sources/{src_id}/peaks")
+    peaks_res = client.get(f"/api/sources/{src_id}/peaks?sf2=Arachno_SoundFont_Version_1.0.sf2")
     assert peaks_res.status_code == 200
     assert "peaks" in peaks_res.json()
     assert len(peaks_res.json()["peaks"]) > 0
