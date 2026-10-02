@@ -3092,19 +3092,23 @@ function paintSource() {
   if (isMidi) {
     badge.className = 'badge ok';
     badge.textContent = 'MIDI score';
-    statusLine('Imported MIDI file. Score is ready to edit or cover.', 'good');
+    if (State.mode === 'cover') {
+      statusLine('Imported MIDI file. Score is ready to edit or cover.', 'good');
+    }
   } else {
     badge.className = 'badge' + (source.has_score ? ' ok' : '');
     badge.textContent = source.has_score ? 'score ready' : 'no score';
-    var map = {
-      none: 'Not transcribed yet. Transcribe it to get a score.',
-      queued: 'Queued for transcription.',
-      running: 'Transcribing\u2026',
-      done: 'Transcribed. The score is ready to edit.',
-      failed: 'Transcription failed: ' + (source.transcribe_error || 'unknown error')
-    };
-    var kind = source.transcribe_state === 'failed' ? 'bad' : (source.transcribe_state === 'done' ? 'good' : (source.transcribe_state === 'running' || source.transcribe_state === 'queued' ? 'wait' : ''));
-    statusLine(map[source.transcribe_state] || (source.has_score ? 'Score ready to edit or cover.' : ''), kind);
+    if (State.mode === 'cover') {
+      var map = {
+        none: 'Not transcribed yet. Transcribe it to get a score.',
+        queued: 'Queued for transcription.',
+        running: 'Transcribing\u2026',
+        done: 'Transcribed. The score is ready to edit.',
+        failed: 'Transcription failed: ' + (source.transcribe_error || 'unknown error')
+      };
+      var kind = source.transcribe_state === 'failed' ? 'bad' : (source.transcribe_state === 'done' ? 'good' : (source.transcribe_state === 'running' || source.transcribe_state === 'queued' ? 'wait' : ''));
+      statusLine(map[source.transcribe_state] || (source.has_score ? 'Score ready to edit or cover.' : ''), kind);
+    }
   }
   paintSourceTempo(source);
   // The box must hold this recording's score or nothing. Comparing ids matters:
@@ -4622,44 +4626,12 @@ function runSave() {
   closeSaveModal();
 }
 
-/* ------------------------------------------------------ song mode and plans */
-var _appStatusTimer = null;
-
-function clearAppStatus() {
-  if (_appStatusTimer) {
-    clearTimeout(_appStatusTimer);
-    _appStatusTimer = null;
-  }
-  var appStatus = $('app-status');
-  if (appStatus) {
-    appStatus.textContent = '';
-    appStatus.className = 'app-status';
-  }
-}
-
 function statusLine(message, kind) {
   var node = $('render-status');
   if (node) {
     node.textContent = message || '';
     node.className = 'status' + (kind ? ' ' + kind : '');
   }
-  var appStatus = $('app-status');
-  if (!appStatus) { return; }
-  if (_appStatusTimer) {
-    clearTimeout(_appStatusTimer);
-    _appStatusTimer = null;
-  }
-  // When the editor is open, render-status in the editor's bottom bar carries the message.
-  // When the editor is closed, transient status (news/actions with kind) shows in the bottom status bar for 3.5s.
-  var inEditor = typeof editorOpen === 'function' && editorOpen();
-  if (inEditor || !message || !kind) {
-    appStatus.textContent = '';
-    appStatus.className = 'app-status';
-    return;
-  }
-  appStatus.textContent = message;
-  appStatus.className = 'app-status show ' + kind;
-  _appStatusTimer = setTimeout(clearAppStatus, 3500);
 }
 
 if (typeof window !== 'undefined') {
@@ -5207,7 +5179,6 @@ function paintTakesHeading() {
 
 function showSpace(id) {
   if (id === State.spaceId) { return; }
-  clearAppStatus();
   State.spaceId = id;
   try { localStorage.setItem(SPACE_KEY, id); } catch (err) { /* private mode */ }
   State.takes = [];
@@ -7594,7 +7565,6 @@ function stemsBlock(take) {
    take calls this first, so the panel always describes the take you just touched. */
 function selectTake(take) {
   if (!take) { return; }
-  clearAppStatus();
   // The take already on show, with words typed over it: leave the form as it is. Play,
   // Score and the other buttons on a card select their take first, and reloading it
   // here threw the edit away in favour of words that were already there.
@@ -10629,7 +10599,6 @@ function editorOpen() { return Boolean($('editor-modal')) && !$('editor-modal').
 
 function openEditor(where) {
   if (!$('editor-modal')) { return; }
-  clearAppStatus();
   Editor.page = where === 'score' ? 'score' : 'song';
   Editor.step = { words: 1, sound: 2, score: 3 }[where] || 0;
   $('editor-modal').classList.remove('hidden');
@@ -10640,7 +10609,6 @@ function openEditor(where) {
 
 function closeEditor() {
   if (!editorOpen()) { return; }
-  clearAppStatus();
   notationStop();
   $('editor-modal').classList.add('hidden');
   document.body.style.overflow = '';

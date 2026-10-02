@@ -1452,38 +1452,6 @@ label .lora-value:disabled { opacity: 0.6; }
 .status .link { color: inherit; text-decoration: underline; font: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 .status .status-training-msg strong { color: var(--text); }
 
-.app-status {
-  position: fixed;
-  bottom: 82px;
-  left: 50%;
-  transform: translateX(-50%) translateY(8px);
-  z-index: 50;
-  max-width: min(600px, 90vw);
-  padding: 8px 18px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--card-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 20px rgb(0 0 0 / 0.45);
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.app-status.show {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-}
-.app-status.good { color: var(--good); border-color: rgb(var(--good-rgb) / 0.4); }
-.app-status.bad { color: var(--bad); border-color: rgb(var(--bad-rgb) / 0.4); }
-.app-status.wait { color: var(--warn); border-color: rgb(var(--warn-rgb) / 0.4); }
-
 /* ---------- library ---------- */
 .library { min-width: 0; }
 .libhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
