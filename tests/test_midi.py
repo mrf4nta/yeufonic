@@ -477,3 +477,51 @@ def test_real_yesterday_midi_conversion():
 
     # Bracket chords preserved in accompaniment
     assert "[CF]" in abc or "[A,CF]" in abc or "[_B,,_B,D]" in abc
+
+
+def test_vocal_melody_legato_gap_closing():
+    """Verify that articulation micro-gaps (<= 1 sixteenth note) are closed to legato phrasing
+    while genuine musical rests (>= 2 sixteenth notes) are preserved."""
+    # 4/4 meter, div 480 -> 1 sixteenth = 120 ticks, 1 eighth = 240 ticks
+    # Note 1: 0..160 (staccato eighth, release gap of 80 ticks to next note at 240)
+    # Note 2: 240..400 (staccato eighth, release gap of 80 ticks to next note at 480)
+    # Note 3: 480..880 (dur 400 ticks, release gap of 80 ticks to next note at 960)
+    # Note 4: 960..1200 (dur 240 ticks)
+    t0 = [
+        (0, b"\xFF\x01\x05Vocal"),
+        (0, b"\xFF\x58\x04\x04\x02\x18\x08"),
+        (0, b"\xFF\x51\x03\x07\xA1\x20"),
+        (0, bytes([0x90, 60, 80])), (160, bytes([0x80, 60, 0])),
+        (80, bytes([0x90, 62, 80])), (160, bytes([0x80, 62, 0])),
+        (80, bytes([0x90, 64, 80])), (400, bytes([0x80, 64, 0])),
+        (80, bytes([0x90, 65, 80])), (240, bytes([0x80, 65, 0])),
+        (0, b"\xFF\x2F\x00"),
+    ]
+    data = create_smf([t0], division=480, fmt=0)
+    parsed = midi.parse_midi(data, "Gap Closing Test")
+    abc = parsed["abc"]
+    assert score.problems(abc) == []
+    # Notes 1 & 2 should be legato eighth notes (dur 2 sixteenths) rather than 'C z D z'
+    vocal_bars = score.vocal_bars(abc)
+    first_bar = vocal_bars[0]
+    assert "Cz" not in first_bar
+    assert "Dz" not in first_bar
+    assert "C2D2E4F2" in first_bar
+
+
+def test_real_hey_jude_midi_conversion():
+    """Verify Hey Jude MIDI converts cleanly with legato vocal phrasing and banner noise excluded."""
+    midi_paths = list(Path("data/sources").glob("*hey-jude*.mid"))
+    if not midi_paths:
+        pytest.skip("Hey Jude MIDI not found")
+    data = midi_paths[0].read_bytes()
+    parsed = midi.parse_midi(data, "Hey Jude")
+    assert parsed["key"] == "F"
+    assert parsed["meter"] == "4/4"
+    assert parsed["tempo"] == 74
+    assert parsed["lyrics"] is None  # BBS banner comments filtered out
+    abc = parsed["abc"]
+    assert score.problems(abc) == []
+    vocal_bars = score.vocal_bars(abc)
+    # Bar 3 was '_B3zf5zfzezcz' before gap closing; now cleanly legato '_B4f6f2e2c2'
+    assert "_B4f6f2e2c2" in vocal_bars[3]

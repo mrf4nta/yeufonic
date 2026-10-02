@@ -607,6 +607,33 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
     qv = quantize_events(vocal_events)
     qi = quantize_events(ins_events)
 
+    def clean_vocal_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not events:
+            return []
+        cleaned: list[dict[str, Any]] = []
+        for e in events:
+            if not cleaned:
+                cleaned.append(dict(e))
+                continue
+            prev = cleaned[-1]
+            if e["start_tick"] == prev["start_tick"]:
+                if max(e["pitches"]) > max(prev["pitches"]):
+                    cleaned[-1] = dict(e)
+                continue
+            if prev["end_tick"] > e["start_tick"]:
+                prev["end_tick"] = e["start_tick"]
+            elif e["start_tick"] - prev["end_tick"] <= 1:
+                prev["end_tick"] = e["start_tick"]
+            cleaned.append(dict(e))
+        return cleaned
+
+    qv = clean_vocal_events(qv)
+
+    # Ensure accompaniment does not have overlapping events from quantization rounding
+    for i in range(len(qi) - 1):
+        if qi[i]["end_tick"] > qi[i + 1]["start_tick"]:
+            qi[i]["end_tick"] = max(qi[i]["start_tick"] + 1, qi[i + 1]["start_tick"])
+
     max_tick = 0
     for e in qv + qi:
         if e["end_tick"] > max_tick:
@@ -745,12 +772,20 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
     # Extract lyrics if present
     extracted_lyrics = None
     if parser.lyrics:
-        words = [txt for _, txt in sorted(parser.lyrics, key=lambda x: x[0])]
-        raw_text = " ".join(words)
-        # Clean up syllable hyphens if any
-        raw_text = raw_text.replace(" - ", " ").replace(" -", "").strip()
-        if raw_text:
-            extracted_lyrics = raw_text
+        valid_lyrics = [
+            (t, txt) for t, txt in parser.lyrics
+            if not any(noise in txt.lower() for noise in (
+                "sequenced", "bbs", "http", "www.", "copyright", "roland",
+                "all rights", "email", "e-mail", "sound canvas", "general midi",
+            ))
+        ]
+        if len(valid_lyrics) >= 5 or (valid_lyrics and any(t > 0 for t, _ in valid_lyrics)):
+            words = [txt for _, txt in sorted(valid_lyrics, key=lambda x: x[0])]
+            raw_text = " ".join(words)
+            # Clean up syllable hyphens if any
+            raw_text = raw_text.replace(" - ", " ").replace(" -", "").strip()
+            if raw_text:
+                extracted_lyrics = raw_text
 
     min_score_dur = round(total_bars * (num * (4.0 / den)) * (60.0 / bpm), 2)
     if duration_sec < min_score_dur and total_bars == 4:
