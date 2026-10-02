@@ -469,11 +469,6 @@ function paintOptions() {
     }
   }
   paintStyleLoras();
-  var styleNode = $('style');
-  var busy = document.activeElement === styleNode;
-  if (!styleNode.value && !styleNode.dataset.touched && !busy && State.options.default_style) {
-    styleNode.value = State.options.default_style;
-  }
 }
 
 /* The style LoRA picker: whatever the engine can load, minus the two the app
