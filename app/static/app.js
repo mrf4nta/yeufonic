@@ -100,7 +100,7 @@ function boxShowsSource(sourceId) {
 var State = { normalising: {}, sources: [], takes: [], options: {}, filter: 'all', playing: null, busy: false, mode: 'cover',
   layout: 'compact',
   takesRaw: '', takesTotal: 0, takeLimit: 300, takesAt: 0, paintedAt: 0, draft: null, audition: null,
-  picked: {},
+  picked: {}, showEdTransport: false,
   formEdited: false, spaces: [], spaceId: 'default', moveTakeId: null, search: '', searchAll: false };
 var LAYOUT_KEY = 'yue2.layout';
 var SHEET_KEY = 'yue2.sheet';   // the take panel folded away, or not
@@ -7717,6 +7717,7 @@ async function startFresh() {
     return false;
   }
   if (formIsDraft()) { stashDraft(); }
+  State.showEdTransport = false;
   var cover = State.mode === 'cover';
   setSelection({});
   $('title').value = '';
@@ -8247,8 +8248,19 @@ function nudge(seconds) {
 
 function updateTimes() {
   var audio = $('audio');
-  $('t-now').textContent = secs(audio.currentTime || 0);
-  $('t-total').textContent = (audio.duration && isFinite(audio.duration)) ? secs(audio.duration) : '--:--';
+  var cur = audio.currentTime || 0;
+  var dur = audio.duration;
+  var hasDur = dur && isFinite(dur);
+  $('t-now').textContent = secs(cur);
+  $('t-total').textContent = hasDur ? secs(dur) : '--:--';
+  var edNow = $('ed-t-now');
+  if (edNow) { edNow.textContent = secs(cur); }
+  var edTotal = $('ed-t-total');
+  if (edTotal) { edTotal.textContent = hasDur ? secs(dur) : '--:--'; }
+  var edSeek = $('ed-seek');
+  if (edSeek && !edSeek.dataset.dragging) {
+    edSeek.value = (hasDur && dur > 0) ? Math.round((cur / dur) * 1000) : 0;
+  }
 }
 
 function paintTransport() {
@@ -8258,24 +8270,68 @@ function paintTransport() {
   // something is sounding.
   var playing = Boolean(audio.currentSrc || audio.src) && !audio.paused && !audio.ended;
   var playBtn = $('btn-play');
+  var playState = playing ? 'pause' : 'play';
+  var playSvg = playing
+    ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 5h2.6v14H9zM13.4 5H16v14h-2.6z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.4v13.2L19 12z"/></svg>';
+  var playTitle = playing ? 'Pause' : 'Play';
   if (playBtn) {
-    var playState = playing ? 'pause' : 'play';
     if (playBtn.dataset.state !== playState) {
       playBtn.dataset.state = playState;
-      playBtn.innerHTML = playing
-        ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 5h2.6v14H9zM13.4 5H16v14h-2.6z"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.4v13.2L19 12z"/></svg>';
-      playBtn.title = playing ? 'Pause' : 'Play';
-      playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+      playBtn.innerHTML = playSvg;
+      playBtn.title = playTitle;
+      playBtn.setAttribute('aria-label', playTitle);
+    }
+  }
+  var edPlayBtn = $('ed-btn-play');
+  if (edPlayBtn) {
+    if (edPlayBtn.dataset.state !== playState) {
+      edPlayBtn.dataset.state = playState;
+      edPlayBtn.innerHTML = playSvg;
+      edPlayBtn.title = playTitle;
+      edPlayBtn.setAttribute('aria-label', playTitle);
     }
   }
   $('btn-repeat').classList.toggle('on', Boolean(audio.loop));
   var take = currentTake();
   $('btn-star').disabled = !take;
   $('btn-star').classList.toggle('on', Boolean(take && take.favourite));
-  $('btn-prev').disabled = playableTakes().length < 2;
-  $('btn-next').disabled = playableTakes().length < 2;
+  var canStep = playableTakes().length >= 2;
+  $('btn-prev').disabled = !canStep;
+  $('btn-next').disabled = !canStep;
+  if ($('ed-btn-prev')) { $('ed-btn-prev').disabled = !canStep; }
+  if ($('ed-btn-next')) { $('ed-btn-next').disabled = !canStep; }
   $('btn-mute').classList.toggle('on', Boolean(audio.muted || audio.volume === 0));
+  paintEdTransport();
+}
+
+function paintEdTransport() {
+  var box = $('ed-transport');
+  if (!box) { return; }
+  var shouldShow = Boolean(State.showEdTransport);
+  box.classList.toggle('hidden', !shouldShow);
+  if (!shouldShow) { return; }
+  var audio = $('audio');
+  var take = currentTake();
+  var titleEl = $('ed-np-title');
+  if (titleEl && take) {
+    var pos = takePosition(take.id);
+    var label = take.title || 'Untitled take';
+    if (pos) { label += ' \u00b7 take ' + pos.index + ' of ' + pos.total; }
+    titleEl.textContent = label;
+    titleEl.title = label;
+  }
+  var cur = audio.currentTime || 0;
+  var dur = audio.duration;
+  var hasDur = dur && isFinite(dur);
+  var edNow = $('ed-t-now');
+  if (edNow) { edNow.textContent = secs(cur); }
+  var edTotal = $('ed-t-total');
+  if (edTotal) { edTotal.textContent = hasDur ? secs(dur) : '--:--'; }
+  var edSeek = $('ed-seek');
+  if (edSeek && !edSeek.dataset.dragging) {
+    edSeek.value = (hasDur && dur > 0) ? Math.round((cur / dur) * 1000) : 0;
+  }
 }
 
 function updateMediaSession(take) {
@@ -8530,6 +8586,31 @@ function wireTransport() {
   $('btn-next').addEventListener('click', function () { stepTake(1); });
   $('btn-back').addEventListener('click', function () { nudge(-10); });
   $('btn-fwd').addEventListener('click', function () { nudge(10); });
+  if ($('ed-btn-play')) { $('ed-btn-play').addEventListener('click', function () { $('btn-play').click(); }); }
+  if ($('ed-btn-prev')) { $('ed-btn-prev').addEventListener('click', function () { $('btn-prev').click(); }); }
+  if ($('ed-btn-next')) { $('ed-btn-next').addEventListener('click', function () { $('btn-next').click(); }); }
+  if ($('ed-btn-back')) { $('ed-btn-back').addEventListener('click', function () { $('btn-back').click(); }); }
+  if ($('ed-btn-fwd')) { $('ed-btn-fwd').addEventListener('click', function () { $('btn-fwd').click(); }); }
+  var edSeek = $('ed-seek');
+  if (edSeek) {
+    edSeek.addEventListener('input', function () {
+      edSeek.dataset.dragging = '1';
+      var a = $('audio');
+      if (a && a.duration && isFinite(a.duration) && a.duration > 0) {
+        var pos = (Number(edSeek.value) / 1000) * a.duration;
+        var edNow = $('ed-t-now');
+        if (edNow) { edNow.textContent = secs(pos); }
+      }
+    });
+    edSeek.addEventListener('change', function () {
+      delete edSeek.dataset.dragging;
+      var a = $('audio');
+      if (a && a.duration && isFinite(a.duration) && a.duration > 0) {
+        a.currentTime = (Number(edSeek.value) / 1000) * a.duration;
+        updateTimes();
+      }
+    });
+  }
   $('btn-repeat').addEventListener('click', function () {
     audio.loop = !audio.loop;
     paintTransport();
@@ -9373,8 +9454,10 @@ function wire() {
       var take = card && takeById(card.dataset.id);
       if (!take || typeof openEditor !== 'function' || !$('editor-modal')) { return; }
       if (window.getSelection) { window.getSelection().removeAllRanges(); }   // the word the double-click picked
+      var audio = $('audio');
+      var isPlaying = Boolean(take && State.playing === take.id && audio && !audio.paused && !audio.ended);
       selectTake(take);
-      openEditor(take.status === 'planned' ? 'score' : 'song');
+      openEditor(take.status === 'planned' ? 'score' : 'song', isPlaying);
       return;
     }
     var id = titleEl.dataset.id || (titleEl.closest('.take') && titleEl.closest('.take').dataset.id);
@@ -10428,8 +10511,9 @@ function paintSheet() {
 function editorLayout() { return setting('editor.layout', 'columns') === 'steps' ? 'steps' : 'columns'; }
 function editorOpen() { return Boolean($('editor-modal')) && !$('editor-modal').classList.contains('hidden'); }
 
-function openEditor(where) {
+function openEditor(where, showTransport) {
   if (!$('editor-modal')) { return; }
+  State.showEdTransport = Boolean(showTransport);
   Editor.page = where === 'score' ? 'score' : 'song';
   Editor.step = { words: 1, sound: 2, score: 3 }[where] || 0;
   $('editor-modal').classList.remove('hidden');
@@ -10440,6 +10524,7 @@ function openEditor(where) {
 
 function closeEditor() {
   if (!editorOpen()) { return; }
+  State.showEdTransport = false;
   notationStop();
   $('editor-modal').classList.add('hidden');
   document.body.style.overflow = '';
@@ -10475,6 +10560,7 @@ function paintEditor() {
   if (page === 'score') { $('score-box').open = true; }
   if (page === 'review') { paintEditorReview(); }
   paintWriteJob(State.currentJob, []);
+  paintEdTransport();
 }
 
 /* Steps: what will be sent, and anything that stops it. */
