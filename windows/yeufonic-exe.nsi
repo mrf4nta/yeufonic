@@ -18,7 +18,7 @@ VIProductVersion "${VERSION}.0"
 VIAddVersionKey "ProductName" "Yeufonic"
 VIAddVersionKey "FileDescription" "Yeufonic"
 VIAddVersionKey "CompanyName" "Yeufonic"
-VIAddVersionKey "LegalCopyright" "Yeufonic, Apache License 2.0"
+VIAddVersionKey "LegalCopyright" "Copyright (c) 2026 Paul Shields. All rights reserved."
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 

@@ -54,7 +54,7 @@ VIAddVersionKey "ProductName" "${APPNAME}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "FileDescription" "${APPNAME} installer"
-VIAddVersionKey "LegalCopyright" "Apache License 2.0"
+VIAddVersionKey "LegalCopyright" "Copyright (c) 2026 Paul Shields. All rights reserved."
 
 !define MUI_ICON "${STAGE}\yeufonic.ico"
 !define MUI_UNICON "${STAGE}\yeufonic.ico"

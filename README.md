@@ -684,9 +684,11 @@ cut.
 - [abcjs](https://github.com/paulrosen/abcjs) by Paul Rosen and Gregory Dyke, for staff notation.
   MIT, vendored in `app/static/` so it works offline.
 
-## License
+## License & Copyright
 
-The code in this repository is licensed under the [Apache License 2.0](LICENSE).
+Copyright (c) 2026 Paul Shields. All rights reserved.
+
+The code in this repository is licensed for free personal, non-commercial use under the [Yeufonic Software License Agreement](LICENSE). For commercial licensing, contact paul@paulshields.com.
 
 The models it runs are not part of the repository and carry their own terms, listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The one that matters most for musicians: YuE2's

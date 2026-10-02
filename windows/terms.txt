@@ -1,4 +1,4 @@
-Yeufonic is free software under the Apache License 2.0.
+Yeufonic is free software for personal, non-commercial use.
 
 This installer is small. When it runs, it downloads the rest from each part's own publisher
 and sets it up on this PC. Each part is used under its own terms:
