@@ -1402,6 +1402,49 @@ def test_piano_roll_zoom_in_and_out():
     assert data["maxClamped"] == 48
 
 
+def test_parse_and_serialize_chords_in_abc():
+    """Verify chords in brackets [...] parse simultaneous notes with shared ticks and serialize back as chords."""
+    js = """
+    const abc = 'X:1\\nM:4/4\\nL:1/16\\nK:C\\nV: Ins\\n[CF]2 [A,DF]2 z12 |';
+    const model = parseAbc(abc);
+    const serialized = serializeToAbc(model);
+    console.log(JSON.stringify({ notes: model.notes, serialized }));
+    """
+    res = run_node_script(js)
+    notes = res["notes"]
+    assert len(notes) == 5
+    # Notes in first chord start at tick 0 with duration 2
+    assert notes[0]["pitch"] == 60 and notes[0]["startTick"] == 0 and notes[0]["durationTicks"] == 2
+    assert notes[1]["pitch"] == 65 and notes[1]["startTick"] == 0 and notes[1]["durationTicks"] == 2
+    # Notes in second chord start at tick 2 with duration 2
+    assert notes[2]["pitch"] == 57 and notes[2]["startTick"] == 2 and notes[2]["durationTicks"] == 2
+    assert notes[3]["pitch"] == 62 and notes[3]["startTick"] == 2 and notes[3]["durationTicks"] == 2
+    assert notes[4]["pitch"] == 65 and notes[4]["startTick"] == 2 and notes[4]["durationTicks"] == 2
+    # Serialized output preserves chords in brackets and exact bar duration
+    assert "[CF]2" in res["serialized"]
+    assert "[A,DF]2" in res["serialized"]
+    assert "z12" in res["serialized"]
+
+
+def test_extract_lyrics_sections_with_markdown_headers():
+    """Verify markdown headers like **[Verse 1]** and ## Chorus are extracted as section tags, not lyric words."""
+    js = """
+    const text = '**[Verse 1]**\\nYesterday, all my troubles seemed so far away\\n[Verse 2]\\nSuddenly, I\\x27m not half the man I used to be\\n## Chorus\\nWhy she had to go';
+    const sections = extractLyricsSections(text);
+    console.log(JSON.stringify({ sections }));
+    """
+    res = run_node_script(js)
+    sections = res["sections"]
+    assert len(sections) == 3
+    assert sections[0]["name"] == "Verse 1"
+    assert sections[0]["lines"] == ["Yesterday, all my troubles seemed so far away"]
+    assert sections[1]["name"] == "Verse 2"
+    assert sections[1]["lines"] == ["Suddenly, I'm not half the man I used to be"]
+    assert sections[2]["name"] == "Chorus"
+    assert sections[2]["lines"] == ["Why she had to go"]
+
+
+
 
 
 

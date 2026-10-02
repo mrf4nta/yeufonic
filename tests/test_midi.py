@@ -449,3 +449,31 @@ def test_real_bohemian_rhapsody_midi_conversion():
     assert score.problems(abc) == []
     est = score.estimate(abc)
     assert est["bars"] > 100
+
+
+def test_real_yesterday_midi_conversion():
+    """Verify Yesterday MIDI converts to F major with accurate chord detection and section placement."""
+    midi_path = Path("data/sources/6256bb1cf564e776-yesterday.mid")
+    if not midi_path.exists():
+        midi_path = Path("/mnt/c/Users/paul/Downloads/yesterday.mid")
+    if not midi_path.exists():
+        pytest.skip("yesterday.mid not found")
+
+    data = midi_path.read_bytes()
+    parsed = midi.parse_midi(data, "yesterday")
+    assert parsed["key"] == "F"
+    assert parsed["meter"] == "4/4"
+    abc = parsed["abc"]
+    assert score.problems(abc) == []
+
+    # Check intro and verse sections
+    assert "% intro" in abc
+    assert "% verse" in abc
+
+    # Chords in F major: F, Em7, Dm, Bb (not Csus4 or A#maj7)
+    assert '"F"' in abc
+    assert '"Bb"' in abc
+    assert '"A#maj7"' not in abc
+
+    # Bracket chords preserved in accompaniment
+    assert "[CF]" in abc or "[A,CF]" in abc or "[_B,,_B,D]" in abc

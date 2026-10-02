@@ -14,6 +14,8 @@ from typing import Any
 PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 SHARP_NAMES = ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"]
 FLAT_NAMES = ["C", "_D", "D", "_E", "E", "F", "_G", "G", "_A", "A", "_B", "B"]
+CHORD_ROOTS_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+CHORD_ROOTS_FLAT = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
 
 FLAT_KEYS = {"F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb", "Dm", "Gm", "Cm", "Fm", "Bbm", "Ebm", "Abm"}
 
@@ -288,26 +290,29 @@ def calculate_duration(parser: MidiParser) -> float:
 
 def estimate_key(parser: MidiParser) -> str:
     """Estimate musical key from key signature events or note pitch classes."""
+    # Check for explicit non-zero key signature first
     if parser.key_sigs:
-        sf, mi = parser.key_sigs[0][1], parser.key_sigs[0][2]
-        if mi == 1:
-            return MINOR_KEYS_BY_SF.get(sf, "Am")
-        return MAJOR_KEYS_BY_SF.get(sf, "C")
+        non_zero = [ks for ks in parser.key_sigs if ks[1] != 0 or ks[2] != 0]
+        if non_zero:
+            sf, mi = non_zero[0][1], non_zero[0][2]
+            return MINOR_KEYS_BY_SF.get(sf, "Am") if mi == 1 else MAJOR_KEYS_BY_SF.get(sf, "C")
 
-    # Fallback: Krumhansl-Schmuckler correlation
+    # Note pitch correlation using Krumhansl-Schmuckler
     pitch_counts = [0.0] * 12
     for n in parser.notes:
         pitch_counts[n["pitch"] % 12] += n["duration_ticks"]
 
     total = sum(pitch_counts)
     if total == 0:
+        if parser.key_sigs:
+            sf, mi = parser.key_sigs[0][1], parser.key_sigs[0][2]
+            return MINOR_KEYS_BY_SF.get(sf, "Am") if mi == 1 else MAJOR_KEYS_BY_SF.get(sf, "C")
         return "C"
 
     best_key = "C"
     best_corr = -999.0
 
     for root in range(12):
-        # Shift profile
         maj_prof = [MAJOR_PROFILE[(i - root) % 12] for i in range(12)]
         min_prof = [MINOR_PROFILE[(i - root) % 12] for i in range(12)]
 
@@ -328,34 +333,102 @@ def estimate_key(parser: MidiParser) -> str:
             best_corr = c_min
             best_key = PITCH_NAMES[root] + "m"
 
+    if parser.key_sigs and best_corr < 0.6:
+        sf, mi = parser.key_sigs[0][1], parser.key_sigs[0][2]
+        return MINOR_KEYS_BY_SF.get(sf, "Am") if mi == 1 else MAJOR_KEYS_BY_SF.get(sf, "C")
+
     return best_key
 
 
-def detect_bar_chord(pitches: list[int], key: str, last_chord: str) -> str:
-    """Determine the most fitting chord symbol for a bar given its sounding pitches."""
-    if not pitches:
+def detect_bar_chord(
+    events_or_pitches: list[Any],
+    arg2: Any = "C",
+    arg3: Any = "",
+    arg4: Any = None,
+    arg5: Any = None,
+) -> str:
+    """Determine the most fitting chord symbol for a bar given sounding events or pitches."""
+    if not events_or_pitches:
+        key = arg4 if isinstance(arg2, int) and arg4 is not None else (arg2 if isinstance(arg2, str) else "C")
+        last = arg5 if isinstance(arg2, int) and arg5 is not None else (arg3 if isinstance(arg3, str) else "")
+        return last or (key.replace("m", "m") if key.endswith("m") else key)
+
+    if isinstance(arg2, int) and arg4 is not None:
+        # Called as detect_bar_chord(bar_events, b, ticks_per_bar, key, last_chord)
+        b = arg2
+        ticks_per_bar = arg3
+        key = str(arg4)
+        last_chord = str(arg5 or "")
+    else:
+        # Called as detect_bar_chord(pitches_or_events, key, last_chord)
+        key = str(arg2 or "C")
+        last_chord = str(arg3 or "")
+        b = 0
+        ticks_per_bar = 16
+
+    # Convert simple pitch list to synthetic event if needed
+    if events_or_pitches and isinstance(events_or_pitches[0], int):
+        bar_events = [{"start_tick": b * ticks_per_bar, "end_tick": (b + 1) * ticks_per_bar, "pitches": events_or_pitches}]
+    else:
+        bar_events = events_or_pitches
+
+    pitch_dur = [0.0] * 12
+    downbeat_bass = None
+    min_bass_pitch = 999
+    bass_dur = [0.0] * 12
+
+    b_start = b * ticks_per_bar
+    b_end = (b + 1) * ticks_per_bar
+
+    for e in bar_events:
+        ts = max(b_start, e["start_tick"])
+        te = min(b_end, e["end_tick"])
+        dur = max(1, te - ts)
+        for p in e["pitches"]:
+            pitch_dur[p % 12] += dur
+            if p < 60:
+                bass_dur[p % 12] += dur
+                if p < min_bass_pitch:
+                    min_bass_pitch = p
+                if ts == b_start and (downbeat_bass is None or p < downbeat_bass[0]):
+                    downbeat_bass = (p, p % 12)
+
+    total_dur = sum(pitch_dur)
+    if total_dur == 0:
         return last_chord or (key.replace("m", "m") if key.endswith("m") else key)
 
-    pitch_classes = set(p % 12 for p in pitches)
-    lowest = min(pitches) % 12
+    primary_bass = (
+        downbeat_bass[1]
+        if downbeat_bass
+        else (max(range(12), key=lambda x: bass_dur[x]) if max(bass_dur) > 0 else min(bar_events[0]["pitches"]) % 12)
+    )
+    pitch_classes = set(i for i in range(12) if pitch_dur[i] > 0)
+
+    names = CHORD_ROOTS_FLAT if key in FLAT_KEYS else CHORD_ROOTS_SHARP
 
     best_chord = None
-    best_score = -1.0
+    best_score = -999.0
 
     for root in range(12):
-        root_name = PITCH_NAMES[root]
-        for suffix, intervals, required_iv in CHORD_TEMPLATES:
-            if required_iv is not None and ((root + required_iv) % 12) not in pitch_classes:
+        root_name = names[root]
+        for suffix, intervals, req in CHORD_TEMPLATES:
+            if req is not None and ((root + req) % 12) not in pitch_classes:
                 continue
-
             target_pcs = set((root + iv) % 12 for iv in intervals)
-            matched = len(pitch_classes & target_pcs)
-            extra = len(pitch_classes - target_pcs)
-            score = (matched * 2.0 - extra * 0.5)
+            chord_dur_ratio = sum(pitch_dur[pc] for pc in target_pcs) / total_dur
+            non_chord_ratio = sum(pitch_dur[pc] for pc in (pitch_classes - target_pcs)) / total_dur
+
+            score = (chord_dur_ratio * 4.0 - non_chord_ratio * 1.5)
             if root in pitch_classes:
-                score += 1.0  # Root note is present
-            if root == lowest:
-                score += 1.5  # Matching bass note
+                score += 1.0
+            if root == primary_bass:
+                score += 3.5  # Strong bass alignment
+            if suffix in ("", "m"):
+                score += 0.8  # Prefer standard triads
+            elif suffix == "sus4":
+                score -= 1.2  # Sus4 penalty unless explicitly dominant
+            elif suffix in ("7", "m7", "maj7"):
+                score += 0.3
 
             if score > best_score:
                 best_score = score
@@ -544,12 +617,13 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
     bar_chords: list[str] = []
     last_chord = key.replace("m", "m") if key.endswith("m") else key
     for b in range(total_bars):
-        sounding_pitches = [
-            p for e in qv + qi
-            if e["end_tick"] > b * ticks_per_bar and e["start_tick"] < (b + 1) * ticks_per_bar
-            for p in e["pitches"]
+        b_start = b * ticks_per_bar
+        b_end = (b + 1) * ticks_per_bar
+        bar_events = [
+            e for e in qv + qi
+            if e["end_tick"] > b_start and e["start_tick"] < b_end
         ]
-        ch = detect_bar_chord(sounding_pitches, key, last_chord)
+        ch = detect_bar_chord(bar_events, b, ticks_per_bar, key, last_chord)
         bar_chords.append(ch)
         last_chord = ch
 
@@ -564,18 +638,29 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
                 clean_sec = next(s for s in ("intro", "verse", "chorus", "bridge", "outro") if s in name)
                 sections.append((b_idx, clean_sec))
 
-    if not sections or sections[0][0] > 0:
-        sections.insert(0, (0, "intro"))
+    first_vocal_bar = (min((e["start_tick"] for e in qv), default=0) // ticks_per_bar) if qv else 0
 
-    if len(sections) == 1:
-        if total_bars > 8:
-            sections = [(0, "intro"), (4, "verse")]
-            if total_bars > 16:
-                sections.append((12, "chorus"))
-            if total_bars > 24:
-                sections.append((total_bars - 4, "outro"))
+    if not sections:
+        if first_vocal_bar > 0:
+            sections = [(0, "intro"), (first_vocal_bar, "verse")]
+            verse_bar = first_vocal_bar
         else:
             sections = [(0, "verse")]
+            verse_bar = 0
+
+        if total_bars > verse_bar + 16:
+            chorus_bar = verse_bar + 8
+            if chorus_bar < total_bars - 4:
+                sections.append((chorus_bar, "chorus"))
+        if total_bars > 24:
+            sections.append((total_bars - 4, "outro"))
+    else:
+        if sections[0][0] > 0:
+            if 0 < first_vocal_bar < sections[0][0]:
+                sections.insert(0, (first_vocal_bar, "verse"))
+                sections.insert(0, (0, "intro"))
+            else:
+                sections.insert(0, (0, "intro" if first_vocal_bar > 0 else "verse"))
 
     sections = sorted(dict(sections).items(), key=lambda x: x[0])
 

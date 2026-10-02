@@ -312,7 +312,7 @@
     var bpm = 120;
     var inHeader = true;
 
-    var tokenRe = /"([^"]*)"|([zZ])(\d*)|([_^=]*[A-Ga-g][,']*)(\d*)(-?)|(\|)/g;
+    var tokenRe = /"([^"]*)"|([zZ])(\d*)|\[([A-Ga-g,=_^'\/\d\s]+)\](\d*)(-?)|([_^=]*[A-Ga-g][,']*)(\d*)(-?)|(\|)/g;
     var nextId = 1;
     var lastMusicVoice = null;
     var lastMusicBars = null;
@@ -446,10 +446,36 @@
           }
         } else if (match[4]) {
           sawZ = false;
-          var noteStr = match[4];
-          var nDur = parseInt(match[5] || "1", 10);
+          var chordStr = match[4];
+          var cDur = parseInt(match[5] || "1", 10);
           var tiedNext = match[6] === "-";
-          
+          var chordNoteRe = /([_^=]*[A-Ga-g][,']*)(\d*)/g;
+          var cMatch;
+          while ((cMatch = chordNoteRe.exec(chordStr)) !== null) {
+            if (!cMatch[1]) { continue; }
+            var noteParts = cMatch[1].match(/^([_^=]*)([A-Ga-g])([,']*)$/);
+            if (noteParts) {
+              var pitch = abcNoteToMidi(noteParts[1], noteParts[2], noteParts[3]);
+              var nDur = cMatch[2] ? parseInt(cMatch[2], 10) : cDur;
+              rawNotes.push({
+                id: nextId++,
+                voice: currentVoice,
+                pitch: pitch,
+                barIndex: voiceBarIndex[currentVoice],
+                tickInBar: tickInBar,
+                durationTicks: nDur,
+                tiedNext: tiedNext,
+                lyric: ''
+              });
+            }
+          }
+          tickInBar += cDur;
+        } else if (match[7]) {
+          sawZ = false;
+          var noteStr = match[7];
+          var nDur = parseInt(match[8] || "1", 10);
+          var tiedNext = match[9] === "-";
+
           var noteParts = noteStr.match(/^([_^=]*)([A-Ga-g])([,']*)$/);
           if (noteParts) {
             var pitch = abcNoteToMidi(noteParts[1], noteParts[2], noteParts[3]);
@@ -465,7 +491,7 @@
             });
           }
           tickInBar += nDur;
-        } else if (match[7]) {
+        } else if (match[10]) {
           if (sawZ) {
             sawZ = false;
           } else {
@@ -653,22 +679,38 @@
             if (chordMap[0]) { barStr += '"' + chordMap[0] + '"'; }
             barStr += 'z' + ticksPerBar;
           } else {
+            var byTick = {};
             for (var segIdx = 0; segIdx < segs.length; segIdx++) {
               var s = segs[segIdx];
-              if (s.tickInBar > curBarTick) {
-                var rDur = s.tickInBar - curBarTick;
+              if (!byTick[s.tickInBar]) { byTick[s.tickInBar] = []; }
+              byTick[s.tickInBar].push(s);
+            }
+            var sortedTicks = Object.keys(byTick).map(Number).sort(function (a, b) { return a - b; });
+
+            for (var ti = 0; ti < sortedTicks.length; ti++) {
+              var tVal = sortedTicks[ti];
+              var group = byTick[tVal];
+              if (tVal > curBarTick) {
+                var rDur = tVal - curBarTick;
                 if (chordMap[curBarTick]) { barStr += '"' + chordMap[curBarTick] + '"'; }
                 barStr += 'z' + (rDur > 1 ? rDur : "");
-                curBarTick = s.tickInBar;
+                curBarTick = tVal;
               }
               if (chordMap[curBarTick]) {
                 barStr += '"' + chordMap[curBarTick] + '"';
               }
-              var nStr = midiToAbcNote(s.pitch, key);
-              var dStr = s.durationTicks > 1 ? String(s.durationTicks) : "";
-              var tStr = s.tied ? "-" : "";
-              barStr += nStr + dStr + tStr;
-              curBarTick += s.durationTicks;
+              var dur = group[0].durationTicks;
+              var dStr = dur > 1 ? String(dur) : "";
+              var tStr = group[0].tied ? "-" : "";
+              if (group.length === 1) {
+                var nStr = midiToAbcNote(group[0].pitch, key);
+                barStr += nStr + dStr + tStr;
+              } else {
+                group.sort(function (a, b) { return a.pitch - b.pitch; });
+                var chordPitches = group.map(function (g) { return midiToAbcNote(g.pitch, key); }).join("");
+                barStr += "[" + chordPitches + "]" + dStr + tStr;
+              }
+              curBarTick += dur;
             }
             if (curBarTick < ticksPerBar) {
               var endRest = ticksPerBar - curBarTick;
@@ -2648,12 +2690,13 @@
     for (var i = 0; i < rawLines.length; i++) {
       var line = rawLines[i].trim();
       if (!line) { continue; }
-      var tagMatch = line.match(/^\[([^\]]+)\]$/);
+      var tagMatch = line.match(/^(?:(?:\*{1,2}\s*)?\[([^\]]+)\](?:\s*\*{1,2})?|(?:#{1,6}|\*{1,2})\s*([A-Za-z]+(?:\s+[A-Za-z0-9_-]+)*)\s*(?:\*{1,2})?)$/);
       if (tagMatch) {
         if (currentSec.name || currentSec.lines.length > 0) {
           sections.push(currentSec);
         }
-        currentSec = { name: tagMatch[1].trim(), lines: [] };
+        var secName = (tagMatch[1] || tagMatch[2]).trim();
+        currentSec = { name: secName, lines: [] };
       } else {
         currentSec.lines.push(line);
       }
