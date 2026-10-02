@@ -1,6 +1,6 @@
 # Third-party notices
 
-Yeufonic's own code is licensed for free personal, non-commercial use (see [LICENSE](LICENSE)). It runs
+Yeufonic's own code is licensed for free personal, non-commercial use (see [LICENSE.md](LICENSE.md)). It runs
 models and software made by others, and each of those keeps its own terms. None of the model
 weights are part of this repository: `scripts/fetch-models.sh` downloads them from their
 publishers, and by using them you accept their terms.

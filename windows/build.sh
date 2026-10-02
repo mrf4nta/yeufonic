@@ -23,7 +23,7 @@ tar -C "$ROOT" --exclude='__pycache__' --exclude='static/__*' -cf - app | tar -C
 cp "$ROOT/VERSION" "$ROOT/requirements.txt" "$STAGE/studio/"
 tar -C "$ROOT/engine/custom_nodes" --exclude='__pycache__' -cf - yue2_harmony | tar -C "$STAGE/studio/engine-nodes" -xf -
 cp "$ROOT/windows/setup.ps1" "$ROOT/windows/launcher.py" "$ROOT/windows/yeufonic.ico" "$ROOT/windows/installer-panel.bmp" \
-   "$ROOT/windows/terms.txt" "$ROOT/LICENSE" "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/"
+   "$ROOT/windows/terms.txt" "$ROOT/LICENSE.md" "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/"
 
 EXE="Yeufonic-Setup-$VERSION${TEST_BUILD:+-test}.exe"
 # Yeufonic.exe, what the shortcuts start, is built first and carried by the installer.
