@@ -3005,6 +3005,10 @@ function paintSource() {
   }
   if ($('audition')) { $('audition').disabled = !source; }
   if ($('source-delete')) { $('source-delete').disabled = !source; }
+  if ($('source-tracks')) {
+    $('source-tracks').classList.toggle('hidden', !source || !isMidi);
+    $('source-tracks').disabled = !source || !isMidi;
+  }
 
   if (!source) {
     status.textContent = '';
@@ -5718,6 +5722,70 @@ async function doVariations() {
     $('variations-status').className = 'status bad';
   }
 }
+
+async function openTracksModal() {
+  var source = currentSource();
+  if (!source) { return; }
+  var modal = $('tracks-modal');
+  var listEl = $('tracks-list');
+  var statusEl = $('tracks-status');
+  if (!modal || !listEl) { return; }
+  modal.classList.remove('hidden');
+  statusEl.textContent = 'Loading MIDI tracks\u2026';
+  statusEl.className = 'status';
+  try {
+    var res = await api('/api/sources/' + source.id + '/tracks');
+    var tracks = res.tracks || [];
+    if (!tracks.length) {
+      statusEl.textContent = 'No tracks found in this MIDI file.';
+      listEl.innerHTML = '';
+      return;
+    }
+    statusEl.textContent = '';
+    listEl.innerHTML = tracks.map(function (t) {
+      var isVocal = t.role === 'vocal';
+      return '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:var(--bg-elevated, #2a2a2a); border-radius:6px; border:1px solid ' + (isVocal ? 'var(--accent, #4caf50)' : 'transparent') + '">' +
+        '<div><strong>Track ' + t.track + ': ' + esc(t.name || 'Unnamed') + '</strong>' +
+        '<div class="muted small">' + t.note_count + ' notes \u00b7 ' + esc(t.role) + ' \u00b7 mono ' + Math.round(t.mono_ratio * 100) + '% \u00b7 score ' + t.vocal_score + '</div></div>' +
+        '<button class="chip action select-vocal-track" data-track="' + t.track + '">' + (isVocal ? 'Lead Vocal \u2713' : 'Set as Vocal') + '</button>' +
+        '</div>';
+    }).join('');
+
+    listEl.querySelectorAll('.select-vocal-track').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var trk = parseInt(btn.dataset.track, 10);
+        statusEl.textContent = 'Retracking with Track ' + trk + ' as Vocal\u2026';
+        statusEl.className = 'status';
+        try {
+          var updated = await api('/api/sources/' + source.id + '/retrack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vocal_track: trk })
+          });
+          $('abc').value = updated.abc || '';
+          scoreBaseline(updated.abc || '');
+          statusEl.textContent = 'Vocal track updated!';
+          statusEl.className = 'status good';
+          source.abc = updated.abc;
+          setTimeout(function () { closeTracksModal(); }, 600);
+        } catch (err) {
+          statusEl.textContent = 'Error: ' + err.message;
+          statusEl.className = 'status bad';
+        }
+      });
+    });
+  } catch (err) {
+    statusEl.textContent = 'Could not load tracks: ' + err.message;
+    statusEl.className = 'status bad';
+  }
+}
+
+function closeTracksModal() {
+  if ($('tracks-modal')) {
+    $('tracks-modal').classList.add('hidden');
+  }
+}
+
 
 /* ------------------------------------------------------------- compare
    Two to six takes on one shared position: switching keeps the place in the song, so
@@ -9367,6 +9435,17 @@ function wire() {
   $('variations-modal').addEventListener('click', function (event) {
     if (backdropClick(event, $('variations-modal'))) { closeVariations(); }
   });
+  if ($('source-tracks')) {
+    $('source-tracks').addEventListener('click', openTracksModal);
+  }
+  if ($('tracks-close')) {
+    $('tracks-close').addEventListener('click', closeTracksModal);
+  }
+  if ($('tracks-modal')) {
+    $('tracks-modal').addEventListener('click', function (event) {
+      if (backdropClick(event, $('tracks-modal'))) { closeTracksModal(); }
+    });
+  }
   wireCompare();
   if ($('tries-modal')) {
     $('tries-close').addEventListener('click', closeTries);

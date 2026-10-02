@@ -439,9 +439,14 @@ def detect_bar_chord(
     return last_chord or (key.replace("m", "m") if key.endswith("m") else key)
 
 
-def midi_to_abc(data: bytes, title: str = "") -> str:
+def midi_to_abc(
+    data: bytes,
+    title: str = "",
+    vocal_track: int | None = None,
+    ins_track: int | None = None,
+) -> str:
     """Convert MIDI binary data into an ABC score with Vocal and Ins staves."""
-    return parse_midi(data, title=title)["abc"]
+    return parse_midi(data, title=title, vocal_track=vocal_track, ins_track=ins_track)["abc"]
 
 
 def midi_duration(data: bytes) -> float:
@@ -450,7 +455,162 @@ def midi_duration(data: bytes) -> float:
     return calculate_duration(parser)
 
 
-def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
+def extract_midi_tracks(data: bytes) -> list[dict[str, Any]]:
+    """Inspect and return metadata for all tracks in a MIDI file."""
+    parser = MidiParser(data)
+    dur = calculate_duration(parser)
+    _, _, tracks = classify_midi_tracks(parser, dur)
+    return tracks
+
+
+def classify_midi_tracks(
+    parser: MidiParser,
+    total_duration_sec: float,
+    vocal_track: int | None = None,
+    ins_track: int | None = None,
+) -> tuple[set[int], set[int], list[dict[str, Any]]]:
+    """Score and classify all MIDI tracks to detect vocal melody and accompaniment.
+
+    Uses monophonicity, pitch range, singing note density, stepwise interval motion,
+    and semantic name priors.
+    """
+    melodic_notes = [n for n in parser.notes if n["channel"] != 9]
+    if not melodic_notes:
+        melodic_notes = parser.notes
+
+    all_tracks = sorted(set(n["track"] for n in parser.notes))
+    track_info: list[dict[str, Any]] = []
+
+    VOCAL_STRONG = ("vocal", "vox", "melody", "lead vox", "voice", "sing")
+    VOCAL_MOD = ("lead", "solo", "sax", "flute", "oboe", "clarinet", "harmonica", "synth")
+    ACCOMP_EXCL = (
+        "bass", "fretless", "bas", "drum", "perc", "click", "rhythm", "rythm",
+        "strum", "chord", "chords", "hihat", "cymbal", "snare", "kick",
+    )
+
+    scores_by_track: dict[int, float] = {}
+    strong_vocal_tracks: set[int] = set()
+
+    for t in all_tracks:
+        t_notes = [n for n in parser.notes if n["track"] == t]
+        name = parser.track_names.get(t, "")
+        name_lower = name.lower()
+        n_count = len(t_notes)
+        is_drum_channel = any(n["channel"] == 9 for n in t_notes)
+
+        if not t_notes or is_drum_channel or any(k in name_lower for k in ("drum", "perc", "click", "cymbal")):
+            track_info.append({
+                "track": t,
+                "name": name,
+                "note_count": n_count,
+                "mono_ratio": 0.0,
+                "avg_pitch": 0.0,
+                "vocal_score": 0.0,
+                "role": "drums",
+            })
+            continue
+
+        sorted_t = sorted(t_notes, key=lambda x: x["start_tick"])
+        overlaps = sum(1 for i in range(len(sorted_t) - 1) if sorted_t[i]["end_tick"] > sorted_t[i + 1]["start_tick"])
+        mono_ratio = 1.0 - (overlaps / max(1, len(sorted_t) - 1))
+
+        pitches = [n["pitch"] for n in t_notes]
+        avg_p = sum(pitches) / n_count
+        in_range = sum(1 for p in pitches if 48 <= p <= 84) / n_count
+        pitch_penalty = max(0.0, 1.0 - abs(avg_p - 63) / 24.0)
+
+        rate = n_count / max(1.0, total_duration_sec)
+        if rate < 0.4:
+            rate_score = max(0.1, rate / 0.4)
+        elif rate > 5.5:
+            rate_score = max(0.01, 1.0 - (rate - 5.5) / 10.0)
+        else:
+            rate_score = 1.0
+
+        if n_count > 1800:
+            count_penalty = max(0.05, 1.0 - (n_count - 1800) / 2000.0)
+        elif n_count < 60:
+            count_penalty = n_count / 60.0
+        else:
+            count_penalty = 1.0
+
+        intervals = [abs(sorted_t[i + 1]["pitch"] - sorted_t[i]["pitch"]) for i in range(min(100, len(sorted_t) - 1))]
+        stepwise_ratio = sum(1 for iv in intervals if iv <= 4) / max(1, len(intervals)) if intervals else 0.5
+
+        name_factor = 1.0
+        is_strong_vocal = any(k in name_lower for k in VOCAL_STRONG)
+        if is_strong_vocal:
+            name_factor = 3.0
+            strong_vocal_tracks.add(t)
+        elif any(k in name_lower for k in VOCAL_MOD):
+            name_factor = 1.3
+        if any(k in name_lower for k in ACCOMP_EXCL):
+            name_factor = 0.02
+        if any(k in name_lower for k in ("string", "slowstring", "pad")):
+            name_factor = 0.4
+
+        score = (
+            100.0
+            * (mono_ratio ** 4)
+            * (in_range ** 2)
+            * pitch_penalty
+            * rate_score
+            * count_penalty
+            * (0.5 + 0.5 * stepwise_ratio)
+            * name_factor
+        )
+
+        if avg_p < 44 or any(k in name_lower for k in ("bass", "fretless", "bas")):
+            role = "bass"
+        elif score >= 20.0 or is_strong_vocal:
+            role = "vocal"
+        elif mono_ratio < 0.60 or any(k in name_lower for k in ("chord", "strum", "rhythm", "rythm", "piano", "gtr", "guitar")):
+            role = "accompaniment"
+        else:
+            role = "lead"
+
+        scores_by_track[t] = score
+        track_info.append({
+            "track": t,
+            "name": name,
+            "note_count": n_count,
+            "mono_ratio": round(mono_ratio, 2),
+            "avg_pitch": round(avg_p, 1),
+            "vocal_score": round(score, 2),
+            "role": role,
+        })
+
+    vocal_tracks: set[int] = set()
+    accomp_tracks: set[int] = set()
+
+    if vocal_track is not None:
+        vocal_tracks = {vocal_track}
+        if ins_track is not None:
+            accomp_tracks = {ins_track}
+        else:
+            accomp_tracks = set(t for t in scores_by_track if t != vocal_track)
+    else:
+        if strong_vocal_tracks:
+            vocal_tracks = strong_vocal_tracks
+        elif scores_by_track:
+            best_t = max(scores_by_track.keys(), key=lambda k: scores_by_track[k])
+            if scores_by_track[best_t] > 0.5:
+                vocal_tracks.add(best_t)
+
+        if ins_track is not None:
+            accomp_tracks = {ins_track}
+        else:
+            accomp_tracks = set(t for t in scores_by_track if t not in vocal_tracks)
+
+    return vocal_tracks, accomp_tracks, track_info
+
+
+def parse_midi(
+    data: bytes,
+    title: str = "",
+    vocal_track: int | None = None,
+    ins_track: int | None = None,
+) -> dict[str, Any]:
     """Parse MIDI data into ABC score, duration, tempo, meter, key, and lyrics."""
     parser = MidiParser(data)
     duration_sec = calculate_duration(parser)
@@ -490,48 +650,9 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
     if not melodic_notes:
         melodic_notes = parser.notes  # Fall back if only drum channel exists
 
-    # Classify into Vocal (lead/melody) and Ins (accompaniment/harmony)
-    tracks = sorted(set(n["track"] for n in melodic_notes))
-
-    VOCAL_KEYWORDS = ("vocal", "vox", "melody", "lead", "voice", "sing", "choir", "solo")
-    INST_EXCLUSIONS = ("guitar", "guitr", "gtr", "gt", "bass", "drum", "perc", "synth", "brass", "horn", "string", "piano", "organ", "hit", "timpani", "orchestra")
-    ACCOMP_KEYWORDS = ("piano", "keys", "keyboard", "guitar", "acoust", "clean", "strum", "organ", "harp")
-
-    vocal_tracks = set()
-    accomp_tracks = set()
-
-    for t in tracks:
-        name = parser.track_names.get(t, "").lower()
-        is_excl = any(ex in name for ex in INST_EXCLUSIONS)
-        if any(w in name for w in VOCAL_KEYWORDS) and not is_excl:
-            vocal_tracks.add(t)
-        elif any(w in name for w in ACCOMP_KEYWORDS):
-            accomp_tracks.add(t)
-
-    # Fallback if no vocal track names found
-    if not vocal_tracks and len(tracks) > 1:
-        best_vocal_track = None
-        best_vocal_score = -1.0
-        for t in tracks:
-            t_notes = [n for n in melodic_notes if n["track"] == t]
-            if not t_notes:
-                continue
-            n_count = len(t_notes)
-            in_range = sum(1 for n in t_notes if 50 <= n["pitch"] <= 84) / n_count
-            avg_p = sum(n["pitch"] for n in t_notes) / n_count
-            pitch_penalty = 1.0 - min(1.0, abs(avg_p - 65) / 25.0)
-
-            # Monophonic ratio
-            sorted_t = sorted(t_notes, key=lambda x: x["start_tick"])
-            overlaps = sum(1 for i in range(len(sorted_t) - 1) if sorted_t[i]["end_tick"] > sorted_t[i + 1]["start_tick"])
-            mono_ratio = 1.0 - (overlaps / max(1, len(sorted_t) - 1))
-
-            score = n_count * in_range * pitch_penalty * (0.5 + 0.5 * mono_ratio)
-            if score > best_vocal_score:
-                best_vocal_score = score
-                best_vocal_track = t
-        if best_vocal_track is not None:
-            vocal_tracks.add(best_vocal_track)
+    vocal_tracks, accomp_tracks, track_info = classify_midi_tracks(
+        parser, duration_sec, vocal_track=vocal_track, ins_track=ins_track
+    )
 
     if vocal_tracks:
         vocal_source = [n for n in melodic_notes if n["track"] in vocal_tracks]
@@ -795,6 +916,10 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
             if raw_text:
                 extracted_lyrics = raw_text
 
+    if extracted_lyrics:
+        from . import aligner
+        abc_text = aligner.align_lyrics_to_abc(abc_text, extracted_lyrics)
+
     min_score_dur = round(total_bars * (num * (4.0 / den)) * (60.0 / bpm), 2)
     if duration_sec < min_score_dur and total_bars == 4:
         duration_sec = min_score_dur
@@ -808,4 +933,6 @@ def parse_midi(data: bytes, title: str = "") -> dict[str, Any]:
         "title": title,
         "lyrics": extracted_lyrics,
         "sections": [s_name for _, s_name in sections],
+        "tracks": track_info,
     }
+

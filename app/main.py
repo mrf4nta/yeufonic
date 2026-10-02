@@ -40,7 +40,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, midi, score, soundfonts, stems, trainsize, update
+from . import aligner, config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, midi, score, soundfonts, stems, trainsize, update
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -500,6 +500,11 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # ------------------------------------------------------------------- api models
 class ScoreIn(BaseModel):
     abc: str = Field(max_length=200_000)
+
+
+class RetrackIn(BaseModel):
+    vocal_track: int
+    ins_track: int | None = None
 
 
 class SongIn(BaseModel):
@@ -1356,6 +1361,58 @@ def save_score(source_id: str, body: ScoreIn) -> dict:
     return {"saved": True, "chars": len(body.abc)}
 
 
+@app.get("/api/sources/{source_id}/tracks")
+def get_source_tracks(source_id: str) -> dict:
+    """Inspect and return detected tracks and roles for a MIDI source."""
+    source = one("SELECT * FROM sources WHERE id = ?", (source_id,))
+    if not source:
+        raise HTTPException(404, "no such source")
+    stored_path = Path(source["stored_path"])
+    if not stored_path.exists():
+        raise HTTPException(400, "the file for this recording is missing")
+    if not (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        return {"tracks": []}
+    try:
+        data = stored_path.read_bytes()
+        tracks = midi.extract_midi_tracks(data)
+        return {"tracks": tracks}
+    except Exception as exc:
+        log.warning("Could not extract tracks from MIDI source %s: %s", source_id, exc)
+        return {"tracks": []}
+
+
+@app.post("/api/sources/{source_id}/retrack")
+def retrack_source(source_id: str, body: RetrackIn) -> dict:
+    """Reparse a MIDI source with specified Vocal and Accompaniment tracks."""
+    source = one("SELECT * FROM sources WHERE id = ?", (source_id,))
+    if not source:
+        raise HTTPException(404, "no such source")
+    stored_path = Path(source["stored_path"])
+    if not stored_path.exists():
+        raise HTTPException(400, "the file for this recording is missing")
+    if not (source.get("filename") or "").lower().endswith((".mid", ".midi")):
+        raise HTTPException(400, "Retracking requires a MIDI recording")
+    try:
+        data = stored_path.read_bytes()
+        title = source.get("title") or stored_path.stem
+        parsed = midi.parse_midi(data, title=title, vocal_track=body.vocal_track, ins_track=body.ins_track)
+        new_abc = parsed["abc"]
+        if source.get("lyrics"):
+            try:
+                new_abc = aligner.align_lyrics_to_abc(new_abc, source["lyrics"])
+            except Exception as exc:
+                log.warning("Could not auto-align lyrics during retracking of %s: %s", source_id, exc)
+        execute(
+            "UPDATE sources SET abc = ?, abc_updated_at = ? WHERE id = ?",
+            (new_abc, time.time(), source_id),
+        )
+        log.info("Retracked source '%s' (%s) with vocal track %d", source.get("title") or source_id, source_id, body.vocal_track)
+        return {"id": source_id, "abc": new_abc, "tracks": parsed.get("tracks", [])}
+    except Exception as exc:
+        log.error("Retracking failed for source %s: %s", source_id, exc)
+        raise HTTPException(500, f"Could not retrack MIDI: {exc}")
+
+
 @app.delete("/api/sources/{source_id}")
 async def delete_source(source_id: str) -> dict:
     """Delete an uploaded recording and its stems.  Covers made from it keep their
@@ -1544,7 +1601,13 @@ async def create_take(body: TakeIn) -> dict:
     source = one("SELECT * FROM sources WHERE id = ?", (body.source_id,))
     if not source:
         raise HTTPException(404, "no such source")
-    _check_score(body.abc if body.abc is not None else source["abc"])
+    abc_to_use = body.abc if body.abc is not None else (source["abc"] or "")
+    if body.lyrics and abc_to_use and ("V: Vocal" in abc_to_use or "V:Vocal" in abc_to_use):
+        try:
+            abc_to_use = aligner.align_lyrics_to_abc(abc_to_use, body.lyrics)
+        except Exception as exc:
+            log.warning("Could not auto-align lyrics to ABC for take: %s", exc)
+    _check_score(abc_to_use)
     _space(body.space_id)
     take_id = uuid.uuid4().hex[:12]
     seed = body.seed if body.seed is not None else int.from_bytes(os.urandom(4), "big")
@@ -1554,7 +1617,7 @@ async def create_take(body: TakeIn) -> dict:
         "title": body.title or source["title"],
         "style": body.style.strip() or config.DEFAULT_STYLE,
         "lyrics": body.lyrics,
-        "abc": body.abc if body.abc is not None else (source["abc"] or ""),
+        "abc": abc_to_use,
         "mode": body.mode if body.mode in ("full", "melody") else "full",
         "seed": seed,
         "checkpoint": _checkpoint(),
@@ -1956,6 +2019,11 @@ async def new_words(take_id: str, body: WordsIn) -> dict:
     abc = take["abc"] if body.abc is None else body.abc
     if not (abc or "").strip():
         raise HTTPException(400, "this take has no score to sing. Write a plan first.")
+    if words and abc and ("V: Vocal" in abc or "V:Vocal" in abc):
+        try:
+            abc = aligner.align_lyrics_to_abc(abc, words)
+        except Exception as exc:
+            log.warning("Could not auto-align lyrics to ABC for new words: %s", exc)
     _check_score(abc, take["kind"])
     _checkpoint()
     record = {key: value for key, value in take.items() if key not in _REVOICE_FRESH}

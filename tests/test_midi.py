@@ -511,7 +511,7 @@ def test_vocal_melody_legato_gap_closing():
 
 def test_real_hey_jude_midi_conversion():
     """Verify Hey Jude MIDI converts cleanly with legato vocal phrasing and banner noise excluded."""
-    midi_paths = list(Path("data/sources").glob("*hey-jude*.mid"))
+    midi_paths = list(Path("data/sources").glob("*beatles-hey-jude*.mid"))
     if not midi_paths:
         pytest.skip("Hey Jude MIDI not found")
     data = midi_paths[0].read_bytes()
@@ -525,3 +525,93 @@ def test_real_hey_jude_midi_conversion():
     vocal_bars = score.vocal_bars(abc)
     # Bar 3 was '_B3zf5zfzezcz' before gap closing; now cleanly legato '_B4f6f2e2c2'
     assert "_B4f6f2e2c2" in vocal_bars[3]
+
+
+def test_hey_jude_synth_lead_melody_classification():
+    """Verify track classifier selects Track 8 (Smooth Synth) over Track 0 (4150 strumming guitar notes)."""
+    p = Path("data/sources/1afc5fac27224e3e-the-beatles-hey-jude.mid")
+    if not p.exists():
+        pytest.skip("Hey Jude new MIDI not found")
+    data = p.read_bytes()
+    parsed = midi.parse_midi(data, "The Beatles - Hey Jude")
+    tracks = parsed["tracks"]
+    vocal_track = next((t for t in tracks if t["role"] == "vocal"), None)
+    assert vocal_track is not None
+    assert vocal_track["track"] == 8
+    assert "Synth" in vocal_track["name"]
+
+    # Verify Vocal melody contains the authentic Hey Jude melody (C4, A, G, Bb, F)
+    abc = parsed["abc"]
+    assert score.problems(abc) == []
+    vocal_bars = score.vocal_bars(abc)
+    assert "C4A,10A,2" in vocal_bars[0]  # Hey, Jude, don't
+
+
+def test_source_tracks_and_retrack_api(client):
+    """Verify GET /api/sources/{id}/tracks and POST /api/sources/{id}/retrack endpoints."""
+    p = Path("data/sources/1afc5fac27224e3e-the-beatles-hey-jude.mid")
+    if not p.exists():
+        pytest.skip("Hey Jude new MIDI not found")
+    res = client.post(
+        "/api/sources",
+        files={"file": ("hey_jude_test.mid", io.BytesIO(p.read_bytes()), "audio/midi")},
+        data={"title": "Hey Jude Track Test"},
+    )
+    assert res.status_code == 200
+    src_id = res.json()["id"]
+
+    # Get tracks
+    trk_res = client.get(f"/api/sources/{src_id}/tracks")
+    assert trk_res.status_code == 200
+    tracks = trk_res.json()["tracks"]
+    assert len(tracks) >= 8
+    t8 = next(t for t in tracks if t["track"] == 8)
+    assert t8["role"] == "vocal"
+
+    # Retrack: switch vocal to Track 8 explicitly
+    retrack_res = client.post(
+        f"/api/sources/{src_id}/retrack",
+        json={"vocal_track": 8, "ins_track": 2},
+    )
+    assert retrack_res.status_code == 200
+    retrack_data = retrack_res.json()
+    assert "C4A,10A,2" in retrack_data["abc"]
+
+
+def test_take_auto_embeds_lyrics_in_abc(client):
+    """Verify that creating a take with lyrics automatically embeds w: lines into the ABC score."""
+    p = Path("data/sources/1afc5fac27224e3e-the-beatles-hey-jude.mid")
+    if not p.exists():
+        pytest.skip("Hey Jude new MIDI not found")
+    upload_res = client.post(
+        "/api/sources",
+        files={"file": ("hey_jude_lyrics_test.mid", io.BytesIO(p.read_bytes()), "audio/midi")},
+        data={"title": "Hey Jude Lyrics Base"},
+    )
+    src_id = upload_res.json()["id"]
+
+    lyrics = (
+        "[Verse 1]\n"
+        "Hey, Jude, don't make it bad\n"
+        "Take a sad song and make it better\n"
+        "Remember to let her into your heart\n"
+        "Then you can start to make it better\n"
+    )
+
+    take_res = client.post(
+        "/api/takes",
+        json={
+            "source_id": src_id,
+            "title": "Hey Jude Aligned Take",
+            "style": "piano ballad",
+            "lyrics": lyrics,
+        },
+    )
+    assert take_res.status_code == 200
+    take_data = take_res.json()
+    abc = take_data["abc"]
+    assert "w: " in abc
+    assert "Hey, Jude, don't" in abc
+    assert "make it bet- ter" in abc
+    assert score.problems(abc) == []
+

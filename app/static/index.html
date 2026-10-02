@@ -201,6 +201,7 @@
                 </div>
                 <button id="transcribe" class="ghost">Transcribe</button>
                 <button id="source-lyrics" class="ghost" title="Write down the words this recording sings">Extract lyrics</button>
+                <button id="source-tracks" class="ghost hidden" title="View MIDI tracks and select Lead Vocal track">MIDI tracks</button>
                 <button id="audition" class="ghost" title="Play this recording through the player">Audition</button>
                 <button id="source-delete" class="ghost" title="Delete this recording">Delete</button>
               </div>
@@ -764,6 +765,18 @@
       <span id="variations-estimate" class="muted"></span>
     </div>
     <div id="variations-status" class="status"></div>
+  </div>
+</div>
+
+<div id="tracks-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="MIDI Tracks">
+  <div class="modal-box narrow">
+    <div class="modal-head">
+      <strong id="tracks-heading">MIDI Tracks</strong>
+      <button id="tracks-close" class="ghost">Close</button>
+    </div>
+    <p class="hint">Select which track plays the lead vocal melody line.</p>
+    <div id="tracks-list" class="tracks-list" style="display:flex; flex-direction:column; gap:8px; margin:12px 0; max-height:360px; overflow-y:auto;"></div>
+    <div id="tracks-status" class="status"></div>
   </div>
 </div>
 
