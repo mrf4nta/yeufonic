@@ -12,6 +12,7 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 - **Song from a prompt:** write a score plan from a style and lyrics, edit it, render it.
 - **Cover a recording:** transcribe your song, change its melody and chords, render a new version.
 - **Instrumentals:** build the structure section by section, or play a recording's score.
+- **MIDI import for covers and instrumentals:** MIDI editing with piano roll and sf2 (experimental).
 - **Style LoRAs:** use published ones, or train your own from a folder of songs.
 - **Lyrics:** draft them from a sentence, or extract them from a recording.
 - **Stems:** split any take into vocals, drums, bass and more, or into vocals and a backing track.
