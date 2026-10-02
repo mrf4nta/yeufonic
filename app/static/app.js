@@ -5316,7 +5316,7 @@ var PRESETS = {
   ]
 };
 
-/* Canned styles dropdown: 53 styles alphabetized by short name. */
+/* Canned styles dropdown: 88 styles alphabetized by short name. */
 var CANNED_STYLES = [
   {
     name: 'afro-cuban jazz',
@@ -5325,6 +5325,10 @@ var CANNED_STYLES = [
   {
     name: 'afrobeats',
     prompt: 'Afrobeats, West African dance-pop, syncopated log-drum percussion, melodic kalimba accents, warm sub-bass, buoyant infectious groove, 104 BPM, auto-tuned smooth male vocals'
+  },
+  {
+    name: 'amapiano',
+    prompt: 'South African Amapiano, deep house fusion, iconic resonant log-drum basslines, airy piano keys, syncopated shaker percussion, lounge club vibe, hypnotic 113 BPM, smooth soulful Zulu vocal phrases'
   },
   {
     name: 'ambient drone',
@@ -5339,8 +5343,20 @@ var CANNED_STYLES = [
     prompt: 'Balkan Brass Band, gypsy brass, frantic trumpet fanfare, thunderous tapan bass drums, rapid Balkan 11/8 folk rhythms, celebratory wild street festival energy, 160 BPM, hearty shouting group vocals'
   },
   {
+    name: 'barbershop quartet',
+    prompt: 'Traditional Barbershop, close four-part a cappella harmony, ringing seventh chords, rubato timing, dramatic dynamic swells, nostalgic turn-of-the-century feel, unaccompanied acoustic resonance, rich interlocking male vocals'
+  },
+  {
     name: 'baroque pop',
     prompt: 'Baroque Pop, chamber pop, harpsichord runs, lush string quartet, gentle timpani, sophisticated brass flourishes, whimsical theatrical mood, 112 BPM, theatrical warm tenor vocals'
+  },
+  {
+    name: 'bavarian polka punk',
+    prompt: 'Alpine Polka Punk, turbo-folk rock, lightning-fast button accordion runs, heavy distorted power chords, thumping brass tuba bassline, rowdy beer-hall stomp, high-speed 160 BPM, shouting gravelly Bavarian gang vocals'
+  },
+  {
+    name: 'black metal',
+    prompt: 'Second-Wave Black Metal, atmospheric raw black metal, relentless tremolo-picked minor chord guitars, icy blast-beat drums, freezing lo-fi production, misanthropic bleak mood, frantic 180 BPM, high-pitched shrieking male vocals'
   },
   {
     name: 'bossa nova',
@@ -5351,8 +5367,20 @@ var CANNED_STYLES = [
     prompt: 'Breakcore, digital hardcore, chaotic hyper-chopped Amen breakbeats, abrupt rhythmic glitches, aggressive screeching acid bass, manic overload, blistering 200 BPM, frantic distorted vocal chops'
   },
   {
+    name: 'carnival samba',
+    prompt: 'Rio de Janeiro Samba Enredo, carnival batucada, massive surdo bass drums, ringing agogô bells, rattling tamborims, sweeping cavaquinho chords, explosive celebratory euphoria, high-energy 140 BPM, ecstatic Portuguese group vocal chants'
+  },
+  {
+    name: 'celtic dark ambient',
+    prompt: 'Gaelic Dark Ambient, atmospheric pagan drone, low bodhrán pulse, eerie uilleann pipe drones, wet reverb cave textures, mystical ancient twilight mood, free-tempo drifting zero-BPM, haunting sean-nós Gaelic female laments'
+  },
+  {
     name: 'celtic punk',
     prompt: 'Celtic Punk, folk punk, distorted electric power chords, fast tin whistle leads, raucous fiddle, pounding drum cadence, rowdy tavern energy, 155 BPM, gravelly gang-chorus male vocals'
+  },
+  {
+    name: 'charleston big band',
+    prompt: '1920s Hot Jazz, Charleston, muted trumpet solos, wild clarinet riffs, stride piano, driving four-to-the-floor acoustic banjo strum, frenetic vintage ballroom energy, fast-paced 210 BPM, theatrical megaphone-style male vocals'
   },
   {
     name: 'chicago drill',
@@ -5363,12 +5391,40 @@ var CANNED_STYLES = [
     prompt: 'Chicano Soul, lowrider oldies, sweet soul ballad, gentle slow-rolling drums, warm Hammond organ, clean picked guitar, melancholic romantic mood, 72 BPM, tender falsetto male vocals'
   },
   {
+    name: 'chiptune bitpop',
+    prompt: '8-Bit Chiptune, tracker video-game pop, NES square-wave melodies, noisy 4-bit white-noise percussion, rapid arpeggiator chord runs, hyperactive retro nostalgia, upbeat 152 BPM, sweet glitched-out vocoder female vocals'
+  },
+  {
+    name: 'choral sacred',
+    prompt: 'Sacred Polyphony, Renaissance choral, cavernous cathedral acoustic reverb, intricate counterpoint vocal lines, solemn transcendent peace, non-metric fluid tempo, pure unadorned mixed SATB choir'
+  },
+  {
     name: 'city pop',
     prompt: '80s Japanese City Pop, funk-pop fusion, bright brass section, crisp slap bass, shimmering electric piano, breezy groove, 118 BPM, silky melodic female vocals'
   },
   {
     name: 'country bluegrass',
     prompt: 'Bluegrass, traditional Appalachian folk, lightning-fast banjo rolls, acoustic flatpicked guitar, rhythmic upright slap bass, lively fiddle leads, high-tempo 145 BPM, twangy high-lonesome male vocal harmonies'
+  },
+  {
+    name: 'cumbia villera',
+    prompt: 'Argentine Cumbia Villera, urban cumbia, prominent synthesizer keytar riffs, slow güiro scraping rhythm, syncopated acoustic bass, raw street party mood, bouncing 92 BPM, street-smart raspy male vocals'
+  },
+  {
+    name: 'dark synthpop',
+    prompt: 'Dark Synthpop, coldwave, icy analog synthesizers, punchy vintage LinnDrum beats, detached pulsing bassline, moody nocturnal dance aesthetic, driving 122 BPM, aloof melancholic female vocals'
+  },
+  {
+    name: 'deathcore',
+    prompt: 'Modern Deathcore, extreme metal, downtuned eight-string guitar chugs, massive drop-tune breakdowns, thunderous double-kick bass drums, terrifying oppressive heaviness, brutal 130 BPM, pig-squeal gutturals and demonic screams'
+  },
+  {
+    name: 'delta blues',
+    prompt: 'Pre-War Delta Blues, country blues, slide resonator guitar in open tuning, rhythmic foot-stomping percussion, warm raw vinyl hiss, lonesome porch atmosphere, unhurried 80 BPM, raspy gravelly male holler'
+  },
+  {
+    name: 'desert blues',
+    prompt: 'Saharan Desert Blues, Tishoumaren, hypnotic interlocking electric guitar grooves, clapping rhythm, hand-percussion calabash, expansive barren landscape feel, meditative 108 BPM, soulful call-and-response Tuareg male vocals'
   },
   {
     name: 'desert rock',
@@ -5379,8 +5435,16 @@ var CANNED_STYLES = [
     prompt: 'Nu-Disco, 70s funk revival, bouncy energetic slap bassline, chic rhythm guitar chops, lush string sweeps, soaring brass stabs, four-on-the-floor 122 BPM, vibrant falsetto male vocals'
   },
   {
+    name: 'dreampop',
+    prompt: 'Dream Pop, ethereal wave, lush chorus-soaked guitars, wash of analog synthesizer pads, delicate muted drum machine, hazy romantic daydream mood, slow-drifting 88 BPM, whispery reverb-drenched female vocals'
+  },
+  {
     name: 'drum and bass',
     prompt: 'Liquid Drum and Bass, jungle, fast rolling breakbeats at 174 BPM, deep sub-bass reese, ambient lush pads, soul-sampled piano chords, smooth soulful female vocals'
+  },
+  {
+    name: 'dubstep',
+    prompt: '2010s Brostep, heavy dubstep, aggressive screeching wavetable growl bass, punchy snare on the third beat, massive sub-bass drops, intense robotic violence, half-time 140 BPM, hype vocal riser shouts'
   },
   {
     name: 'dungeon synth',
@@ -5399,6 +5463,10 @@ var CANNED_STYLES = [
     prompt: 'Nuevo Flamenco, Spanish guitar fusion, rapid rasgueado nylon-guitar, cajón percussive rhythm, hand claps, emotional acoustic bass, fiery 110 BPM, raspy impassioned cante jondo vocals'
   },
   {
+    name: 'flamenco trap',
+    prompt: 'Spanish Flamenco Trap, urbano fusion, rapid nylon-string guitar rasgueado, snappy 808 sub-bass, stuttering hi-hat rolls, palmas handclaps, seductive dark swagger, 130 BPM, autotuned passionate Melisma vocals'
+  },
+  {
     name: 'french house',
     prompt: 'French House, filter disco, side-chained vinyl sample loops, funky slap bassline, 909 four-on-the-floor kick, euphoric club energy, 126 BPM, pitched-down soulful vocal chops'
   },
@@ -5411,12 +5479,36 @@ var CANNED_STYLES = [
     prompt: '90s West Coast G-Funk, hip-hop, high-pitched Portamento sine synth leads, deep rolling Moog bassline, classic Parliament-style groove, laid-back sunny atmosphere, 92 BPM, smooth relaxed male rap flow'
   },
   {
+    name: 'glam rock',
+    prompt: '70s Glam Rock, glitter rock, stomp-stomp-clap drum groove, fuzz-laden crunchy electric guitar riffs, theatrical piano flourishes, flamboyant stadium energy, stomping 116 BPM, theatrical high-register male vocals'
+  },
+  {
+    name: 'glitch hop',
+    prompt: '2010s Glitch Hop, neuro-funk, squelchy neuro-bass stabs, swing-quantized heavy boombap beat, vinyl scratching, razor-sharp digital chops, swaggering funk groove, bouncing 108 BPM, robotic processed hip-hop hype vocals'
+  },
+  {
+    name: 'gqom',
+    prompt: 'South African Gqom, dark minimal club, menacing repetitive sub-bass thuds, syncopated dry tribal percussion, ominous synth stabs, raw basement rave tension, raw 127 BPM, sporadic echoing male chant shouts'
+  },
+  {
     name: 'grunge',
     prompt: 'Grunge, 90s alternative rock, sludgy heavy-gain electric guitars, dynamic quiet-loud transitions, raw room drums, gritty aggressive mood, 110 BPM, raspy passionate male vocals'
   },
   {
+    name: 'gypsy jazz',
+    prompt: '1930s Gypsy Jazz, jazz manouche, blistering acoustic Selmer guitar arpeggios, steady "la pompe" rhythm guitar chugging, agile violin runs, energetic swing groove, virtuosic 210 BPM, charming Parisian French male vocals'
+  },
+  {
+    name: 'hardcore gabber',
+    prompt: '90s Rotterdam Gabber, early hardcore, relentless distorted 909 kick drum at maximum saturation, abrasive hoover synth stabs, manic rave tempo, chaotic relentless aggression, blistering 190 BPM, pitch-shifted aggressive Dutch male shouts'
+  },
+  {
     name: 'hardstyle',
     prompt: 'Hardstyle, hard dance, distorted reverse bass kick, euphoric supersaw synth melodies, dramatic build-ups and risers, intense festival energy, 150 BPM, pitched energetic hype-man vocals'
+  },
+  {
+    name: 'horrorcore',
+    prompt: 'Dark Underground Horrorcore, eerie horror trap, detuned nursery-rhyme music box bells, muddy rolling 808s, chainsaw sound effects, claustrophobic menacing dread, dragging 118 BPM, sinister raspy whispering rap delivery'
   },
   {
     name: 'hyperpop',
@@ -5431,12 +5523,20 @@ var CANNED_STYLES = [
     prompt: '80s Italo Disco, Euro disco, spacey synthesizer arpeggios, punchy LinnDrum patterns, melodic electric bass pulse, romantic campy electronic groove, 124 BPM, heavily accented passionate male vocals'
   },
   {
+    name: 'japanese enka',
+    prompt: 'Traditional Japanese Enka, dramatic kayōkyoku, mournful shakuhachi flute, weeping electric tremolo guitar, lush orchestral strings, sorrowful nostalgic melodrama, slow 72 BPM, theatrical vibrato-heavy female vocals with kobushi ornamentation'
+  },
+  {
     name: 'k-pop girl group',
     prompt: 'Modern K-Pop, dance-pop, bubblegum EDM, punchy 808 bass, brass stabs, clean synth arpeggios, dynamic beat switches, hyper-energetic 128 BPM, bright crisp female vocals and tight syncopated rap delivery'
   },
   {
     name: 'kawaii future bass',
     prompt: 'Kawaii Future Bass, anime pop EDM, bright detuned supersaws, bubbly water-drop synth effects, bouncy syncopated kicks, cheerful high-energy mood, 150 BPM, high-pitched cute female vocals'
+  },
+  {
+    name: 'krautrock',
+    prompt: '70s Krautrock, kosmische musik, continuous hypnotic motorik 4/4 drum pulse, swirling modular synthesizer loops, repetitive minimal bassline, driving experimental groove, trance-inducing 124 BPM, detached monotone German male vocals'
   },
   {
     name: 'lo-fi hip-hop',
@@ -5457,6 +5557,10 @@ var CANNED_STYLES = [
   {
     name: 'midwest emo',
     prompt: 'Midwest Emo, math rock, intricate clean guitar tapping, odd-time signatures, dynamic build-ups, raw emotional energy, 140 BPM, strained confessional male vocals'
+  },
+  {
+    name: 'mongolian throat metal',
+    prompt: 'Folk Metal, hunnu rock, distorted Morin Khuur horsehead fiddle, heavy double-bass drum blasts, chugging low-tuned rhythm guitars, warlike nomadic energy, relentless 136 BPM, deep vibrating Tuvan throat singing and guttural chants'
   },
   {
     name: 'motown soul',
@@ -5483,12 +5587,36 @@ var CANNED_STYLES = [
     prompt: 'Psychobilly, horror punk rockabilly, furious slap acoustic upright bass, twangy overdriven Gretsch guitar, frantic surf drum rhythms, campy sinister energy, 175 BPM, snarling theatrical male vocals'
   },
   {
+    name: 'psytrance',
+    prompt: 'Full-On Psytrance, psy-electronic, rolling 16th-note rolling bassline, laser-like squelch synth leads, galloping kick drum, hypnotic psychedelic momentum, relentless 142 BPM, trippy robotic voice samples'
+  },
+  {
+    name: 'qawwali',
+    prompt: 'Sufi Qawwali, devotional ecstasy, driving harmonium chord progressions, rapid rhythmic handclaps, thunderous dholak and tabla patterns, soaring spiritual momentum, hypnotic 115 BPM, passionate improvisational male group vocals'
+  },
+  {
     name: 'reggae dub',
     prompt: 'Dub Reggae, roots reggae, heavy syncopated sub-bass, rimshot snare drenched in spring reverb, tape-echo guitar skank, spacious psychedelic mix, 75 BPM, meditative chanted male vocals'
   },
   {
+    name: 'reggaeton',
+    prompt: 'Neo-Reggaeton, perreo, heavy Dembow drum rhythm, booming 808 sub kick, synthetic steel-drum synth hooks, sensual club atmosphere, infectious dance groove, 94 BPM, melodic autotuned Spanish male vocals'
+  },
+  {
+    name: 'sea shanty',
+    prompt: '19th Century Sea Shanty, maritime folk, wooden deck foot-stomping, rhythmic rigging-rope pulls, lone accordion drones, raw nautical camaraderie, buoyant marching 100 BPM, booming baritone lead with rowdy call-and-response pirate gang chorus'
+  },
+  {
     name: 'shoegaze',
     prompt: 'Shoegaze, dream pop, wall of fuzzy distorted guitars, heavy reverb and delay, wash of white noise, buried drums, ethereal 100 BPM, soft whispering female vocals'
+  },
+  {
+    name: 'ska punk',
+    prompt: '90s Ska Punk, skate punk, fast upstroke guitar skanks, punchy trumpet and trombone horn lines, galloping walking bassline, high-speed energetic drums, rowdy 165 BPM, raspy upbeat male vocals'
+  },
+  {
+    name: 'space age bachelor pad',
+    prompt: '1960s Exotica, space-age lounge, bubbling vibraphone chords, lush orchestral harp sweeps, muted brass flourishes, light bongo tapestries, whimsical retro-futuristic cocktail mood, breezy 105 BPM, wordless sensual female vocal coos'
   },
   {
     name: 'stoner doom',
@@ -5511,6 +5639,14 @@ var CANNED_STYLES = [
     prompt: 'Trip-Hop, downtempo, dusty vinyl-sampled breakbeats, deep sub-bass, moody upright piano, cinematic noir strings, hazy 85 BPM, sultry breathy female vocals'
   },
   {
+    name: 'tuareg trance techno',
+    prompt: 'Afro-Acid Fusion, desert techno, Roland TB-303 squelching acid bassline, hypnotic West African electric guitar loops, polyrhythmic djembe grooves, driving four-on-the-floor kick, psychedelic midnight rave energy, 128 BPM, echoing Saharan chants'
+  },
+  {
+    name: 'twee pop',
+    prompt: '90s Twee Pop, indie pop, clean jangly Rickenbacker guitar, playful toy piano and glockenspiel, simple four-on-the-floor drumming, naive innocent charm, bouncy 132 BPM, delicate breathy boy-girl vocal duets'
+  },
+  {
     name: 'vaporwave',
     prompt: 'Vaporwave, mallsoft, slowed and pitched-down 80s adult contemporary samples, heavy phaser and chorus modulation, lush luxury synth pads, eerie consumerist nostalgia, sluggish 78 BPM, distorted pitched-down male vocals'
   },
@@ -5521,6 +5657,10 @@ var CANNED_STYLES = [
   {
     name: 'witch house',
     prompt: 'Witch House, occult electronica, dragging slowed trap beats, heavily side-chained abrasive synths, dark tape modulation, haunted atmosphere, sluggish 65 BPM, pitch-dropped reverbed vocal moans'
+  },
+  {
+    name: 'witchy dark americana',
+    prompt: 'Southern Gothic, dark swamp blues, eerie bowed banjo, resonant steel resonator slide, muffled heartbeat kick drum, heavy swamp-fog atmosphere, brooding cinematic 70 BPM, smoky haunted female alto vocals'
   },
   {
     name: 'yacht rock',
