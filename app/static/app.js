@@ -3047,7 +3047,6 @@ function sourceById(id) {
 
 function paintSource() {
   var source = currentSource();
-  var status = $('source-status');
   var badge = $('score-badge');
   paintHearButton();
   paintAudition();
@@ -3079,27 +3078,33 @@ function paintSource() {
   }
 
   if (!source) {
-    status.textContent = '';
-    status.className = 'status';
     badge.textContent = 'no score';
     badge.className = 'badge';
     // An instrumental let go of its recording: the recording's score goes with it.
     if (State.mode === 'inst' && Selection.boxKind === 'source') { clearRecordingScore(); }
     followRecordingCap();
     paintInstSource();
+    if (State.mode === 'cover') {
+      statusLine('Choose a recording to start a cover.');
+    }
     return;
   }
   if (isMidi) {
     badge.className = 'badge ok';
     badge.textContent = 'MIDI score';
-    status.textContent = 'Imported MIDI file. Score is ready to edit or cover.';
-    status.className = 'status good';
+    statusLine('Imported MIDI file. Score is ready to edit or cover.', 'good');
   } else {
     badge.className = 'badge' + (source.has_score ? ' ok' : '');
     badge.textContent = source.has_score ? 'score ready' : 'no score';
-    var map = { none: 'Not transcribed yet.', queued: 'Queued for transcription.', running: 'Transcribing\u2026', done: 'Transcribed. The score is ready to edit.', failed: 'Transcription failed: ' + (source.transcribe_error || 'unknown error') };
-    status.textContent = map[source.transcribe_state] || '';
-    status.className = 'status' + (source.transcribe_state === 'failed' ? ' bad' : (source.transcribe_state === 'done' ? ' good' : ''));
+    var map = {
+      none: 'Not transcribed yet. Transcribe it to get a score.',
+      queued: 'Queued for transcription.',
+      running: 'Transcribing\u2026',
+      done: 'Transcribed. The score is ready to edit.',
+      failed: 'Transcription failed: ' + (source.transcribe_error || 'unknown error')
+    };
+    var kind = source.transcribe_state === 'failed' ? 'bad' : (source.transcribe_state === 'done' ? 'good' : (source.transcribe_state === 'running' || source.transcribe_state === 'queued' ? 'wait' : ''));
+    statusLine(map[source.transcribe_state] || (source.has_score ? 'Score ready to edit or cover.' : ''), kind);
   }
   paintSourceTempo(source);
   // The box must hold this recording's score or nothing. Comparing ids matters:
@@ -3161,8 +3166,7 @@ async function deleteSourceById(id) {
   try {
     await api('/api/sources/' + id, { method: 'DELETE' });
   } catch (err) {
-    $('source-status').textContent = 'Could not delete: ' + err.message;
-    $('source-status').className = 'status bad';
+    statusLine('Could not delete: ' + err.message, 'bad');
     return;
   }
   if ($('source-select').value === id) {
@@ -3324,8 +3328,7 @@ function paintInstSource() {
   if (!fromRecording && shown === played) { statusLine(hint); }
   // A sung melody is given to an instrument by the server, as the tune the render plays.
   if (fromRecording && $('abc').value.trim() && vocalNotes($('abc').value)) {
-    $('source-status').textContent = 'The score has a sung melody: the instrumental plays it on an instrument.';
-    $('source-status').className = 'status';
+    statusLine('The score has a sung melody: the instrumental plays it on an instrument.');
   }
   paintStructure();
 }
@@ -4620,16 +4623,49 @@ function runSave() {
 }
 
 /* ------------------------------------------------------ song mode and plans */
+var _appStatusTimer = null;
+
+function clearAppStatus() {
+  if (_appStatusTimer) {
+    clearTimeout(_appStatusTimer);
+    _appStatusTimer = null;
+  }
+  var appStatus = $('app-status');
+  if (appStatus) {
+    appStatus.textContent = '';
+    appStatus.className = 'app-status';
+  }
+}
+
 function statusLine(message, kind) {
   var node = $('render-status');
-  node.textContent = message;
-  node.className = 'status' + (kind ? ' ' + kind : '');
-  // The editor may be closed: the sheet says it too, when it is news rather than a hint.
-  var mirror = $('sheet-status');
-  if (mirror && (kind || !message)) {
-    mirror.textContent = message;
-    mirror.className = 'status' + (kind ? ' ' + kind : '');
+  if (node) {
+    node.textContent = message || '';
+    node.className = 'status' + (kind ? ' ' + kind : '');
   }
+  var appStatus = $('app-status');
+  if (!appStatus) { return; }
+  if (_appStatusTimer) {
+    clearTimeout(_appStatusTimer);
+    _appStatusTimer = null;
+  }
+  // When the editor is open, render-status in the editor's bottom bar carries the message.
+  // When the editor is closed, transient status (news/actions with kind) shows in the bottom status bar for 3.5s.
+  var inEditor = typeof editorOpen === 'function' && editorOpen();
+  if (inEditor || !message || !kind) {
+    appStatus.textContent = '';
+    appStatus.className = 'app-status';
+    return;
+  }
+  appStatus.textContent = message;
+  appStatus.className = 'app-status show ' + kind;
+  _appStatusTimer = setTimeout(clearAppStatus, 3500);
+}
+
+if (typeof window !== 'undefined') {
+  window.toast = function (msg, kind) {
+    statusLine(msg, kind || 'good');
+  };
 }
 
 /* ---------------------------------------------------------------- harmony ---
@@ -4713,7 +4749,6 @@ function setMode(mode) {
     }
   }
   paintStyleLoraNote();
-  $('source-status').textContent = '';
   var ownedByTake = Boolean(takeIdInEditor());
   if (cover) {
     claimEditorFor(null);
@@ -4734,7 +4769,7 @@ function setMode(mode) {
     $('score-badge').textContent = 'no plan yet';
     $('score-badge').className = 'badge';
     setChart('');
-    statusLine('Write a score plan to start a song from scratch.');
+    statusLine(inst ? 'Choose an instrument and structure to start an instrumental.' : 'Write a score plan to start a song from scratch.');
   }
   followRecordingCap();
   if (inst) { paintInstSource(); }
@@ -5172,6 +5207,7 @@ function paintTakesHeading() {
 
 function showSpace(id) {
   if (id === State.spaceId) { return; }
+  clearAppStatus();
   State.spaceId = id;
   try { localStorage.setItem(SPACE_KEY, id); } catch (err) { /* private mode */ }
   State.takes = [];
@@ -7558,6 +7594,7 @@ function stemsBlock(take) {
    take calls this first, so the panel always describes the take you just touched. */
 function selectTake(take) {
   if (!take) { return; }
+  clearAppStatus();
   // The take already on show, with words typed over it: leave the form as it is. Play,
   // Score and the other buttons on a card select their take first, and reloading it
   // here threw the edit away in favour of words that were already there.
@@ -8805,8 +8842,7 @@ function wireWave() {
 /* ------------------------------------------------------------------- form */
 async function uploadFile(file) {
   if (!file) { return; }
-  $('source-status').textContent = 'Uploading ' + file.name + '\u2026';
-  $('source-status').className = 'status';
+  statusLine('Uploading ' + file.name + '\u2026', 'wait');
   var form = new FormData();
   form.append('file', file);
   try {
@@ -8815,28 +8851,26 @@ async function uploadFile(file) {
     $('source-select').value = source.id;
     setSelection({ formTakeId: Selection.formTakeId });
     paintSource();
-    $('source-status').textContent = source.duplicate
+    var msg = source.duplicate
       ? 'That recording is already in the library.'
       : (source.transcribe_state === 'done'
          ? 'Uploaded MIDI file. Score is ready.'
          : 'Uploaded. Transcribe it to get a score.');
-    $('source-status').className = 'status good';
+    statusLine(msg, 'good');
   } catch (err) {
-    $('source-status').textContent = 'Upload failed: ' + err.message;
-    $('source-status').className = 'status bad';
+    statusLine('Upload failed: ' + err.message, 'bad');
   }
 }
 
 async function doTranscribe() {
   var source = currentSource();
-  if (!source) { $('source-status').textContent = 'Choose a recording first.'; return; }
+  if (!source) { statusLine('Choose a recording first.', 'bad'); return; }
   try {
     await api('/api/sources/' + source.id + '/transcribe', { method: 'POST' });
     source.transcribe_state = 'queued';
     paintSource();
   } catch (err) {
-    $('source-status').textContent = 'Could not start: ' + err.message;
-    $('source-status').className = 'status bad';
+    statusLine('Could not start: ' + err.message, 'bad');
   }
 }
 
@@ -9439,8 +9473,6 @@ function wire() {
     scoreBaseline($('abc').value);
     confirmScoreSaved();
     statusLine('Score saved.', 'good');
-    $('source-status').textContent = 'Score saved.';
-    $('source-status').className = 'status good';
     loadSources();
     loadTakes();
   });
@@ -10597,6 +10629,7 @@ function editorOpen() { return Boolean($('editor-modal')) && !$('editor-modal').
 
 function openEditor(where) {
   if (!$('editor-modal')) { return; }
+  clearAppStatus();
   Editor.page = where === 'score' ? 'score' : 'song';
   Editor.step = { words: 1, sound: 2, score: 3 }[where] || 0;
   $('editor-modal').classList.remove('hidden');
@@ -10607,6 +10640,7 @@ function openEditor(where) {
 
 function closeEditor() {
   if (!editorOpen()) { return; }
+  clearAppStatus();
   notationStop();
   $('editor-modal').classList.add('hidden');
   document.body.style.overflow = '';

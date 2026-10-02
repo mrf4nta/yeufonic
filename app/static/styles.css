@@ -1445,11 +1445,44 @@ label .lora-value:disabled { opacity: 0.6; }
 }
 
 .status { font-size: 12.5px; color: var(--muted); min-height: 18px; margin-top: 8px; }
+.status:empty { display: none; }
 .status.bad { color: var(--bad); }
 .status.good { color: var(--good); }
 .status.wait { color: var(--warn); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .status .link { color: inherit; text-decoration: underline; font: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 .status .status-training-msg strong { color: var(--text); }
+
+.app-status {
+  position: fixed;
+  bottom: 82px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 50;
+  max-width: min(600px, 90vw);
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-status.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+.app-status.good { color: var(--good); border-color: rgb(var(--good-rgb) / 0.4); }
+.app-status.bad { color: var(--bad); border-color: rgb(var(--bad-rgb) / 0.4); }
+.app-status.wait { color: var(--warn); border-color: rgb(var(--warn-rgb) / 0.4); }
 
 /* ---------- library ---------- */
 .library { min-width: 0; }
@@ -2293,8 +2326,6 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
 .sheet-new-btn.type-song { background: linear-gradient(90deg, var(--song-a), var(--song-b)); }
 .sheet-new-btn.type-cover { background: linear-gradient(90deg, var(--cover-a), var(--cover-b)); }
 .sheet-new-btn.type-inst { background: linear-gradient(90deg, var(--inst-b), var(--inst-a)); color: #07140c; }
-#sheet-status:empty { display: none; }
-#sheet-status { margin: -4px 0 12px; }
 .take-sheet .kind { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; }
 /* kind-* rather than song or cover: a plain .cover class belongs to the card's tile. */
 .take-sheet .kind-song { color: var(--song-a); }

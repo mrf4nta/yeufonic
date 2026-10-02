@@ -78,7 +78,6 @@
       <button type="button" class="sheet-new-btn type-cover" data-new="cover" title="Cover a recording">+ Cover</button>
       <button type="button" class="sheet-new-btn type-inst" data-new="inst" title="Write a new instrumental">+ Instrumental</button>
     </div>
-    <div id="sheet-status" class="status"></div>
     <div id="take-sheet" class="take-sheet"><p class="sub">Choose a take to see how it was made, or start something new.</p></div>
   </section>
   <!-- Folds the take panel away, so the takes have the width. -->
@@ -209,7 +208,6 @@
                 <div class="bar"><div id="lyrics-hear-bar"></div></div>
                 <div class="hear-job-line"><span id="lyrics-hear-stage" class="muted">Waiting</span><button id="lyrics-hear-stop" class="chip action compact">stop</button></div>
               </div>
-              <div id="source-status" class="status"></div>
               <div id="source-tempo" class="status"></div>
             </div>
 
@@ -949,6 +947,8 @@
     </div>
   </div>
 </div>
+
+<div id="app-status" class="app-status" aria-live="polite"></div>
 
 <div class="player">
   <div class="np-cover" id="np-cover"></div>
