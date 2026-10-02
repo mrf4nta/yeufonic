@@ -1672,8 +1672,19 @@ label .lora-value:disabled { opacity: 0.6; }
 .job { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 16px; }
 .job.hidden { display: none; }
 .job-top { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 9px; }
-.bar { height: 7px; border-radius: 999px; background: rgb(var(--ink) / 0.07); overflow: hidden; }
+.bar { height: 7px; border-radius: 999px; background: rgb(var(--ink) / 0.07); overflow: hidden; position: relative; }
 .bar > div { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--accent-a), var(--accent-b)); transition: width 0.5s ease; }
+.bar.indeterminate > div {
+  width: 35% !important;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  animation: bar-indeterminate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes bar-indeterminate {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}
 .job-bottom { display: flex; justify-content: space-between; margin-top: 9px; font-size: 12.5px; }
 .muted { color: var(--muted); }
 /* The queue under the job card: what runs after the job on show. */
@@ -1986,7 +1997,7 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
 /* The words heard in a recording: a small job with its own progress, beside the
    lyrics it fills in. */
 .hear-job { margin: 6px 0 8px; }
-.hear-job-line { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12.5px; }
+.hear-job-line { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12.5px; }
 .hear-job.bad .bar > div { background: var(--bad); }
 .hear-job.bad .hear-job-line span { color: var(--bad); }
 

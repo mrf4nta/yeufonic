@@ -448,8 +448,12 @@ function paintOptions() {
   $('create-inst').title = canInst ? '' : 'The engine has no instrumental LoRA. Run scripts/fetch-models.sh, then restart the engine.';
   var canWrite = State.options.lyrics_available !== false;
   $('lyrics-write').disabled = !canWrite;
-  $('lyrics-write').title = canWrite ? 'Draft lyrics from a short description'
+  $('lyrics-write').title = canWrite
+    ? (WRITE.id ? 'Drafting lyrics in progress\u2026 Click to view status or stop' : 'Draft lyrics from a short description')
     : 'The engine has no lyric writer. Run scripts/fetch-models.sh, then restart the engine.';
+  if (canWrite) {
+    $('lyrics-write').textContent = WRITE.id ? 'Drafting\u2026' : 'Write lyrics';
+  }
   var canRealaudio = State.options.realaudio !== false;
   $('realaudio').disabled = !canRealaudio;
   if (!canRealaudio) {
@@ -2658,10 +2662,102 @@ function paintRenderJob(current, queue) {
   }
 }
 
+function paintWriteJob(current, queue) {
+  var box = $('lyrics-write-job');
+  if (!box) {
+    var field = $('lyrics-field');
+    var labelRow = field ? field.querySelector('.label-row') : null;
+    if (!field || !labelRow) { return; }
+    box = document.createElement('div');
+    box.id = 'lyrics-write-job';
+    box.className = 'hear-job hidden';
+    box.innerHTML = '<div class="bar indeterminate"><div id="lyrics-write-bar"></div></div>' +
+      '<div class="hear-job-line"><span id="lyrics-write-stage" class="muted">Drafting lyrics\u2026</span>' +
+      '<span style="display:inline-flex;gap:8px;align-items:center"><span id="lyrics-write-time" class="muted"></span>' +
+      '<button type="button" id="lyrics-write-stop-btn" class="chip action compact">stop</button></span></div>';
+    labelRow.parentNode.insertBefore(box, labelRow.nextSibling);
+    var stopBtn = $('lyrics-write-stop-btn');
+    if (stopBtn) { stopBtn.addEventListener('click', stopWrite); }
+  }
+
+  if (box.classList.contains('bad')) { return; }
+
+  var targetId = WRITE.id;
+  var mine = function (item) {
+    if (!item || item.kind !== 'lyrics') { return false; }
+    return targetId ? item.id === targetId : true;
+  };
+  var running = mine(current) ? current : null;
+  var waitingItem = !running && (queue || []).find(mine);
+  var isActive = Boolean(targetId || running || waitingItem);
+
+  box.classList.toggle('hidden', !isActive);
+  if (!isActive) { return; }
+
+  var bar = box.querySelector('.bar');
+  var barFill = $('lyrics-write-bar');
+  var stageEl = $('lyrics-write-stage');
+  var timeEl = $('lyrics-write-time');
+  var stopBtn = $('lyrics-write-stop-btn');
+  if (stopBtn) { stopBtn.style.display = ''; }
+
+  var elapsed = 0;
+  if (WRITE.started) {
+    elapsed = Math.round((Date.now() - WRITE.started) / 1000);
+  } else if (running && running.elapsed) {
+    elapsed = running.elapsed;
+  }
+  if (timeEl) { timeEl.textContent = elapsed ? secs(elapsed) : ''; }
+
+  if (running && running.progress && running.progress > 0) {
+    if (bar) { bar.classList.remove('indeterminate'); }
+    if (barFill) { barFill.style.width = Math.max(5, Math.round(running.progress * 100)) + '%'; }
+    var label = running.label || 'Writing lyrics';
+    if (running.value && running.max) { label += ' \u00b7 ' + running.value + '/' + running.max; }
+    if (stageEl) { stageEl.textContent = label; }
+  } else if (waitingItem) {
+    if (bar) { bar.classList.remove('indeterminate'); }
+    if (barFill) { barFill.style.width = '0%'; }
+    if (stageEl) { stageEl.textContent = 'Queued behind another job'; }
+  } else {
+    if (bar) { bar.classList.add('indeterminate'); }
+    if (barFill) { barFill.style.width = ''; }
+    var text = (WRITE.status === 'running' || (running && running.stage))
+      ? 'Writing lyrics\u2026'
+      : 'Waiting for the engine\u2026';
+    if (stageEl) { stageEl.textContent = text; }
+  }
+}
+
+function showWriteError(message) {
+  var box = $('lyrics-write-job');
+  if (!box) { return; }
+  box.classList.remove('hidden');
+  box.classList.add('bad');
+  var bar = box.querySelector('.bar');
+  if (bar) { bar.classList.remove('indeterminate'); }
+  var fill = $('lyrics-write-bar');
+  if (fill) { fill.style.width = '100%'; }
+  var stage = $('lyrics-write-stage');
+  if (stage) { stage.textContent = message; }
+  var time = $('lyrics-write-time');
+  if (time) { time.textContent = ''; }
+  var stopBtn = $('lyrics-write-stop-btn');
+  if (stopBtn) { stopBtn.style.display = 'none'; }
+  setTimeout(function () {
+    if (!WRITE.id && box.classList.contains('bad')) {
+      box.classList.add('hidden');
+      box.classList.remove('bad');
+      if (stopBtn) { stopBtn.style.display = ''; }
+    }
+  }, 6000);
+}
+
 function paintJob(current, queue, options) {
   paintTranscribeJob(current, queue);
   paintPlanJob(current, queue);
   paintRenderJob(current, queue);
+  paintWriteJob(current, queue);
   var card = $('job-card');
   if (!current && !queue.length) {
     if (State.training) {
@@ -6206,7 +6302,7 @@ async function runLoraSteps() {
 /* ------------------------------------------------------------------ lyrics
    A draft from a short brief, written on the engine.  It lands in the lyrics box
    even if this window was closed while it was being written. */
-var WRITE = { id: null, timer: null };
+var WRITE = { id: null, timer: null, started: null, status: null };
 
 function openWrite() {
   $('write-modal').classList.remove('hidden');
@@ -6221,6 +6317,17 @@ function closeWrite() {
 function setWriting(on) {
   $('write-go').disabled = on;
   $('write-stop').classList.toggle('hidden', !on);
+  var btn = $('lyrics-write');
+  if (btn) {
+    btn.textContent = on ? 'Drafting\u2026' : 'Write lyrics';
+    btn.classList.toggle('active', on);
+  }
+  if (!on) {
+    var box = $('lyrics-write-job');
+    if (box && !box.classList.contains('bad')) {
+      box.classList.add('hidden');
+    }
+  }
 }
 
 function writeStatus(text, tone) {
@@ -6243,8 +6350,12 @@ async function doWrite() {
       body: JSON.stringify({ brief: brief, style: $('style').value, structure: $('write-structure').value })
     });
     WRITE.id = draft.id;
+    WRITE.started = Date.now();
+    WRITE.status = draft.status || 'queued';
     setWriting(true);
     writeStatus('Waiting for the engine\u2026 You can close this window: the words land in the lyrics box.');
+    statusLine('Drafting lyrics\u2026 You can close this window: the words land in the lyrics box.', 'wait');
+    paintWriteJob(State.currentJob, []);
     clearTimeout(WRITE.timer);
     WRITE.timer = setTimeout(pollWrite, 1500);
   } catch (err) {
@@ -6259,19 +6370,35 @@ async function pollWrite() {
     draft = await api('/api/lyrics/' + WRITE.id);
   } catch (err) {
     WRITE.id = null;
+    WRITE.started = null;
     setWriting(false);
-    writeStatus('Lost the draft: ' + err.message, 'bad');
+    var errText = 'Lost the draft: ' + err.message;
+    writeStatus(errText, 'bad');
+    statusLine(errText, 'bad');
+    showWriteError(errText);
     return;
   }
+  WRITE.status = draft.status;
   if (draft.status === 'done' || draft.status === 'failed') {
     WRITE.id = null;
+    WRITE.started = null;
     setWriting(false);
-    if (draft.status === 'done') { landDraft(draft); }
-    else { writeStatus(draft.error === 'cancelled' ? 'Stopped.' : 'Could not write the lyrics: ' + draft.error, 'bad'); }
+    if (draft.status === 'done') {
+      var box = $('lyrics-write-job');
+      if (box) { box.classList.add('hidden'); box.classList.remove('bad'); }
+      landDraft(draft);
+    } else {
+      var msg = draft.error === 'cancelled' ? 'Stopped drafting lyrics.' : ('Could not write the lyrics: ' + draft.error);
+      writeStatus(msg, 'bad');
+      statusLine(msg, 'bad');
+      showWriteError(msg);
+    }
     return;
   }
-  writeStatus(draft.status === 'running' ? 'Writing\u2026'
-    : 'Waiting for the engine\u2026 You can close this window: the words land in the lyrics box.');
+  var statusMsg = draft.status === 'running' ? 'Writing lyrics\u2026'
+    : 'Waiting for the engine\u2026 You can close this window: the words land in the lyrics box.';
+  writeStatus(statusMsg);
+  paintWriteJob(State.currentJob, []);
   WRITE.timer = setTimeout(pollWrite, 2000);
 }
 
@@ -6288,6 +6415,10 @@ function landDraft(draft) {
 
 async function stopWrite() {
   if (!WRITE.id) { return; }
+  var stageEl = $('lyrics-write-stage');
+  if (stageEl) { stageEl.textContent = 'Stopping\u2026'; }
+  writeStatus('Stopping\u2026');
+  statusLine('Stopping lyrics draft\u2026', 'wait');
   try { await api('/api/lyrics/' + WRITE.id + '/cancel', { method: 'POST' }); } catch (err) { /* the poll reports it */ }
 }
 
@@ -9411,6 +9542,7 @@ function wire() {
   $('write-close').addEventListener('click', closeWrite);
   $('write-go').addEventListener('click', doWrite);
   $('write-stop').addEventListener('click', stopWrite);
+  if ($('lyrics-write-stop-btn')) { $('lyrics-write-stop-btn').addEventListener('click', stopWrite); }
   $('write-modal').addEventListener('click', function (event) { if (backdropClick(event, $('write-modal'))) { closeWrite(); } });
   $('lora-steps').addEventListener('click', openLoraSteps);
   $('steps-close').addEventListener('click', closeLoraSteps);
@@ -10373,6 +10505,7 @@ function paintEditor() {
   $('ed-next').disabled = Editor.step === 4;
   if (page === 'score') { $('score-box').open = true; }
   if (page === 'review') { paintEditorReview(); }
+  paintWriteJob(State.currentJob, []);
 }
 
 /* Steps: what will be sent, and anything that stops it. */

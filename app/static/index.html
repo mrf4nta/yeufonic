@@ -242,6 +242,16 @@
                   <button id="lyrics-expand" class="chip action compact" title="Open a full size editor">Expand</button>
                 </span>
               </div>
+              <div id="lyrics-write-job" class="hear-job hidden">
+                <div class="bar indeterminate"><div id="lyrics-write-bar"></div></div>
+                <div class="hear-job-line">
+                  <span id="lyrics-write-stage" class="muted">Drafting lyrics…</span>
+                  <span style="display:inline-flex;gap:8px;align-items:center">
+                    <span id="lyrics-write-time" class="muted"></span>
+                    <button type="button" id="lyrics-write-stop-btn" class="chip action compact">stop</button>
+                  </span>
+                </div>
+              </div>
               <textarea id="lyrics" class="lyrics" spellcheck="false" placeholder="[Verse]&#10;First line&#10;Second line&#10;&#10;[Chorus]&#10;..."></textarea>
               <label class="check words-changed hidden" id="words-changed" title="Sing this take's score with the new words, as a new take. Untick to write a new plan, and a new tune, for them.">
                 <input id="keep-tune" type="checkbox" checked> Keep this tune <span class="muted">with the new words</span></label>
