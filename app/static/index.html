@@ -214,6 +214,13 @@
             <div class="field">
               <label>Style</label>
               <textarea id="style" class="style-box" rows="1" autocomplete="off" title="Drag the corner to show more of the style"></textarea>
+              <div class="source-picker style-picker" id="style-picker">
+                <button type="button" class="source-picker-btn style-picker-btn" id="style-picker-btn" aria-haspopup="listbox" aria-expanded="false" title="Choose a canned style">
+                  <span id="style-picker-label" class="source-picker-label">Choose a style…</span>
+                  <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div id="style-picker-menu" class="source-picker-menu style-picker-menu hidden" role="listbox"></div>
+              </div>
               <div id="lora-presets-wrap" class="hidden" style="margin-top: 8px;">
                 <div id="lora-presets-label" class="muted small" style="margin-bottom: 4px;"></div>
                 <div id="lora-presets" class="chips" style="margin-top: 0;"></div>

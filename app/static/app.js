@@ -3436,6 +3436,7 @@ function paintVocals() {
     return '<button class="chip' + (styleHas(style, word) ? ' active' : '') + '" data-tone="' + word + '">' +
       esc(word) + '</button>';
   }).join('');
+  if (typeof syncStylePickerLabel === 'function') { syncStylePickerLabel(); }
 }
 
 var IDENTITIES_LIST = [];
@@ -5314,6 +5315,353 @@ var PRESETS = {
     'orchestral, full orchestra, strings, brass, timpani, epic, 90 BPM'
   ]
 };
+
+/* Canned styles dropdown: 53 styles alphabetized by short name. */
+var CANNED_STYLES = [
+  {
+    name: 'afro-cuban jazz',
+    prompt: 'Afro-Cuban Jazz, salsa fusion, energetic conga and bongo tumbao, intricate montuno piano riffs, blazing trumpet solos, tight walking upright bass, vibrant 130 BPM, rhythmic Spanish vocal improvisations'
+  },
+  {
+    name: 'afrobeats',
+    prompt: 'Afrobeats, West African dance-pop, syncopated log-drum percussion, melodic kalimba accents, warm sub-bass, buoyant infectious groove, 104 BPM, auto-tuned smooth male vocals'
+  },
+  {
+    name: 'ambient drone',
+    prompt: 'Ambient Drone, dark ambient, massive evolving synthesizer textures, subterranean sub-bass rumbles, bowed acoustic instruments, zero-tempo, meditative vast atmosphere, wordless distant female vocal chants'
+  },
+  {
+    name: 'appalachian dark folk',
+    prompt: 'Appalachian Murder Ballad, dark gothic Americana, weeping open-tuned acoustic guitar, mournful solo fiddle, distant stomping floorboard percussion, haunting bleak atmosphere, 68 BPM, raw cracked tenor vocals'
+  },
+  {
+    name: 'balkan brass',
+    prompt: 'Balkan Brass Band, gypsy brass, frantic trumpet fanfare, thunderous tapan bass drums, rapid Balkan 11/8 folk rhythms, celebratory wild street festival energy, 160 BPM, hearty shouting group vocals'
+  },
+  {
+    name: 'baroque pop',
+    prompt: 'Baroque Pop, chamber pop, harpsichord runs, lush string quartet, gentle timpani, sophisticated brass flourishes, whimsical theatrical mood, 112 BPM, theatrical warm tenor vocals'
+  },
+  {
+    name: 'bossa nova',
+    prompt: 'Bossa Nova, Brazilian jazz, classical nylon-string guitar, soft syncopated brushes on snare, upright acoustic bass, warm gentle flute, relaxing 95 BPM, intimate whispery Portuguese female vocals'
+  },
+  {
+    name: 'breakcore',
+    prompt: 'Breakcore, digital hardcore, chaotic hyper-chopped Amen breakbeats, abrupt rhythmic glitches, aggressive screeching acid bass, manic overload, blistering 200 BPM, frantic distorted vocal chops'
+  },
+  {
+    name: 'celtic punk',
+    prompt: 'Celtic Punk, folk punk, distorted electric power chords, fast tin whistle leads, raucous fiddle, pounding drum cadence, rowdy tavern energy, 155 BPM, gravelly gang-chorus male vocals'
+  },
+  {
+    name: 'chicago drill',
+    prompt: 'Drill Rap, dark trap, sliding pitch-bent 808 glides, sinister minor-key piano loops, rapid-fire hi-hat triplets, gritty street tension, aggressive 142 BPM, cold monotone rap delivery'
+  },
+  {
+    name: 'chicano soul',
+    prompt: 'Chicano Soul, lowrider oldies, sweet soul ballad, gentle slow-rolling drums, warm Hammond organ, clean picked guitar, melancholic romantic mood, 72 BPM, tender falsetto male vocals'
+  },
+  {
+    name: 'city pop',
+    prompt: '80s Japanese City Pop, funk-pop fusion, bright brass section, crisp slap bass, shimmering electric piano, breezy groove, 118 BPM, silky melodic female vocals'
+  },
+  {
+    name: 'country bluegrass',
+    prompt: 'Bluegrass, traditional Appalachian folk, lightning-fast banjo rolls, acoustic flatpicked guitar, rhythmic upright slap bass, lively fiddle leads, high-tempo 145 BPM, twangy high-lonesome male vocal harmonies'
+  },
+  {
+    name: 'desert rock',
+    prompt: 'Desert Rock, stoner rock, fuzz-heavy drop-tuned guitar riffs, hypnotic groove, thunderous loose drumming, dry psychedelic atmosphere, 95 BPM, howling bluesy male vocals'
+  },
+  {
+    name: 'disco funk',
+    prompt: 'Nu-Disco, 70s funk revival, bouncy energetic slap bassline, chic rhythm guitar chops, lush string sweeps, soaring brass stabs, four-on-the-floor 122 BPM, vibrant falsetto male vocals'
+  },
+  {
+    name: 'drum and bass',
+    prompt: 'Liquid Drum and Bass, jungle, fast rolling breakbeats at 174 BPM, deep sub-bass reese, ambient lush pads, soul-sampled piano chords, smooth soulful female vocals'
+  },
+  {
+    name: 'dungeon synth',
+    prompt: 'Dungeon Synth, fantasy ambient, primitive 90s rompler synthesizer patches, medieval recorder melodies, solemn harpsichord arpeggios, nostalgic lo-fi dungeon atmosphere, 80 BPM, distant ghostly whispered chants'
+  },
+  {
+    name: 'electro swing',
+    prompt: 'Electro Swing, vintage big band dance, 1930s swing clarinet and brass samples, driving 128 BPM house kick drum, bouncy sub-bassline, theatrical speakeasy energy, jazzy energetic female vocals'
+  },
+  {
+    name: 'eurobeat',
+    prompt: '90s Eurobeat, high-speed electronic dance, aggressive brass synth leads, unrelenting four-on-the-floor kick, dramatic key shifts, adrenaline-fueled racing mood, 158 BPM, operatic soaring male vocals'
+  },
+  {
+    name: 'flamenco nuevo',
+    prompt: 'Nuevo Flamenco, Spanish guitar fusion, rapid rasgueado nylon-guitar, cajón percussive rhythm, hand claps, emotional acoustic bass, fiery 110 BPM, raspy impassioned cante jondo vocals'
+  },
+  {
+    name: 'french house',
+    prompt: 'French House, filter disco, side-chained vinyl sample loops, funky slap bassline, 909 four-on-the-floor kick, euphoric club energy, 126 BPM, pitched-down soulful vocal chops'
+  },
+  {
+    name: 'future garage',
+    prompt: 'Future Garage, atmospheric UK bass, syncopated skippy percussion, heavy reese bass swells, rain ambience, melancholic vinyl warmth, 134 BPM, chopped pitched-up R&B female vocal fragments'
+  },
+  {
+    name: 'g-funk',
+    prompt: '90s West Coast G-Funk, hip-hop, high-pitched Portamento sine synth leads, deep rolling Moog bassline, classic Parliament-style groove, laid-back sunny atmosphere, 92 BPM, smooth relaxed male rap flow'
+  },
+  {
+    name: 'grunge',
+    prompt: 'Grunge, 90s alternative rock, sludgy heavy-gain electric guitars, dynamic quiet-loud transitions, raw room drums, gritty aggressive mood, 110 BPM, raspy passionate male vocals'
+  },
+  {
+    name: 'hardstyle',
+    prompt: 'Hardstyle, hard dance, distorted reverse bass kick, euphoric supersaw synth melodies, dramatic build-ups and risers, intense festival energy, 150 BPM, pitched energetic hype-man vocals'
+  },
+  {
+    name: 'hyperpop',
+    prompt: 'Hyperpop, glitch pop, distorted 808 bass, metallic synth leads, erratic pitch-shifted vocal chops, manic energy, 160 BPM, autotuned sugary female vocals'
+  },
+  {
+    name: 'industrial metal',
+    prompt: 'Industrial Metal, cyber-metal, down-tuned mechanical guitar riffs, distorted electronic beats, pounding factory percussion, dark hostile atmosphere, 135 BPM, harsh processed male vocals'
+  },
+  {
+    name: 'italo disco',
+    prompt: '80s Italo Disco, Euro disco, spacey synthesizer arpeggios, punchy LinnDrum patterns, melodic electric bass pulse, romantic campy electronic groove, 124 BPM, heavily accented passionate male vocals'
+  },
+  {
+    name: 'k-pop girl group',
+    prompt: 'Modern K-Pop, dance-pop, bubblegum EDM, punchy 808 bass, brass stabs, clean synth arpeggios, dynamic beat switches, hyper-energetic 128 BPM, bright crisp female vocals and tight syncopated rap delivery'
+  },
+  {
+    name: 'kawaii future bass',
+    prompt: 'Kawaii Future Bass, anime pop EDM, bright detuned supersaws, bubbly water-drop synth effects, bouncy syncopated kicks, cheerful high-energy mood, 150 BPM, high-pitched cute female vocals'
+  },
+  {
+    name: 'lo-fi hip-hop',
+    prompt: 'Lo-Fi Hip Hop, chillhop, dusty tape-wobbly Rhodes chords, muted vinyl-crackle boombap drums, warm hollow bass, mellow nostalgic study vibe, 82 BPM, soft melancholic spoken-word male samples'
+  },
+  {
+    name: 'math rock',
+    prompt: 'Math Rock, progressive indie rock, clean twangy dual guitars, metric modulation and complex 7/8 time signatures, tight dynamic drumming, bright playful mood, 138 BPM, clean earnest male vocals'
+  },
+  {
+    name: 'mathcore',
+    prompt: 'Mathcore, chaotic hardcore, dissonant guitar riffs, complex polymetric drum blast beats, jarring stop-and-start transitions, relentless aggression, 190 BPM, guttural screaming male vocals'
+  },
+  {
+    name: 'mid-tempo bass',
+    prompt: 'Cyberpunk Midtempo Bass, dark synthwave, crunchy distorted saw bass stabs, industrial clockwork percussion, aggressive cybernetic drive, brooding sci-fi mood, 105 BPM, processed vocoderized male whispering'
+  },
+  {
+    name: 'midwest emo',
+    prompt: 'Midwest Emo, math rock, intricate clean guitar tapping, odd-time signatures, dynamic build-ups, raw emotional energy, 140 BPM, strained confessional male vocals'
+  },
+  {
+    name: 'motown soul',
+    prompt: 'Motown, 60s classic soul, melodic walking bassline, tambourine backbeat, vibrant horn section, clean rhythm guitar chops, uplifting 120 BPM, powerful gospel-infused female vocals'
+  },
+  {
+    name: 'neofolk',
+    prompt: 'Neofolk, dark folk, acoustic fingerpicked twelve-string guitar, militaristic snare marches, mournful cello, atmospheric field recordings, solemn 90 BPM, deep ritualistic baritone vocals'
+  },
+  {
+    name: 'phonk',
+    prompt: 'Drift Phonk, Memphis rap revival, heavily distorted cowbell melody, chopped 808 sub-bass slides, lo-fi drum machine patterns, aggressive dark energy, 140 BPM, pitched-down gritty rap samples'
+  },
+  {
+    name: 'post-punk',
+    prompt: 'Post-Punk, darkwave, chorus-drenched jangly guitar, prominent driving bassline, motorik drum machine, moody gothic aesthetic, 130 BPM, deadpan baritone male vocals'
+  },
+  {
+    name: 'post-rock',
+    prompt: 'Post-Rock, cinematic crescendo rock, ambient volume-swell guitars, shimmering tremolo melodies, gradual slow-burn build-up to thunderous drum explosion, cathartic 90 BPM, wordless ethereal vocal textures'
+  },
+  {
+    name: 'psychobilly',
+    prompt: 'Psychobilly, horror punk rockabilly, furious slap acoustic upright bass, twangy overdriven Gretsch guitar, frantic surf drum rhythms, campy sinister energy, 175 BPM, snarling theatrical male vocals'
+  },
+  {
+    name: 'reggae dub',
+    prompt: 'Dub Reggae, roots reggae, heavy syncopated sub-bass, rimshot snare drenched in spring reverb, tape-echo guitar skank, spacious psychedelic mix, 75 BPM, meditative chanted male vocals'
+  },
+  {
+    name: 'shoegaze',
+    prompt: 'Shoegaze, dream pop, wall of fuzzy distorted guitars, heavy reverb and delay, wash of white noise, buried drums, ethereal 100 BPM, soft whispering female vocals'
+  },
+  {
+    name: 'stoner doom',
+    prompt: 'Stoner Doom Metal, sludge, massive wall of fuzz-drenched drop-F guitars, agonizingly slow groove, cavernous room reverb drums, hypnotic monolithic weight, 55 BPM, raw bellowing male vocals'
+  },
+  {
+    name: 'surf rock',
+    prompt: '60s Surf Rock, instrumental rock, Fender Jaguar spring-reverb drippy guitars, fast tremolo picking, energetic rolling tom-tom drums, sun-drenched retro beach vibe, 148 BPM, sporadic wild male vocal shouts'
+  },
+  {
+    name: 'synthwave',
+    prompt: 'Synthwave, 80s retrowave, analog synthesizers, punchy gated reverb snare, driving arpeggiated bassline, nostalgic atmosphere, 115 BPM, smooth emotive male vocals'
+  },
+  {
+    name: 'tango nuevo',
+    prompt: 'Tango Nuevo, contemporary Argentine tango, expressive bandoneon runs, dramatic piano accents, virtuosic violin solos, romantic tension, syncopated 120 BPM, rich passionate baritone vocals'
+  },
+  {
+    name: 'trip-hop',
+    prompt: 'Trip-Hop, downtempo, dusty vinyl-sampled breakbeats, deep sub-bass, moody upright piano, cinematic noir strings, hazy 85 BPM, sultry breathy female vocals'
+  },
+  {
+    name: 'vaporwave',
+    prompt: 'Vaporwave, mallsoft, slowed and pitched-down 80s adult contemporary samples, heavy phaser and chorus modulation, lush luxury synth pads, eerie consumerist nostalgia, sluggish 78 BPM, distorted pitched-down male vocals'
+  },
+  {
+    name: 'viking wardruna folk',
+    prompt: 'Nordic Dark Folk, ritual ambient, tagelharpa bowed strings, booming frame drums, carved deer-bone flute, ancient pagan atmosphere, hypnotic 75 BPM, guttural throat-singing and runic male chants'
+  },
+  {
+    name: 'witch house',
+    prompt: 'Witch House, occult electronica, dragging slowed trap beats, heavily side-chained abrasive synths, dark tape modulation, haunted atmosphere, sluggish 65 BPM, pitch-dropped reverbed vocal moans'
+  },
+  {
+    name: 'yacht rock',
+    prompt: 'Late 70s Yacht Rock, West Coast soft rock, smooth electric piano Rhodes, clean compressed guitar solos, breezy syncopated drums, glossy studio production, laid-back 96 BPM, silky harmonized male vocals'
+  },
+  {
+    name: 'zydeco',
+    prompt: 'Louisiana Zydeco, Creole folk, fast syncopated button accordion, rasping metal frottoir washboard, funky backbeat drums, buoyant party groove, 135 BPM, lively call-and-response Creole French male vocals'
+  }
+];
+
+function formatCannedStyle(prompt) {
+  var item = typeof loraChosen === 'function' ? loraChosen() : null;
+  if (item && item.trigger) {
+    return item.trigger + ', ' + prompt;
+  }
+  return prompt;
+}
+
+function currentCannedStyle() {
+  var val = tidyStyle($('style') ? $('style').value : '');
+  if (!val) { return null; }
+  var cleanVal = val;
+  if (typeof allKnownLoraTriggers === 'function') {
+    allKnownLoraTriggers().forEach(function (t) { cleanVal = removeStyleWord(cleanVal, t); });
+    cleanVal = tidyStyle(cleanVal);
+  }
+  for (var i = 0; i < CANNED_STYLES.length; i++) {
+    var s = CANNED_STYLES[i];
+    if (tidyStyle(s.prompt) === val || tidyStyle(s.prompt) === cleanVal || tidyStyle(formatCannedStyle(s.prompt)) === val) {
+      return s;
+    }
+  }
+  return null;
+}
+
+function syncStylePickerLabel() {
+  var lbl = $('style-picker-label');
+  if (!lbl) { return; }
+  var match = currentCannedStyle();
+  lbl.textContent = match ? match.name : 'Choose a style\u2026';
+}
+
+function paintStylePickerMenu(filterText) {
+  var menu = $('style-picker-menu');
+  if (!menu) { return; }
+  var searchInput = $('style-picker-search');
+  var query = typeof filterText === 'string' ? filterText : (searchInput ? searchInput.value : '');
+  query = (query || '').trim().toLowerCase();
+  var match = currentCannedStyle();
+  var filtered = CANNED_STYLES.filter(function (s) {
+    if (!query) { return true; }
+    return s.name.toLowerCase().indexOf(query) >= 0 || s.prompt.toLowerCase().indexOf(query) >= 0;
+  });
+
+  var listHtml = filtered.length ? filtered.map(function (s) {
+    var isSelected = match && match.name === s.name;
+    return '<div class="style-picker-item' + (isSelected ? ' selected' : '') + '" role="option" data-style-name="' + esc(s.name) + '" title="' + esc(s.prompt) + '">' +
+      '<span class="style-item-name">' + esc(s.name) + '</span>' +
+      '<span class="style-item-preview">' + esc(s.prompt) + '</span>' +
+      '</div>';
+  }).join('') : '<div class="style-picker-empty muted">No matching styles</div>';
+
+  var listEl = menu.querySelector('.style-picker-list');
+  if (!searchInput || !listEl) {
+    menu.innerHTML = '<div class="style-picker-search-wrap">' +
+      '<input type="search" id="style-picker-search" class="style-picker-search" placeholder="Search styles\u2026" autocomplete="off" />' +
+      '</div>' +
+      '<div class="style-picker-list" role="listbox">' + listHtml + '</div>';
+  } else {
+    listEl.innerHTML = listHtml;
+  }
+}
+
+function openStylePicker() {
+  var menu = $('style-picker-menu');
+  var btn = $('style-picker-btn');
+  if (!menu || !btn) { return; }
+  paintStylePickerMenu('');
+  var searchInput = $('style-picker-search');
+  if (searchInput) { searchInput.value = ''; }
+  paintStylePickerMenu('');
+  var box = btn.getBoundingClientRect();
+  var panel = btn.closest('.panel');
+  var bounds = panel ? panel.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+  var below = Math.min(bounds.bottom, window.innerHeight) - box.bottom;
+  var above = box.top - Math.max(bounds.top, 0);
+  var up = above > below && below < 280;
+  menu.classList.toggle('up', up);
+  menu.classList.remove('hidden');
+  btn.setAttribute('aria-expanded', 'true');
+  var selected = menu.querySelector('.selected');
+  if (selected) {
+    selected.scrollIntoView({ block: 'nearest' });
+  } else if (searchInput) {
+    searchInput.focus();
+  }
+}
+
+function closeStylePicker() {
+  var menu = $('style-picker-menu');
+  var btn = $('style-picker-btn');
+  if (!menu || !btn) { return; }
+  menu.classList.add('hidden');
+  btn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleStylePicker() {
+  var menu = $('style-picker-menu');
+  if (menu && menu.classList.contains('hidden')) {
+    openStylePicker();
+  } else {
+    closeStylePicker();
+  }
+}
+
+function applyCannedStyle(styleName) {
+  var found = null;
+  for (var i = 0; i < CANNED_STYLES.length; i++) {
+    if (CANNED_STYLES[i].name === styleName) {
+      found = CANNED_STYLES[i];
+      break;
+    }
+  }
+  if (!found) { return; }
+  var item = typeof loraChosen === 'function' ? loraChosen() : null;
+  var trigger = (item && item.trigger) || '';
+  if (trigger) {
+    $('style').value = trigger + ', ' + found.prompt;
+    State.loraTrigger = trigger;
+  } else {
+    $('style').value = found.prompt;
+    State.loraTrigger = null;
+  }
+  $('style').dataset.touched = '1';
+  paintVocals();
+  paintStyleLoraNote();
+  saveForm();
+  syncStylePickerLabel();
+  closeStylePicker();
+}
 
 /* ----------------------------------------------- a big LoRA's learned styles
    A corpus gives a chip per song, 136 of them for a big one. Past a dozen, a filter
@@ -7586,6 +7934,7 @@ function selectTake(take) {
   $('title').value = take.title;
   $('style').value = take.style || '';
   $('style').dataset.touched = '1';
+  paintVocals();
   // Before the structure: timed sections are laid out against the cap.
   if (take.max_duration) { $('max-duration').value = Math.round(take.max_duration); }
   // The take's own cap, which a recording's score does not replace.
@@ -9361,6 +9710,31 @@ function wire() {
       saveForm();
     }
   });
+  if ($('style-picker-btn')) {
+    $('style-picker-btn').addEventListener('click', toggleStylePicker);
+  }
+  if ($('style-picker-menu')) {
+    $('style-picker-menu').addEventListener('click', function (event) {
+      var item = event.target.closest('[data-style-name]');
+      if (item) {
+        applyCannedStyle(item.dataset.styleName);
+      }
+    });
+    $('style-picker-menu').addEventListener('input', function (event) {
+      if (event.target.id === 'style-picker-search') {
+        paintStylePickerMenu(event.target.value);
+      }
+    });
+    $('style-picker-menu').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        var first = $('style-picker-menu').querySelector('.style-picker-item');
+        if (first && first.dataset.styleName) {
+          event.preventDefault();
+          applyCannedStyle(first.dataset.styleName);
+        }
+      }
+    });
+  }
   $('vocal-sex').addEventListener('click', function (event) {
     var button = event.target.closest('[data-sex]');
     if (button) { setVocalSex(button.dataset.sex); }
@@ -9617,6 +9991,7 @@ function wire() {
       closeSourcePicker();
     }
     if (!event.target.closest('#lora-picker')) { closeLoraPicker(); }
+    if (!event.target.closest('#style-picker')) { closeStylePicker(); }
   });
   $('lora-picker-btn').addEventListener('click', function () {
     if ($('lora-picker-menu').classList.contains('hidden')) { openLoraPicker(); } else { closeLoraPicker(); }
@@ -10268,6 +10643,7 @@ function wire() {
     }
     if (event.key === 'Escape' && $('source-picker-menu') && !$('source-picker-menu').classList.contains('hidden')) { closeSourcePicker(); return; }
     if (event.key === 'Escape' && $('lora-picker-menu') && !$('lora-picker-menu').classList.contains('hidden')) { closeLoraPicker(); return; }
+    if (event.key === 'Escape' && $('style-picker-menu') && !$('style-picker-menu').classList.contains('hidden')) { closeStylePicker(); return; }
     if (event.key === 'Escape' && $('brand-menu') && !$('brand-menu').classList.contains('hidden')) { closeBrandMenu(); return; }
     if (event.key === 'Escape' && !$('sung-modal').classList.contains('hidden')) { closeSungWarning(); return; }
     if (event.key === 'Escape' && !$('move-modal').classList.contains('hidden')) { closeMoveModal(); return; }
