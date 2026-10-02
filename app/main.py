@@ -2079,9 +2079,12 @@ class SoundFontSelectIn(BaseModel):
 
 @app.get("/api/soundfonts/sf2")
 def list_soundfonts_sf2() -> dict:
+    available = soundfonts.available_sf2()
+    selected = soundfonts.get_active_sf2()
     return {
-        "soundfonts": soundfonts.available_sf2(),
-        "selected": soundfonts.get_active_sf2(),
+        "soundfonts": available,
+        "selected": selected,
+        "available": len(available) > 0,
     }
 
 
@@ -2092,6 +2095,91 @@ def select_soundfont_sf2(body: SoundFontSelectIn) -> dict:
         "status": "ok",
         "selected": soundfonts.get_active_sf2(),
     }
+
+
+class ScoreRenderIn(BaseModel):
+    midi_base64: str | None = None
+    sf2: str | None = None
+    title: str = "score"
+
+
+@app.post("/api/score/render-sf2")
+async def render_score_sf2(body: ScoreRenderIn) -> dict:
+    available = soundfonts.available_sf2()
+    if not available:
+        return {
+            "status": "unavailable",
+            "detail": "No SoundFont (.sf2) files found in data/models/soundfonts/sf2.",
+            "available": [],
+        }
+
+    active_sf2 = body.sf2 or soundfonts.get_active_sf2()
+    if not active_sf2 or not (soundfonts.sf2_folder() / active_sf2).is_file():
+        return {
+            "status": "unavailable",
+            "detail": f"SoundFont '{active_sf2}' is not available.",
+            "available": [s["filename"] for s in available],
+        }
+
+    if not body.midi_base64:
+        raise HTTPException(400, "No MIDI data provided")
+
+    import base64, hashlib
+    try:
+        midi_bytes = base64.b64decode(body.midi_base64)
+    except Exception as exc:
+        raise HTTPException(400, f"Invalid base64 MIDI: {exc}")
+
+    if not midi_bytes:
+        raise HTTPException(400, "Empty MIDI data provided")
+
+    content_hash = hashlib.sha256(midi_bytes + active_sf2.encode("utf-8")).hexdigest()[:16]
+    out_dir = config.WORK_DIR / "score_renders"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    flac_path = out_dir / f"{content_hash}.flac"
+    midi_path = out_dir / f"{content_hash}.mid"
+
+    if not flac_path.exists() or flac_path.stat().st_size == 0:
+        midi_path.write_bytes(midi_bytes)
+        try:
+            await asyncio.to_thread(soundfonts.render_midi_to_audio, midi_path, flac_path, active_sf2)
+        except Exception as exc:
+            log.exception("Failed to render score audio with SF2 %s", active_sf2)
+            raise HTTPException(500, f"SoundFont synthesis failed: {exc}")
+
+    peaks = library.ensure_peaks(flac_path)
+    return {
+        "status": "ok",
+        "audio_url": f"/api/score/rendered-audio/{content_hash}",
+        "peaks_url": f"/api/score/rendered-audio/{content_hash}/peaks",
+        "soundfont": active_sf2,
+        "key": content_hash,
+        "has_peaks": peaks is not None,
+    }
+
+
+@app.get("/api/score/rendered-audio/{key}")
+def score_rendered_audio_file(key: str) -> FileResponse:
+    if not re.fullmatch(r"[a-f0-9]{16}", key):
+        raise HTTPException(400, "invalid key")
+    flac_path = config.WORK_DIR / "score_renders" / f"{key}.flac"
+    if not flac_path.exists():
+        raise HTTPException(404, "rendered audio not found")
+    return FileResponse(flac_path, filename=f"score-{key}.flac", media_type="audio/flac")
+
+
+@app.get("/api/score/rendered-audio/{key}/peaks")
+def score_rendered_audio_peaks(key: str) -> dict:
+    if not re.fullmatch(r"[a-f0-9]{16}", key):
+        raise HTTPException(400, "invalid key")
+    flac_path = config.WORK_DIR / "score_renders" / f"{key}.flac"
+    if not flac_path.exists():
+        raise HTTPException(404, "rendered audio not found")
+    peaks = library.ensure_peaks(flac_path)
+    if not peaks:
+        return {"columns": 128, "peaks": [0.0] * 128, "rms": [0.0] * 128}
+    return peaks
+
 
 
 class TriesIn(BaseModel):
@@ -3387,6 +3475,8 @@ def source_rendered_audio(source_id: str, sf2: str | None = None) -> FileRespons
 
     flac_p = stored_p.with_suffix(".flac")
     active_sf2 = sf2 or soundfonts.get_active_sf2()
+    if not active_sf2 or not (soundfonts.sf2_folder() / active_sf2).is_file():
+        raise HTTPException(503, "No .sf2 SoundFont available to render MIDI. Place .sf2 files in data/models/soundfonts/sf2.")
     if not flac_p.exists() or flac_p.stat().st_size == 0 or sf2 is not None:
         try:
             soundfonts.render_midi_to_audio(stored_p, flac_p, sf2_filename=active_sf2)
@@ -3407,9 +3497,12 @@ async def render_source_audio(source_id: str, sf2: str | None = None) -> dict:
         raise HTTPException(400, "source is not a MIDI file")
     flac_p = stored_p.with_suffix(".flac")
     active_sf2 = sf2 or soundfonts.get_active_sf2()
+    if not active_sf2 or not (soundfonts.sf2_folder() / active_sf2).is_file():
+        raise HTTPException(503, "No .sf2 SoundFont available to render MIDI. Place .sf2 files in data/models/soundfonts/sf2.")
     await asyncio.to_thread(soundfonts.render_midi_to_audio, stored_p, flac_p, active_sf2)
     peaks = library.ensure_peaks(flac_p)
     return {"status": "ok", "audio_path": str(flac_p), "soundfont": active_sf2, "has_peaks": peaks is not None}
+
 
 
 # ---------------------------------------------------------------------- jobs

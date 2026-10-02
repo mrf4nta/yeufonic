@@ -105,12 +105,16 @@ def test_sf2_soundfonts_discovery_and_selection(client, monkeypatch, tmp_path):
     assert res2.json()["selected"] == "github_Jnsgm2.sf2"
 
 
-def test_midi_rendered_audio_and_peaks(client, monkeypatch):
+def test_midi_rendered_audio_and_peaks(client, monkeypatch, data_dir):
     """Verify MIDI source provides rendered audio and waveform peaks."""
     import io
     from tests.test_midi import create_smf
     from tests.conftest import tone
     from app import library
+
+    sf2_dir = data_dir / "models" / "soundfonts" / "sf2"
+    sf2_dir.mkdir(parents=True, exist_ok=True)
+    (sf2_dir / "Arachno_SoundFont_Version_1.0.sf2").write_bytes(b"dummy")
 
     def fake_render(midi_path, output_path, sf2_filename=None, gain=0.8):
         tone(output_path, 1.0)
@@ -150,5 +154,63 @@ def test_midi_rendered_audio_and_peaks(client, monkeypatch):
     re_res = client.post(f"/api/sources/{src_id}/render-audio")
     assert re_res.status_code == 200
     assert re_res.json()["status"] == "ok"
+
+
+def test_score_render_sf2_fallback_and_success(client, monkeypatch, tmp_path):
+    """Verify score rendering endpoint falls back gracefully when no SF2 is installed, and succeeds when available."""
+    import base64
+    from tests.test_midi import create_smf
+    from tests.conftest import tone
+    from app import library
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "WORK_DIR", tmp_path / "tmp")
+
+    events = [
+        (0, b"\xFF\x51\x03\x07\xA1\x20"),
+        (0, bytes([0x90, 60, 80])),
+        (480, bytes([0x80, 60, 0])),
+        (0, b"\xFF\x2F\x00"),
+    ]
+    b64_midi = base64.b64encode(create_smf([events], division=480, fmt=0)).decode("ascii")
+
+    # 1. No soundfonts installed:
+    res = client.get("/api/soundfonts/sf2")
+    assert res.status_code == 200
+    assert res.json()["available"] is False
+    assert res.json()["soundfonts"] == []
+
+    render_unavail = client.post("/api/score/render-sf2", json={"midi_base64": b64_midi})
+    assert render_unavail.status_code == 200
+    assert render_unavail.json()["status"] == "unavailable"
+
+    # 2. SoundFont installed:
+    sf2_dir = tmp_path / "models" / "soundfonts" / "sf2"
+    sf2_dir.mkdir(parents=True, exist_ok=True)
+    (sf2_dir / "Arachno_SoundFont_Version_1.0.sf2").write_bytes(b"dummy_sf2")
+
+    def fake_render(midi_path, output_path, sf2_filename=None, gain=0.8):
+        tone(output_path, 0.5)
+        library.ensure_peaks(output_path)
+        return output_path
+
+    monkeypatch.setattr(soundfonts, "render_midi_to_audio", fake_render)
+
+    render_ok = client.post("/api/score/render-sf2", json={"midi_base64": b64_midi})
+    assert render_ok.status_code == 200
+    data = render_ok.json()
+    assert data["status"] == "ok"
+    assert "audio_url" in data
+    assert data["soundfont"] == "Arachno_SoundFont_Version_1.0.sf2"
+
+    key = data["key"]
+    aud_res = client.get(f"/api/score/rendered-audio/{key}")
+    assert aud_res.status_code == 200
+    assert aud_res.headers["content-type"] == "audio/flac"
+
+    peaks_res = client.get(f"/api/score/rendered-audio/{key}/peaks")
+    assert peaks_res.status_code == 200
+    assert "peaks" in peaks_res.json()
+
 
 

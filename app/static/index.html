@@ -534,6 +534,11 @@
       <button class="chip" data-view="roll">Piano roll</button>
       <button class="chip" data-view="lyrics">Lyrics</button>
       <span id="score-count" class="muted small"></span>
+      <div class="score-sf2-bar" id="score-sf2-bar">
+        <span class="roll-label" title="SoundFont used for FluidSynth rendering">SF2:</span>
+        <select id="score-sf2-select" class="compact-select" title="Active SoundFont (.sf2) for studio rendering"></select>
+        <button id="score-render-sf2" class="ghost compact" title="Render score with SoundFont via FluidSynth">Studio Audio</button>
+      </div>
     </div>
     <div class="score-view" id="view-chart"><pre id="chart-big" class="chart"></pre></div>
     <div class="score-view hidden" id="view-notation">
@@ -541,6 +546,7 @@
         <div id="notation-audio"></div>
         <label class="check" title="Play each voice with an instrument the style names, instead of a piano throughout"><input type="checkbox" id="notation-instruments" checked> Instruments</label>
         <label class="check" title="Play the chord symbols as a part of its own"><input type="checkbox" id="notation-chords" checked> Chords</label>
+        <button id="notation-render-sf2" class="ghost" title="Render score with SoundFont via FluidSynth">Studio Audio (SF2)</button>
         <button id="notation-midi" class="ghost" title="Save this score as a MIDI file, to arrange in a DAW">Download MIDI</button>
         <button id="notation-sounds" class="ghost hidden" title="The note samples playback uses, fetched once from their upstream home">Get the sounds</button>
         <span id="notation-note" class="hint"></span>
@@ -559,6 +565,22 @@
             <option value="16" selected>1/16</option>
             <option value="8">1/8</option>
             <option value="4">1/4</option>
+          </select>
+        </div>
+        <div class="roll-sound">
+          <span class="roll-label">Sound:</span>
+          <select id="roll-sound-val" class="compact-select" title="Interactive piano roll playback sound">
+            <option value="acoustic_grand_piano" selected>Piano (Grand)</option>
+            <option value="acoustic_guitar_steel">Acoustic Guitar</option>
+            <option value="electric_guitar_clean">Clean Guitar</option>
+            <option value="distortion_guitar">Distortion Guitar</option>
+            <option value="string_ensemble_1">Strings</option>
+            <option value="cello">Cello</option>
+            <option value="violin">Violin</option>
+            <option value="drawbar_organ">Organ</option>
+            <option value="flute">Flute</option>
+            <option value="choir_aahs">Choir</option>
+            <option value="synth">Synth (Oscillator)</option>
           </select>
         </div>
         <div class="roll-transport">
@@ -580,6 +602,7 @@
           <button id="roll-zoom-fit" class="ghost compact" title="Scroll to notes (F or 0)">Fit</button>
         </div>
         <div class="roll-extra">
+          <button id="roll-render-sf2" class="ghost compact" title="Render score with SoundFont via FluidSynth">Studio Audio (SF2)</button>
           <button id="roll-match-lyrics" class="ghost compact" title="Auto-match lyrics from song text to vocal melody notes">Match Lyrics</button>
           <button id="roll-fill-gaps" class="ghost compact" title="Harmonize empty bars with accompaniment notes from chords">Fill Gaps</button>
           <button id="roll-compact-gaps" class="ghost compact" title="Remove silent empty bars and compact score">Compact Gaps</button>

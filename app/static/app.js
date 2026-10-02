@@ -1837,6 +1837,119 @@ function notationDownloadMidi() {
   setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
 }
 
+async function initScoreSf2Select() {
+  var sel = $('score-sf2-select');
+  if (!sel) return;
+  try {
+    var data = await api('/api/soundfonts/sf2');
+    sel.innerHTML = '';
+    if (!data.soundfonts || data.soundfonts.length === 0) {
+      var opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '(No .sf2 SoundFonts installed)';
+      sel.appendChild(opt);
+      sel.disabled = true;
+      var hint = 'Place .sf2 files in data/models/soundfonts/sf2 to enable studio rendering';
+      if ($('score-render-sf2')) $('score-render-sf2').title = hint;
+      if ($('notation-render-sf2')) $('notation-render-sf2').title = hint;
+      if ($('roll-render-sf2')) $('roll-render-sf2').title = hint;
+      return;
+    }
+    sel.disabled = false;
+    data.soundfonts.forEach(function (sf) {
+      var opt = document.createElement('option');
+      opt.value = sf.filename;
+      opt.textContent = sf.name + ' (' + sf.size_mb + 'MB)';
+      if (sf.filename === data.selected) {
+        opt.selected = true;
+      }
+      sel.appendChild(opt);
+    });
+    sel.onchange = function () {
+      api('/api/soundfonts/sf2/select', {
+        method: 'POST',
+        body: JSON.stringify({ filename: sel.value })
+      }).catch(function () {});
+    };
+  } catch (err) {
+    sel.innerHTML = '<option value="">(SoundFonts unavailable)</option>';
+    sel.disabled = true;
+  }
+}
+
+async function renderScoreSf2() {
+  var score = notationAbc();
+  var abc = (window.PianoRoll && scoreView() === 'roll')
+    ? (window.PianoRoll.model ? window.serializeToAbc(window.PianoRoll.model) : '')
+    : (score.text || ($('score-big') && $('score-big').value) || '');
+
+  if (!abc.trim()) {
+    notationNote('There is no score to render yet.');
+    return;
+  }
+
+  var sel = $('score-sf2-select');
+  var chosenSf2 = sel && sel.value ? sel.value : null;
+
+  var btns = [$('score-render-sf2'), $('notation-render-sf2'), $('roll-render-sf2')].filter(Boolean);
+  btns.forEach(function (b) { b.disabled = true; b.textContent = 'Rendering...'; });
+
+  try {
+    var bytes = null;
+    try { bytes = notationMidiBytes(abc); } catch (e) { bytes = null; }
+    if (!bytes || !bytes.length) {
+      notationNote('Could not convert score to MIDI.');
+      return;
+    }
+
+    var binary = '';
+    var len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    var b64 = window.btoa(binary);
+
+    var res = await api('/api/score/render-sf2', {
+      method: 'POST',
+      body: JSON.stringify({ midi_base64: b64, sf2: chosenSf2 || undefined })
+    });
+
+    if (res.status === 'unavailable') {
+      notationNote(res.detail || 'No SoundFonts installed. Place .sf2 files in data/models/soundfonts/sf2.');
+      return;
+    }
+
+    if (res.status === 'ok' && res.audio_url) {
+      var audio = $('audio');
+      if (audio) {
+        if (window.PianoRoll && window.PianoRoll.isPlaying) { window.PianoRoll.stop(); }
+        notationStop();
+        State.audition = null;
+        State.loadedId = null;
+        audio.src = res.audio_url;
+        audio.play().catch(function () {});
+        var sfLabel = res.soundfont ? res.soundfont.replace(/_/g, ' ').replace(/\.sf2$/i, '') : 'SoundFont';
+        $('np-title').textContent = ($('title') && $('title').value) || 'Score';
+        $('np-meta').textContent = 'Score (Studio Audio: ' + sfLabel + ')';
+        $('np-cover').className = 'np-cover grad-cover';
+        if (res.peaks_url) {
+          loadWave(res.audio_url, res.peaks_url);
+        }
+        notationNote('Playing studio audio rendered with ' + sfLabel);
+      }
+    }
+  } catch (err) {
+    notationNote('Render failed: ' + (err.message || err));
+  } finally {
+    btns.forEach(function (b) {
+      b.disabled = false;
+      if (b.id === 'score-render-sf2') b.textContent = 'Studio Audio';
+      else b.textContent = 'Studio Audio (SF2)';
+    });
+  }
+}
+window.renderScoreSf2 = renderScoreSf2;
+
 function notationInit() {
   if (NOTATION.synth) { return NOTATION.synth; }
   if (typeof ABCJS === 'undefined' || !ABCJS.synth || !ABCJS.synth.SynthController || !$('notation-audio')) { return null; }
@@ -1870,6 +1983,8 @@ function notationInit() {
   }
   var midi = $('notation-midi');
   if (midi) { midi.addEventListener('click', notationDownloadMidi); }
+  var notSf2 = $('notation-render-sf2');
+  if (notSf2) { notSf2.addEventListener('click', renderScoreSf2); }
   var sounds = $('notation-sounds');
   if (sounds) { sounds.addEventListener('click', function () { notationGetSounds(true, 0); }); }
   var chords = $('notation-chords');
@@ -2145,6 +2260,7 @@ function loadScoreMaximized() {
 
 function openScoreEditor(view) {
   $('score-big').value = $('abc').value;
+  initScoreSf2Select();
   paintScoreTempo();
   if (scoreStack.items[scoreStack.index] !== $('abc').value) { scoreReset($('abc').value); }
   if (view) { State.scoreView = view; }
@@ -9647,6 +9763,10 @@ function wire() {
     if (savedView) { State.scoreView = savedView; }
   } catch (err) { /* private mode */ }
   $('score-close').addEventListener('click', closeScoreEditor);
+  var sf2Btn = $('score-render-sf2');
+  if (sf2Btn) { sf2Btn.addEventListener('click', renderScoreSf2); }
+  var rollSf2Btn = $('roll-render-sf2');
+  if (rollSf2Btn) { rollSf2Btn.addEventListener('click', renderScoreSf2); }
   $('score-big').addEventListener('input', syncScoreFromBig);
   $('do-replace-big').addEventListener('click', function () {
     var find = $('find-chord-big').value.trim();

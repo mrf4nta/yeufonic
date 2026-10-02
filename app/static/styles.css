@@ -822,8 +822,8 @@ details.block[open] > summary { margin-bottom: 10px; }
   width: 100%; height: 100%; min-height: 320px; resize: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
 }
-.score-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.score-tabs { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.score-tabs { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+.score-sf2-bar { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .modal-head .tempo { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 /* The number beside a LoRA strength, editable so an exact value can be typed. */
 label .lora-value {
@@ -898,7 +898,7 @@ label .lora-value:disabled { opacity: 0.6; }
   padding: 2px 0 4px;
   border-bottom: 1px solid var(--line);
 }
-.roll-voices, .roll-select, .roll-snap, .roll-transport, .roll-history, .roll-zoom, .roll-extra {
+.roll-voices, .roll-select, .roll-snap, .roll-sound, .roll-transport, .roll-history, .roll-zoom, .roll-extra {
   display: flex;
   align-items: center;
   gap: 5px;

@@ -125,6 +125,7 @@
     return 440 * Math.pow(2, (pitch - 69) / 12);
   }
 
+  var currentInstrument = 'acoustic_grand_piano';
   var sampleCache = {};
   var pendingFetches = {};
   var FLATS_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -136,16 +137,19 @@
     return name + octave;
   }
 
-  function getOrPreloadSample(instrument, noteName) {
-    if (!instrument || !noteName) return null;
+  function loadSamplePromise(instrument, noteName) {
+    if (!instrument || !noteName || instrument === 'synth') return Promise.resolve(null);
     var key = instrument + '_' + noteName;
-    if (sampleCache[key]) { return sampleCache[key]; }
-    if (pendingFetches[key]) { return null; }
+    if (sampleCache[key]) return Promise.resolve(sampleCache[key]);
     var ctx = getAudioContext();
-    if (!ctx || typeof fetch === 'undefined') { return null; }
-    pendingFetches[key] = true;
+    if (!ctx || typeof fetch === 'undefined') return Promise.resolve(null);
+
+    if (pendingFetches[key]) {
+      return pendingFetches[key];
+    }
+
     var url = '/soundfonts/' + instrument + '-mp3/' + encodeURIComponent(noteName) + '.mp3';
-    fetch(url)
+    pendingFetches[key] = fetch(url)
       .then(function (res) { return res && res.ok ? res.arrayBuffer() : null; })
       .then(function (buf) {
         if (!buf) return null;
@@ -153,34 +157,49 @@
       })
       .then(function (decoded) {
         if (decoded) { sampleCache[key] = decoded; }
+        return decoded;
       })
-      .catch(function () {})
+      .catch(function () { return null; })
       .finally(function () { delete pendingFetches[key]; });
+
+    return pendingFetches[key];
+  }
+
+  function getOrPreloadSample(instrument, noteName) {
+    if (!instrument || !noteName || instrument === 'synth') return null;
+    var key = instrument + '_' + noteName;
+    if (sampleCache[key]) { return sampleCache[key]; }
+    loadSamplePromise(instrument, noteName);
     return null;
   }
 
-  function preloadSamplesForNotes(notes) {
-    if (!notes || !notes.length) return;
+  function preloadSamplesForNotes(notes, instrument) {
+    var inst = instrument || currentInstrument;
+    if (inst === 'synth' || !notes || !notes.length) return Promise.resolve();
+    var promises = [];
     var seen = {};
     for (var i = 0; i < notes.length; i++) {
       var n = notes[i];
       var name = midiToSampleName(n.pitch);
       if (name && !seen[name]) {
         seen[name] = true;
-        getOrPreloadSample('acoustic_grand_piano', name);
+        promises.push(loadSamplePromise(inst, name));
       }
     }
+    return Promise.all(promises);
   }
 
-  function playTone(pitch, durationSec, voiceType, startTime) {
+  function playTone(pitch, durationSec, voiceType, startTime, instrumentOverride) {
     var ctx = getAudioContext();
     if (!ctx) { return null; }
     var now = startTime !== undefined ? startTime : ctx.currentTime;
     var dur = durationSec || 0.25;
 
+    var inst = instrumentOverride || currentInstrument;
     var sampleName = midiToSampleName(pitch);
-    var instrument = 'acoustic_grand_piano';
-    var cachedBuf = sampleName ? (sampleCache[instrument + '_' + sampleName] || getOrPreloadSample(instrument, sampleName)) : null;
+    var cachedBuf = (inst !== 'synth' && sampleName)
+      ? (sampleCache[inst + '_' + sampleName] || getOrPreloadSample(inst, sampleName))
+      : null;
 
     if (cachedBuf) {
       try {
@@ -212,6 +231,7 @@
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
     var filter = ctx.createBiquadFilter();
+
 
     osc.type = voiceType === 'Ins' ? 'sawtooth' : 'triangle';
     osc.frequency.setValueAtTime(midiToFreq(pitch), now);
@@ -333,12 +353,15 @@
     var now = startTime !== undefined ? startTime : ctx.currentTime;
     var dur = durationSec || 1.0;
     var nodes = [];
+    var inst = (currentInstrument === 'synth') ? 'synth' : (currentInstrument || 'acoustic_grand_piano');
 
     for (var i = 0; i < pitches.length; i++) {
       var pitch = pitches[i];
       var isBass = (i === 0);
       var sampleName = midiToSampleName(pitch);
-      var cachedBuf = sampleName ? (sampleCache['acoustic_grand_piano_' + sampleName] || getOrPreloadSample('acoustic_grand_piano', sampleName)) : null;
+      var cachedBuf = (inst !== 'synth' && sampleName)
+        ? (sampleCache[inst + '_' + sampleName] || getOrPreloadSample(inst, sampleName))
+        : null;
 
       if (cachedBuf) {
         try {
@@ -979,6 +1002,22 @@
         });
       }
 
+      // Sound / Instrument dropdown
+      var soundSel = document.getElementById('roll-sound-val');
+      if (soundSel) {
+        soundSel.value = currentInstrument;
+        soundSel.addEventListener('change', function () {
+          self.setInstrument(soundSel.value);
+        });
+      }
+
+      var rollSf2Btn = document.getElementById('roll-render-sf2');
+      if (rollSf2Btn) {
+        rollSf2Btn.addEventListener('click', function () {
+          if (global.renderScoreSf2) { global.renderScoreSf2(); }
+        });
+      }
+
       // Transport Rewind / Prev / Play / Next / Metronome
       var rewindBtn = document.getElementById('roll-rewind');
       if (rewindBtn) {
@@ -1117,10 +1156,25 @@
       if (insBtn) { insBtn.classList.toggle('active', voiceName === 'Ins'); }
     },
 
+    setInstrument: function (inst) {
+      currentInstrument = inst || 'acoustic_grand_piano';
+      var select = document.getElementById('roll-sound-val');
+      if (select && select.value !== currentInstrument) {
+        select.value = currentInstrument;
+      }
+      if (currentInstrument !== 'synth' && this.model && this.model.notes) {
+        preloadSamplesForNotes(this.model.notes, currentInstrument);
+      }
+    },
+
+    getInstrument: function () {
+      return currentInstrument;
+    },
+
     loadAbc: function (abcText) {
       this.model = parseAbc(abcText);
       if (this.model && this.model.notes) {
-        preloadSamplesForNotes(this.model.notes);
+        preloadSamplesForNotes(this.model.notes, currentInstrument);
       }
       this.selectedNoteIds = [];
       this.selectedNoteId = null;
@@ -2117,6 +2171,33 @@
         ctx.resume().catch(function () {});
       }
 
+      var self = this;
+      var playBtn = document.getElementById('roll-play');
+
+      // Preload missing samples so playback never falls back to primitive beeps
+      if (currentInstrument !== 'synth' && this.model.notes && this.model.notes.length > 0) {
+        var missingNotes = [];
+        for (var ni = 0; ni < this.model.notes.length; ni++) {
+          var sName = midiToSampleName(this.model.notes[ni].pitch);
+          if (sName && !sampleCache[currentInstrument + '_' + sName]) {
+            missingNotes.push(this.model.notes[ni]);
+          }
+        }
+        if (missingNotes.length > 0) {
+          if (playBtn) { playBtn.textContent = '⏳ Loading...'; }
+          preloadSamplesForNotes(missingNotes, currentInstrument).then(function () {
+            self._startPlayback(ctx);
+          }).catch(function () {
+            self._startPlayback(ctx);
+          });
+          return;
+        }
+      }
+
+      this._startPlayback(ctx);
+    },
+
+    _startPlayback: function (ctx) {
       var ticksPerBar = this.model.ticksPerBar || 16;
       var unitLength = this.model.unitLength || 16;
       var bpm = this.model.bpm || 120;
