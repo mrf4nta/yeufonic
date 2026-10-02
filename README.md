@@ -690,10 +690,4 @@ Copyright (c) 2026 Paul Shields. All rights reserved.
 
 The code in this repository is licensed for free personal, non-commercial use under the [Yeufonic Software License Agreement](LICENSE). For commercial licensing, contact paul@paulshields.com.
 
-The models it runs are not part of the repository and carry their own terms, listed in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The one that matters most for musicians: YuE2's
-weights are CC BY-NC 4.0 with an additional creator permission, under which personal users,
-content creators and musicians may monetise the music they generate, with no fees or royalties
-to the YuE2 authors. Commercial companies need a licence from them. Read the notices for the
-details, including the instrumental LoRA, whose author has not said anything about monetising
-its output.
+The AI models run by this software are not part of this repository; they are downloaded directly from their respective creators and are governed by their own individual licenses and terms of use (summarized in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). Users are solely responsible for reviewing the upstream model terms and ensuring that their use and any distribution or monetization of generated audio complies with those licenses.
