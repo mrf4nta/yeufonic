@@ -95,6 +95,9 @@ services:
       # Corpora and training a LoRA from one. "0" takes them out of the app. Training
       # also needs the engine built with WITH_TRAINER=1, as it is above.
       TRAINING_ENABLED: "1"
+      # Which YuE2 model to ask the engine for: bf16 or int8. Empty (the default) uses the full-quality
+      # one if it is in models/checkpoints, else the low-memory one. Set YUE2_CHECKPOINT in .env.
+      YUE2_CHECKPOINT: "${YUE2_CHECKPOINT:-}"
     volumes:
       - ./data:/data
       - ./engine-state/output:/engine-output

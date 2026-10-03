@@ -299,9 +299,11 @@ are not downloaded again. Deleting that folder removes it.
 YuE2 comes in two sizes. An install has one of them: **full quality** (BF16, 7.8 GB), which is what
 we recommend, or **low memory** (INT8, 4.0 GB), a smaller copy for graphics cards with little video
 memory. The Windows installer asks which on its components page; with Docker, `sh scripts/fetch-models.sh`
-fetches full quality and `sh scripts/fetch-models.sh --int8` the low-memory one. To change later,
-run the installer again and choose differently (it removes the one you leave), or fetch the other
-for Docker and delete the first. The Settings page doesn't switch it, and **About** says which is in use.
+fetches full quality and `sh scripts/fetch-models.sh --int8` the low-memory one; the app uses whichever
+is in `models/checkpoints`, so that is all the choosing there is. With both files there it uses full quality,
+and `YUE2_CHECKPOINT=int8` in `.env` picks the other, so a Docker install can keep both and switch (restart
+with `docker compose up -d`). On Windows, to change later, run the installer again and choose differently
+(it removes the one you leave). The Settings page doesn't switch it, and **About** says which is in use.
 
 | | Full quality (BF16) | Low memory (INT8) |
 |---|---|---|
@@ -671,7 +673,7 @@ built from, and the ports itself: change those in its `settings.ini` instead (se
 | `WEAK_RENDER_DB` | `-24` | the average level, in dB, below which a take is marked *Weak render* |
 | `PEAK_GUARD` | `1` | with an engine that has the peak guard, a render whose peaks would clip is turned down around them before it is saved. `0` leaves it out |
 | `PEAK_CEILING_DB` | `-0.5` | the highest a peak may reach with the guard on, in dB below full scale |
-| `YUE2_CHECKPOINT` | unset | which YuE2 model the app asks the engine for: `bf16`, `int8`, or a file name. Unset, it uses the full-quality model if it is installed, else the low-memory one. See Choosing a model size |
+| `YUE2_CHECKPOINT` | unset | which YuE2 model the app asks the engine for: `bf16`, `int8`, or a file name. Unset, it uses the full-quality model if it is installed, else the low-memory one. Put it in `.env` (`YUE2_CHECKPOINT=int8`) or in `compose.override.yml`. See Choosing a model size |
 | `TRAINING_ENABLED` | `1` | corpora and LoRA training; `0` takes them out of the app. Training also needs `WITH_TRAINER` on the engine. See Training a LoRA |
 | `DATA_DIR` | `/data` | the library. Only needed when running without the containers |
 
