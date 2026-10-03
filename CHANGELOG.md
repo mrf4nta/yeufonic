@@ -37,6 +37,16 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Added
+- **A smaller YuE2 model for graphics cards with little memory.** The Windows installer offers
+  two sizes on its components page, full quality (BF16, recommended) or low memory (INT8, 4.0 GB),
+  and the Docker script takes `--int8`. An install has one: running the installer again changes it,
+  and `YUE2_CHECKPOINT` forces one. The app uses whichever is installed, **About** says which, and
+  LoRA training stays on the full-quality model. The README has a section on choosing between them.
+  Fixes #31.
+
 ## 0.0.24 (2026-10-03)
 
 ### Fixed

@@ -366,6 +366,9 @@ class Engine:
                         "trainer": "FSAudioArtistTrainer" in info,
                         "loras": loras}
 
+        # Which size of the model is installed decides which one the graphs ask for.
+        config.CHECKPOINT = config.choose_checkpoint(checkpoints)
+
         needed = set()
         for graph in _TEMPLATES.values():
             needed |= {node["class_type"] for node in graph.values()}
@@ -374,7 +377,8 @@ class Engine:
         if "sheetsage2_bf16.safetensors" not in encoders:
             notes.append("SheetSage2 audio encoder is not visible to ComfyUI.")
         if config.CHECKPOINT not in checkpoints:
-            notes.append(f"The YuE2 checkpoint {config.CHECKPOINT} is not visible to ComfyUI. Run scripts/fetch-models.sh.")
+            notes.append(f"The YuE2 model {config.CHECKPOINT} is not visible to ComfyUI. Run scripts/fetch-models.sh "
+                         "(or, for the smaller model, scripts/fetch-models.sh --int8).")
         self.compat = {"ok": not missing and not notes, "missing": missing, "notes": notes}
         self.options_loaded = True
 

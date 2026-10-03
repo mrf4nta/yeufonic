@@ -69,7 +69,30 @@ IMPORT_ROOTS = [p.strip() for p in os.environ.get("IMPORT_ROOTS", "/import").spl
 ALLOWED_HOSTS = [h.strip().lower() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,::1").split(",") if h.strip()]
 
 # The models the app uses.  One YuE2 checkpoint, and Gemma for writing lyrics.
-CHECKPOINT = "yue2_3b_bf16.safetensors"
+# The YuE2 model comes in two sizes and an install has one of them: the full-quality BF16 file, which
+# is the recommendation, or the smaller INT8 file for GPUs with little memory.  CHECKPOINT is the one
+# in use: it starts as BF16 and is set from what the engine reports it has (choose_checkpoint), so
+# nothing has to be configured.  YUE2_CHECKPOINT ("bf16", "int8" or a file name) forces one.
+CHECKPOINT_BF16 = "yue2_3b_bf16.safetensors"
+CHECKPOINT_INT8 = "yue2_3b_int8_convrot.safetensors"
+CHECKPOINT = CHECKPOINT_BF16
+# Training learns from the full-quality model only.
+TRAIN_CHECKPOINT = CHECKPOINT_BF16
+CHECKPOINT_LABELS = {CHECKPOINT_BF16: "Full quality (BF16)", CHECKPOINT_INT8: "Low memory (INT8)"}
+
+
+def choose_checkpoint(installed: list[str] | None) -> str:
+    """The model to use, given the checkpoints the engine can see: what YUE2_CHECKPOINT names when
+    it is set, else BF16 when it is there, else INT8, else BF16 (so the message about the missing
+    file names the usual one)."""
+    wanted = os.environ.get("YUE2_CHECKPOINT", "").strip()
+    wanted = {"bf16": CHECKPOINT_BF16, "int8": CHECKPOINT_INT8}.get(wanted.lower(), wanted)
+    if wanted:
+        return wanted
+    for name in (CHECKPOINT_BF16, CHECKPOINT_INT8):
+        if name in (installed or []):
+            return name
+    return CHECKPOINT_BF16
 LYRICS_MODEL = "gemma4_e4b_it_int8_convrot.safetensors"
 # The engine's model folder, when this machine can see it.  The app only reads
 # from it, and only to say what a LoRA holds; the engine is what loads them.

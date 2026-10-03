@@ -215,7 +215,8 @@ installation.
   while it prepares the songs, so 16 GB is the practical minimum, and an 8 GB card can't train
   (it can still use LoRAs trained elsewhere). AMD and Intel graphics are not supported.
 - 16 GB of RAM and about 40 GB of free disk.
-- An internet connection for about 24 GB of downloads, most of it the models. The score preview
+- An internet connection for about 24 GB of downloads (20 GB with the smaller low-memory model, see
+  [Choosing a model size](#choosing-a-model-size)), most of it the models. The score preview
   fetches its own note samples as they are played, about 7 MB for each instrument.
 
 The installer checks all of this before it downloads anything.
@@ -293,12 +294,55 @@ are not downloaded again. Deleting that folder removes it.
 - Linux, or Windows with WSL2 or Docker Desktop. WSL2 is what this was built on; Windows with
   Docker Desktop needs a few settings, below.  Alternatively, on Windows, [the installer](#on-windows-without-docker) needs none of this.
 
+## Choosing a model size
+
+YuE2 comes in two sizes. An install has one of them: **full quality** (BF16, 7.8 GB), which is what
+we recommend, or **low memory** (INT8, 4.0 GB), a smaller copy for graphics cards with little video
+memory. The Windows installer asks which on its components page; with Docker, `sh scripts/fetch-models.sh`
+fetches full quality and `sh scripts/fetch-models.sh --int8` the low-memory one. To change later,
+run the installer again and choose differently (it removes the one you leave), or fetch the other
+for Docker and delete the first. The Settings page doesn't switch it, and **About** says which is in use.
+
+| | Full quality (BF16) | Low memory (INT8) |
+|---|---|---|
+| Download | 7.8 GB | 4.0 GB |
+| Video memory a render adds | about 8 GB | about 5 GB |
+| LoRA training | yes | no: training uses the full-quality model |
+| Sound | the model as released | a compressed copy; it can differ in small ways |
+
+**What to expect.** We timed one short song on one PC: an RTX 4070 Ti SUPER (16 GB) on a PCIe 3.0 x16
+link with 64 GB of RAM, using the Windows install's engine (CUDA 13.0). To see what smaller cards would
+do, the rest of the card's memory was held back so that only the amount below was free. These are single
+runs, so read them as a comparison between the two columns, not as figures for your PC.
+
+| Video memory free to the engine | Full quality: write the plan, then render | Low memory: write the plan, then render |
+|---|---|---|
+| plenty (about 13 GB) | 10 s, then 32 s | 10 s, then 27 s |
+| about 6 GB, an 8 GB card with Windows running | 10 s, then 32 s | 10 s, then 28 s |
+| about 5 GB, a 6 GB card | 182 s, then 305 s | 10 s, then 29 s |
+
+- **A card with 8 GB or more** ran the full-quality model at full speed here. The engine moves what
+  does not fit into system RAM, and a PC with plenty of RAM does that cheaply. A PC with less RAM, or
+  slower RAM, may slow down sooner.
+- **Around 5 to 6 GB free** the full-quality model slowed ten-fold or more, and the low-memory model
+  did not. That is what it is for.
+- **Speed depends on the software around the model.** With the older CUDA 12.8 build that the Docker
+  engine uses, the low-memory model rendered about four times slower than full quality in an earlier
+  test on the same card. On Windows, with CUDA 13.0, it was not slower.
+- **The LoRAs** (the instrumental one, the production polish decoder, and style LoRAs) are applied on
+  top of either model. A style LoRA and the polish decoder ran without error on the low-memory model;
+  we have not compared how they sound.
+
+Our advice: use full quality if your card has the room, and try low memory if renders are slow or
+run out of memory.
+
 ## Quick start
 
 ```sh
 git clone https://github.com/yeufonic/yeufonic.git
 cd yeufonic
 sh scripts/fetch-models.sh          # about 17 GB, and creates the folders below
+# sh scripts/fetch-models.sh --int8   # the smaller low-memory model instead: see Choosing a model size
 docker compose up -d --build
 ```
 
@@ -627,6 +671,7 @@ built from, and the ports itself: change those in its `settings.ini` instead (se
 | `WEAK_RENDER_DB` | `-24` | the average level, in dB, below which a take is marked *Weak render* |
 | `PEAK_GUARD` | `1` | with an engine that has the peak guard, a render whose peaks would clip is turned down around them before it is saved. `0` leaves it out |
 | `PEAK_CEILING_DB` | `-0.5` | the highest a peak may reach with the guard on, in dB below full scale |
+| `YUE2_CHECKPOINT` | unset | which YuE2 model the app asks the engine for: `bf16`, `int8`, or a file name. Unset, it uses the full-quality model if it is installed, else the low-memory one. See Choosing a model size |
 | `TRAINING_ENABLED` | `1` | corpora and LoRA training; `0` takes them out of the app. Training also needs `WITH_TRAINER` on the engine. See Training a LoRA |
 | `DATA_DIR` | `/data` | the library. Only needed when running without the containers |
 
@@ -663,7 +708,7 @@ heard back to an earlier step with **Checkpoints**.
 | **Write score plan** is greyed out in Instrumental | the LoRA is not in `models/loras` | `sh scripts/fetch-models.sh`, then `docker compose restart engine` |
 | **Write lyrics** is greyed out | Gemma is not in `models/text_encoders` | `sh scripts/fetch-models.sh`, then `docker compose restart engine` |
 | **Corpora** is not in the menu | `TRAINING_ENABLED` is `0`, or the engine was built with `WITH_TRAINER=0` | set both back to `1`, rebuild the engine if it was the second; see Training a LoRA above |
-| Header says the checkpoint is missing | `yue2_3b_bf16.safetensors` is not in `models/checkpoints` | `sh scripts/fetch-models.sh`, then `docker compose restart engine` |
+| Header says the checkpoint is missing | neither `yue2_3b_bf16.safetensors` nor `yue2_3b_int8_convrot.safetensors` is in `models/checkpoints` | `sh scripts/fetch-models.sh`, then `docker compose restart engine` |
 | **Render this score** and **Write a new plan** are greyed out | no take's score is in the editor | press **Score** on a take in the library, or write a plan |
 | The app restarts, and its log says it cannot open the database | `data/` belongs to root, because Docker created it | `sudo chown -R "$(id -u):$(id -g)" data engine-state/output`, with your ids as `APP_UID` and `APP_GID` in `.env` |
 | The page says *This host name is not allowed* | you reached it by a name not in `ALLOWED_HOSTS` | add that name or address to `ALLOWED_HOSTS` in compose.yml |

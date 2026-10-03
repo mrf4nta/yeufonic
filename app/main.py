@@ -1111,6 +1111,7 @@ def state() -> dict:
     return {
         "version": config.VERSION,
         "build": config.BUILD,
+        "model": config.CHECKPOINT_LABELS.get(config.CHECKPOINT, config.CHECKPOINT),
         # Whether a newer release is out, and what to do about it: a background task keeps
         # this current, and this route only ever reads it.
         "update": update.state(),
@@ -3169,6 +3170,10 @@ async def train_identity(identity_id: str, body: TrainIn | None = None) -> dict:
     runs, and shows it on the main screen with a stop button."""
     _training_built_in()
     identity = _identity(identity_id)
+    if ENGINE.options_loaded and config.TRAIN_CHECKPOINT not in (ENGINE.options.get("checkpoints") or []):
+        raise HTTPException(400, "Training learns from the full-quality model, and this install has the "
+                                 "low-memory one. Run the installer again and choose full quality, or "
+                                 "scripts/fetch-models.sh for Docker.")
     if _training_run():
         raise HTTPException(409, "A LoRA is already training.")
     _engine_free_for_training()

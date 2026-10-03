@@ -81,6 +81,13 @@ powershell -ExecutionPolicy Bypass -File setup.ps1 -InstallDir C:\somewhere -Ski
 powershell -ExecutionPolicy Bypass -File setup.ps1 -InstallDir C:\somewhere -CheckOnly
 ```
 
+## The model size
+
+The components page offers two sizes of the YuE2 model, full quality (BF16) and low memory (INT8), as
+a choice of one. The choice is passed to `setup.ps1` as `-Int8` for the small one, remembered in the
+registry for the next update, and the file that was not chosen is removed once the chosen one is in
+place. The app picks whichever the engine reports (BF16 first), so there is no setting to keep in step.
+
 ## Trying an update before it is released
 
 A test build of the installer (`TEST_BUILD=1`, which installs as "Yeufonic (test)" in a folder of

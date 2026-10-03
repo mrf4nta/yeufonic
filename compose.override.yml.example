@@ -17,6 +17,11 @@ services:
       # commas. Each needs a volume below. ./data/corpus is always offered as well.
       # IMPORT_ROOTS: /import
 
+      # ---- The YuE2 model ----
+      # The app uses the full-quality model if it is installed, else the low-memory one
+      # (fetched with `sh scripts/fetch-models.sh --int8`). This forces one: "bf16", "int8".
+      # YUE2_CHECKPOINT: int8
+
       # ---- The app ----
       # Host names the page may be reached by. Add a LAN name or address to open it
       # from another device; "*" turns the check off.

@@ -3,13 +3,15 @@
 # version and checked by sha256 where the publisher gives one.  Safe to run again:
 # whatever is already in place is kept, and an interrupted download carries on.
 #
-#   powershell -ExecutionPolicy Bypass -File setup.ps1 -InstallDir <folder> [-NoLyrics]
+#   powershell -ExecutionPolicy Bypass -File setup.ps1 -InstallDir <folder> [-NoLyrics] [-Int8]
+#   ... -Int8             the smaller, low-memory YuE2 model instead of the full-quality one
 #   ... -CheckOnly        only the system check
 #   ... -SkipModels       everything but the 18 GB of models (for testing)
 
 param(
     [Parameter(Mandatory = $true)][string]$InstallDir,
     [switch]$NoLyrics,
+    [switch]$Int8,
     [switch]$CheckOnly,
     [switch]$SkipModels
 )
@@ -19,7 +21,7 @@ param(
 if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) {
     $native = Join-Path $env:WINDIR 'Sysnative\WindowsPowerShell\v1.0\powershell.exe'
     $again = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-InstallDir', $InstallDir)
-    foreach ($flag in @('NoLyrics', 'CheckOnly', 'SkipModels')) { if ($PSBoundParameters[$flag]) { $again += "-$flag" } }
+    foreach ($flag in @('NoLyrics', 'Int8', 'CheckOnly', 'SkipModels')) { if ($PSBoundParameters[$flag]) { $again += "-$flag" } }
     & $native @again
     exit $LASTEXITCODE
 }
@@ -89,6 +91,20 @@ $ModelFiles = @(
        Sha = '587631eec5946f9f87d4b422abcda7e35dee43299efb7b7d2fcba4cd8752c475'; Size = 296098847 }
 )
 if ($NoLyrics) { $ModelFiles = @($ModelFiles | Where-Object { -not $_.Lyrics }) }
+# The model comes in two sizes and an install has one of them: the full-quality file, or with -Int8 the
+# smaller one for a GPU with little memory.  The other is taken off the entry list here, and removed from
+# the folder once the chosen one is in place (below), so choosing differently later is just running this again.
+$FullModel = 'yue2_3b_bf16.safetensors'
+$SmallModel = 'yue2_3b_int8_convrot.safetensors'
+if ($Int8) {
+    $ModelFiles = @($ModelFiles | ForEach-Object {
+        if ($_.File -eq $FullModel) {
+            @{ Name = 'YuE2, low-memory size (plans and renders)'; Dir = 'checkpoints'; File = $SmallModel
+               Url = "$HF/Comfy-Org/YuE2/resolve/main/checkpoints/$SmallModel"
+               Sha = '96fe199377309001ed8cd26a944baeee8cc31a20ba7c36d1d3c0a7e1f4149db6'; Size = 3960938800 }
+        } else { $_ }
+    })
+}
 $SoundFontFiles = @(
     @{ Name = 'Jnsgm2 GM SoundFont'; File = 'github_Jnsgm2.sf2'
        Url = 'https://raw.githubusercontent.com/wrightflyer/SF2_SoundFonts/master/Jnsgm2.sf2'
@@ -381,6 +397,13 @@ if (-not $SkipModels) {
         Say ''
         Say $m.Name 'White'
         Get-Verified $m (Join-Path (Join-Path $Models $m.Dir) $m.File)
+    }
+    # One size only: with the chosen one in place, the other is taken away, so the app uses what was chosen.
+    $unchosen = Join-Path (Join-Path $Models 'checkpoints') $(if ($Int8) { $FullModel } else { $SmallModel })
+    if (Test-Path $unchosen) {
+        Say ''
+        Say ("Removing {0}: this install uses the {1} model." -f (Split-Path $unchosen -Leaf), $(if ($Int8) { 'low-memory' } else { 'full-quality' }))
+        Remove-Item -Force $unchosen
     }
 }
 

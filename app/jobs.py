@@ -1420,7 +1420,7 @@ def train_graph(audio_folder: str, dataset_name: str, lora_name: str, steps: int
         "2": {
             "class_type": "FSAudioModelLoader",
             "inputs": {
-                "yue2_checkpoint": config.CHECKPOINT,
+                "yue2_checkpoint": config.TRAIN_CHECKPOINT,
                 "melody_transcriber": "sheetsage2_bf16.safetensors",
                 "loras": ["1", 0],
             },

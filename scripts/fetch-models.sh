@@ -10,12 +10,24 @@
 #   data/models/soundfonts/sf2/github_Jnsgm2.sf2         Jnsgm2 SoundFont                33 MB
 #   data/models/soundfonts/sf2/Arachno_SoundFont...sf2   Arachno SoundFont 1.0          149 MB
 #
-#   sh scripts/fetch-models.sh
+#   sh scripts/fetch-models.sh           the full-quality YuE2 model (recommended)
+#   sh scripts/fetch-models.sh --int8    the low-memory YuE2 model instead, 4.0 GB, for GPUs
+#                                        with little memory (checkpoints/yue2_3b_int8_convrot.safetensors)
 #
+# One size or the other: with both in models/checkpoints the app uses the full-quality one.
 # A file that is already there is kept, and an interrupted download resumes.
 # It also creates data/ and engine-state/output/, which the app needs to own, and
 # records your user and group ids in .env for compose.yml to run the app as.
 set -eu
+
+MODEL=bf16
+for arg in "$@"; do
+  case "$arg" in
+    --int8) MODEL=int8 ;;
+    -h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d'; exit 0 ;;
+    *) echo "unknown option: $arg (see --help)" >&2; exit 1 ;;
+  esac
+done
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 YUE2=https://huggingface.co/Comfy-Org/YuE2/resolve/main
@@ -49,8 +61,17 @@ fetch() {
   mv "$dest.part" "$dest"
 }
 
-fetch "$YUE2/checkpoints/yue2_3b_bf16.safetensors" \
-      "$ROOT/models/checkpoints/yue2_3b_bf16.safetensors"
+if [ "$MODEL" = int8 ]; then
+  fetch "$YUE2/checkpoints/yue2_3b_int8_convrot.safetensors" \
+        "$ROOT/models/checkpoints/yue2_3b_int8_convrot.safetensors"
+  if [ -s "$ROOT/models/checkpoints/yue2_3b_bf16.safetensors" ]; then
+    echo "note: yue2_3b_bf16.safetensors is also here, and the app uses it. To use the low-memory model,"
+    echo "      remove that file (or set YUE2_CHECKPOINT=int8 for the app)."
+  fi
+else
+  fetch "$YUE2/checkpoints/yue2_3b_bf16.safetensors" \
+        "$ROOT/models/checkpoints/yue2_3b_bf16.safetensors"
+fi
 
 fetch "$YUE2/audio_encoders/sheetsage2_bf16.safetensors" \
       "$ROOT/models/audio_encoders/sheetsage2_bf16.safetensors"

@@ -415,7 +415,7 @@ async function pollState() {
     State.stemsOptions = data.stems || State.stemsOptions || {};
     if (data.settings) { adoptSettings(data.settings); }
     if (data.version) { $('app-version').textContent = 'v' + data.version; }
-    State.about = { version: data.version || '', build: data.build || '' };
+    State.about = { version: data.version || '', build: data.build || '', model: data.model || '' };
     paintUpdate(data.update);
     paintOptions();
     paintJob(data.current, data.queue || [], data.options);
@@ -4755,6 +4755,7 @@ function openAbout() {
   var line = about.version ? 'Version ' + about.version : '';
   if (about.build) { line += (line ? ' \u00b7 build ' : 'Build ') + about.build; }
   $('about-build').textContent = line;
+  if ($('about-model')) { $('about-model').textContent = about.model ? 'Model: ' + about.model : ''; }
   $('about-modal').classList.remove('hidden');
 }
 

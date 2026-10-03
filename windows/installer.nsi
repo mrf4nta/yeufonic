@@ -156,7 +156,7 @@ Section "${APPNAME}" SecCore
   SectionIn RO
   ; What setup.ps1 will put on disk, so the page shows the real figure: the engine,
   ; the app and the models other than Gemma.
-  AddSize 15000000
+  AddSize 7200000
   SetOutPath "$INSTDIR"
   ; A running copy holds its files open.  Only its own programs are stopped, never
   ; this installer, which may be running from the same folder.
@@ -197,6 +197,17 @@ Section "${APPNAME}" SecCore
   ${EndIf}
 SectionEnd
 
+; The YuE2 model comes in two sizes and an install has one of them (radio buttons, below).  No
+; files here: setup.ps1 is told which to fetch, and takes the other away if it is there.
+SectionGroup /e "YuE2 model size" SecModelGroup
+  Section "Full quality" SecFull
+    AddSize 7800000
+  SectionEnd
+  Section /o "Low memory" SecSmall
+    AddSize 3960000
+  SectionEnd
+SectionGroupEnd
+
 Section "Lyric drafts (Gemma 4)" SecLyrics
   AddSize 7900000
   ; No files: setup.ps1 is told whether to fetch Gemma.  Without it, lyric drafts and
@@ -208,6 +219,12 @@ Section "-Setup"
     StrCpy $1 ""
   ${Else}
     StrCpy $1 "-NoLyrics"
+  ${EndIf}
+  ${If} ${SectionIsSelected} ${SecSmall}
+    StrCpy $1 "$1 -Int8"
+    WriteRegDWORD HKCU "Software\${REGNAME}" "SmallModel" 1
+  ${Else}
+    WriteRegDWORD HKCU "Software\${REGNAME}" "SmallModel" 0
   ${EndIf}
   ; Remembered, so an update offers the same choice again.
   ${If} ${SectionIsSelected} ${SecLyrics}
@@ -245,11 +262,24 @@ Section "-Setup"
 SectionEnd
 
 LangString DESC_Core ${LANG_ENGLISH} "The app, the engine (ComfyUI), and the YuE2 models."
+LangString DESC_Full ${LANG_ENGLISH} "The full-quality YuE2 model (BF16), 7.8 GB. Recommended. It needs a graphics card with plenty of memory to run at full speed, and it is the one that LoRA training uses."
+LangString DESC_Small ${LANG_ENGLISH} "A smaller YuE2 model (INT8), 4.0 GB, for graphics cards with little memory (6 GB or less). It is the choice to try if the full one is too slow on this PC, and it can sound a little different. LoRA training needs the full-quality model. Only one size is installed: run this installer again to change."
 LangString DESC_Lyrics ${LANG_ENGLISH} "Gemma 4, for lyric drafts and song analysis on this PC. Leave it out if you intend to configure an external LLM. This will save an 8 GB download."
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecCore} $(DESC_Core)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecModelGroup} $(DESC_Full)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecFull} $(DESC_Full)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecSmall} $(DESC_Small)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecLyrics} $LyricsText
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+; The two sizes of the model are radio buttons: ticking one unticks the other.
+Function .onSelChange
+  !insertmacro StartRadioButtons $1
+    !insertmacro RadioButton ${SecFull}
+    !insertmacro RadioButton ${SecSmall}
+  !insertmacro EndRadioButtons
+FunctionEnd
 
 ; After the sections, so their names can be used here.
 Function .onInit
@@ -316,6 +346,17 @@ Function .onInit
     StrCpy $LyricsText "$(DESC_Lyrics)"
     ; Only the app itself is new: the engine and the models are already here.
     SectionSetSize ${SecCore} 100000
+    ; The model size as it is on disk: kept as it is unless another is picked, and nothing to download for it.
+    ${If} ${FileExists} "$INSTDIR\engine\ComfyUI\models\checkpoints\yue2_3b_int8_convrot.safetensors"
+    ${AndIfNot} ${FileExists} "$INSTDIR\engine\ComfyUI\models\checkpoints\yue2_3b_bf16.safetensors"
+      !insertmacro UnselectSection ${SecFull}
+      !insertmacro SelectSection ${SecSmall}
+      SectionSetSize ${SecSmall} 0
+      SectionSetText ${SecSmall} "Low memory (installed)"
+    ${ElseIf} ${FileExists} "$INSTDIR\engine\ComfyUI\models\checkpoints\yue2_3b_bf16.safetensors"
+      SectionSetSize ${SecFull} 0
+      SectionSetText ${SecFull} "Full quality (installed)"
+    ${EndIf}
     ; Gemma as chosen last time: kept if it is here, left out if it was left out.
     ReadRegDWORD $1 HKCU "Software\$R9" "Lyrics"
     ${If} ${FileExists} "$INSTDIR\engine\ComfyUI\models\text_encoders\gemma4_e4b_it_int8_convrot.safetensors"
