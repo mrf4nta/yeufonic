@@ -49,7 +49,7 @@ cannot creep back in.
   part way) is left in the planner's own key, and the log says so.
 
 ### Changed
-- **MIDI imports find the real bar line.** Many MIDI files start with the first word on the beat
+- **MIDI imports find the real bar line.** Some MIDI files start with the first word on the beat
   before the downbeat, which put every bar marker, chord change and phrase a beat out. The drums
   and bass now decide where the first bar line is, and a lead-in gets a short bar of its own. A
   file whose rhythm section does not say is left as it was. `bar_offset` on retrack overrides it.
