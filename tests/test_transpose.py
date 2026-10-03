@@ -117,3 +117,14 @@ def test_rendering_a_plan_moves_the_score_you_see_to_the_locks(client):
     execute("UPDATE takes SET status = 'planned' WHERE id = ?", (made["id"],))
     client.post(f"/api/takes/{made['id']}/render", json={"seed": 5})                     # said nothing: the lock stays
     assert "K:F#m" in one("SELECT abc FROM takes WHERE id = ?", (made["id"],))["abc"]
+
+
+def test_a_cover_is_stored_at_the_locked_tempo_and_key(client):
+    execute("""INSERT INTO sources(id, title, filename, stored_path, sha256, created_at, abc)
+               VALUES('src-lock', 'S', 's.mid', '/nowhere', 'x', 0, ?)""", (GOOD,))
+    made = client.post("/api/takes", json={"source_id": "src-lock", "target_bpm": 74, "target_key": "Fm"})
+    assert made.status_code == 200, made.text
+    stored = one("SELECT abc FROM takes WHERE id = ?", (made.json()["id"],))["abc"]
+    assert "Q:1/4=74" in stored and "K:Fm" in stored and '"Dm"' not in stored
+    plain = client.post("/api/takes", json={"source_id": "src-lock"}).json()
+    assert one("SELECT abc FROM takes WHERE id = ?", (plain["id"],))["abc"] == GOOD

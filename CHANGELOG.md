@@ -34,7 +34,7 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## Unreleased
+## 0.0.23 (2026-10-03)
 
 ### Added
 - **Advanced take settings.** An *Advanced* button in the song editor opens a panel of per-take
@@ -48,11 +48,33 @@ cannot creep back in.
   with only the tonic moving). A plan it cannot read with certainty (a modal key, or a key change
   part way) is left in the planner's own key, and the log says so.
 
+### Changed
+- **MIDI imports find the real bar line.** Many MIDI files start with the first word on the beat
+  before the downbeat, which put every bar marker, chord change and phrase a beat out. The drums
+  and bass now decide where the first bar line is, and a lead-in gets a short bar of its own. A
+  file whose rhythm section does not say is left as it was. `bar_offset` on retrack overrides it.
+- **Pasted lyrics are fitted to the whole melody.** The words were shared out section by section
+  by count, so one misplaced line shifted every later one, and a text longer than the melody
+  squeezed everything early. They are now placed a syllable to a note over the whole song, with
+  line ends pulled towards the melody's rests, line starts towards phrase starts, and the notes
+  left over held after the word they belong to. Lines that cannot fit are left out from the end.
+
+- **Studio Audio in the piano roll is a mode.** Its button stays lit while it is on, and the
+  roll's Play, Pause, Rewind and bar-step controls act on the studio audio, with the cursor
+  following it. Only one thing plays at a time: the roll, the notation preview and the main
+  player give way to each other, and Roll Sound is greyed out while the studio audio is on.
+  Pressed again, the button returns to the ordinary preview. The duplicate button beside Match
+  Lyrics is gone.
+
 ### Fixed
+- **MIDI Tracks window in light themes.** The track rows kept a dark background with dark text.
 - **Tempo lock now sets the plan's tempo.** A style that named two tempos, or a planner that wrote
   its own, could leave the plan at a different tempo from the one asked for. The tempo lock now
   replaces the tempo in the style and in the stored plan, and the plan that is shown is the one
   that renders.
+- **Tempo and key locks apply to covers.** A cover from a MIDI file or a recording's score kept
+  the source's tempo in the score you read, and ignored a key lock. Both now apply to the stored
+  score as well as the render.
 - **Reset to defaults reaches the server.** After a reset, a plan, render or new-words request
   now puts every setting back to its default instead of keeping the take's earlier values; a
   request that says nothing about a setting still keeps the take's.

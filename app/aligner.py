@@ -256,6 +256,125 @@ def align_lines_to_notes(
     return splits
 
 
+def flag_lyric_tokens(lines: list[str], owners: list[int] | None = None) -> list[dict[str, Any]]:
+    """Syllable tokens of the lines, each knowing whether it opens or closes its line, whether
+    punctuation follows it, and which lyric section its line belongs to."""
+    out: list[dict[str, Any]] = []
+    for li, line in enumerate(lines):
+        toks = tokenize_lyric_lines([line])
+        for ti, tok in enumerate(toks):
+            out.append({
+                "tok": tok,
+                "line_start": ti == 0,
+                "line_end": ti == len(toks) - 1,
+                "comma": tok.rstrip("-")[-1:] in (",", ".", ";", ":", "!", "?"),
+                "joins": tok.endswith("-"),
+                "owner": owners[li] if owners else None,
+            })
+    return out
+
+
+def _note_groups(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A sung note with the notes tied on from it, so a held syllable is one unit."""
+    groups: list[dict[str, Any]] = []
+    for n in sorted(notes, key=lambda x: x["start_tick"]):
+        if n.get("tied_from_prev") and groups:
+            groups[-1]["members"].append(n)
+            groups[-1]["end"] = n["start_tick"] + n["dur"]
+            continue
+        groups.append({"members": [n], "start": n["start_tick"], "end": n["start_tick"] + n["dur"]})
+    for i, g in enumerate(groups):
+        g["rest_before"] = g["start"] - groups[i - 1]["end"] if i else 99
+        g["rest_after"] = groups[i + 1]["start"] - g["end"] if i + 1 < len(groups) else 99
+        g["dur"] = g["end"] - g["start"]
+    return groups
+
+
+FILL_RATIO = 0.92   # most syllables to a note that the melody is expected to carry
+DROP_COST = 12.0   # leaving a trailing syllable out, against holding a phrase-start note
+
+
+def _skip_cost(g: dict[str, Any]) -> float:
+    """What it costs to leave a note without a syllable (it is held or slurred from the one
+    before).  Cheap inside a run of short notes, dear at the start of a phrase."""
+    if g["rest_before"] >= 4:
+        return 10.0
+    if g["rest_before"] >= 2:
+        return 6.0
+    return 1.5 if g["dur"] <= 3 else 3.0
+
+
+def _token_cost(t: dict[str, Any], g: dict[str, Any], ticks_per_bar: int, joined: bool) -> float:
+    """How well a syllable sits on a note: a line should end where the melody rests, begin where
+    a phrase begins, and a word's second half should not follow a rest."""
+    cost = 0.0
+    if t["line_end"]:
+        cost += 0.0 if g["rest_after"] >= 3 else (3.0 if g["rest_after"] >= 1 else 8.0)
+    elif t["comma"]:
+        cost += 0.0 if g["rest_after"] >= 2 else 1.5
+    if t["line_start"]:
+        starts_bar = g["start"] % ticks_per_bar == 0
+        cost += 0.0 if (g["rest_before"] >= 2 or starts_bar) else 4.0
+    elif g["rest_before"] >= 4:
+        cost += 2.0
+    if joined and g["rest_before"] >= 2:
+        cost += 6.0
+    return cost
+
+
+def align_tokens_to_notes(tokens: list[dict[str, Any]], groups: list[dict[str, Any]],
+                          ticks_per_bar: int = 16) -> list[int | None]:
+    """The note each syllable is sung on: in order, one syllable to a note, the notes left over
+    held on the syllable before.  Chosen over the whole stretch at once, so a line the melody
+    does not split the way the words do cannot push every later line out of place.
+
+    Returns, for each token, the index of its group, or None for a token that does not fit
+    (more syllables than notes: the last ones are the ones left out)."""
+    T, N = len(tokens), len(groups)
+    reach = min(T, N)
+    if reach == 0:
+        return [None] * T
+    skip = [_skip_cost(g) for g in groups]
+    prefix = [0.0] * (N + 1)
+    for k in range(N):
+        prefix[k + 1] = prefix[k] + skip[k]
+    INF = 1e12
+    prev = [prefix[i] + _token_cost(tokens[0], groups[i], ticks_per_bar, False) for i in range(N)]
+    back: list[list[int]] = [[-1] * N]
+    rows = [prev]
+    for j in range(1, reach):
+        cur = [INF] * N
+        arg = [-1] * N
+        best, best_i = INF, -1
+        for i in range(1, N):
+            cand = prev[i - 1] - prefix[i]       # the notes between the two are skipped
+            if cand < best:
+                best, best_i = cand, i - 1
+            cur[i] = best + prefix[i] + _token_cost(
+                tokens[j], groups[i], ticks_per_bar, tokens[j - 1]["joins"])
+            arg[i] = best_i
+        prev = cur
+        rows.append(cur)
+        back.append(arg)
+    # More syllables than notes: the last ones are left out, at a price, rather than squeezing
+    # every earlier line to make room for them.
+    end_j = min(range(reach), key=lambda j: min(rows[j]) + DROP_COST * (T - 1 - j))
+    i = min(range(N), key=lambda k: rows[end_j][k])
+    out: list[int | None] = [None] * T
+    for j in range(end_j, -1, -1):
+        out[j] = i
+        i = back[j][i]
+    # The second half of a split word follows the first at once: it is the word's end that is
+    # held (bet-ter...), not the gap in the middle of it.
+    for j in range(1, end_j + 1):
+        before, here = out[j - 1], out[j]
+        if tokens[j - 1]["joins"] and before is not None and here is not None and here > before + 1:
+            nxt = out[j + 1] if j + 1 <= end_j else N
+            if nxt is not None and before + 1 < nxt:
+                out[j] = before + 1
+    return out
+
+
 def clean_section_tag(name: str) -> str:
     """Normalize lyric section header name to clean ABC section comment tag."""
     if not name:
@@ -272,37 +391,37 @@ def clean_section_tag(name: str) -> str:
 
 
 def assign_lyrics_to_vocal_notes(
-    lines: list[str], sec_vocal_notes: list[dict[str, Any]], ticks_per_bar: int = 16
+    lines: list[str], sec_vocal_notes: list[dict[str, Any]], ticks_per_bar: int = 16,
+    owners: list[int] | None = None,
 ) -> int:
-    """Assign lyric tokens from lines to a slice of vocal notes."""
+    """Assign lyric syllables from lines to a run of vocal notes.  Every note ends up with a
+    syllable or `_` (held from the one before).  With `owners`, each note a syllable lands on
+    is marked with the lyric section its line came from."""
     if not lines or not sec_vocal_notes:
         return 0
-    line_tokens_list = []
-    for l in lines:
-        toks = tokenize_lyric_lines([l])
-        if toks:
-            line_tokens_list.append(toks)
-    if not line_tokens_list:
+    groups = _note_groups(sec_vocal_notes)
+    tokens = flag_lyric_tokens(lines, owners)
+    # Words longer than the melody can carry leave no note to hold, and every line is then
+    # squeezed early.  Whole lines are left out from the end until some notes can be held.
+    keep = len(lines)
+    limit = FILL_RATIO * len(groups) if len(tokens) > len(groups) else len(tokens)
+    while keep > 1 and len(tokens) > limit:
+        keep -= 1
+        tokens = flag_lyric_tokens(lines[:keep], owners[:keep] if owners else None)
+    if not tokens:
         return 0
-
-    splits = align_lines_to_notes(line_tokens_list, sec_vocal_notes, ticks_per_bar)
+    where = align_tokens_to_notes(tokens, groups, ticks_per_bar)
+    for g in groups:
+        for n in g["members"]:
+            n["lyric"] = "_"
     count = 0
-
-    for sp in splits:
-        toks = line_tokens_list[sp["line_idx"]]
-        seg_notes = sec_vocal_notes[sp["start_idx"] : sp["end_idx"]]
-        if not seg_notes:
+    for tok, gi in zip(tokens, where):
+        if gi is None:
             continue
-        tok_idx = 0
-        for n in seg_notes:
-            if n.get("tied_from_prev"):
-                n["lyric"] = "_"
-            elif tok_idx < len(toks):
-                n["lyric"] = toks[tok_idx]
-                tok_idx += 1
-                count += 1
-            else:
-                n["lyric"] = "_"
+        first = groups[gi]["members"][0]
+        first["lyric"] = tok["tok"]
+        first["lyric_section"] = tok["owner"]
+        count += 1
     return count
 
 
@@ -487,7 +606,24 @@ def align_lyrics_to_abc(abc_text: str, lyrics_text: str) -> str:
     assigned_count = 0
     bar_to_section_tag: dict[int, str] = {}
     has_explicit_lyric_sections = any(bool(s.get("name")) for s in lyric_sections)
-    if vocal_score_sections and lyric_sections:
+    if vocal_score_sections and lyric_sections and len(vocal_score_sections) != len(lyric_sections):
+        # The score's sections were guessed from rests and the lyrics' from their headings, and
+        # they rarely agree.  Sharing the lyric sections out by count puts a line in the wrong
+        # place and every later one follows, so the words are fitted to the whole melody at once.
+        all_lines: list[str] = []
+        owners: list[int] = []
+        for li, lsec in enumerate(lyric_sections):
+            all_lines.extend(lsec["lines"])
+            owners.extend([li] * len(lsec["lines"]))
+        assigned_count += assign_lyrics_to_vocal_notes(all_lines, vocal_notes, ticks_per_bar, owners)
+        if has_explicit_lyric_sections:
+            for si, sec_item in enumerate(vocal_score_sections):
+                for n in sec_item["notes"]:
+                    if n.get("lyric_section") is not None and n.get("lyric") not in ("", "_"):
+                        tag = clean_section_tag(lyric_sections[n["lyric_section"]].get("name", ""))
+                        bar_to_section_tag[sec_item["bar"]] = f"% {tag}"
+                        break
+    elif vocal_score_sections and lyric_sections:
         curr_lyric_idx = 0
         num_score = len(vocal_score_sections)
         num_lyric = len(lyric_sections)

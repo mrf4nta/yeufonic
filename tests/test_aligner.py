@@ -183,3 +183,48 @@ def test_build_render_graph_strips_w_lines():
     assert "Hel- lo" not in submitted_abc
     assert "C4D4E4F4" in submitted_abc
 
+
+
+def _notes(spec):
+    """(duration, rest after) pairs as vocal notes in the aligner's own shape."""
+    out, tick = [], 0
+    for dur, rest in spec:
+        out.append({"start_tick": tick, "dur": dur, "tied": False})
+        tick += dur + rest
+    return out
+
+
+def _words(notes):
+    return [n.get("lyric") for n in notes]
+
+
+def test_a_held_note_follows_the_word_not_the_middle_of_it():
+    notes = _notes([(4, 0), (4, 0), (4, 0), (4, 0), (4, 0), (4, 8)])      # six notes, then a rest
+    assert aligner.assign_lyrics_to_vocal_notes(["Make it better"], notes, 16) == 4
+    assert _words(notes) == ["Make", "it", "bet-", "ter", "_", "_"]
+
+
+def test_words_follow_the_phrases_when_the_sections_do_not_match():
+    """Two melody phrases, one heading: the words split where the melody rests, not by count."""
+    phrase = [(4, 0)] * 5 + [(4, 8)]
+    notes = _notes(phrase + phrase + phrase)
+    lines = ["one two three four five six", "red blue green gold pink grey", "cat dog fox hen cow pig"]
+    aligner.assign_lyrics_to_vocal_notes(lines, notes, 16)
+    assert [n["lyric"] for n in notes[6:8]] == ["red", "blue"]
+    assert [n["lyric"] for n in notes[12:14]] == ["cat", "dog"]
+
+
+def test_a_text_longer_than_the_melody_loses_its_last_lines_not_its_held_notes():
+    phrase = [(4, 0), (2, 0), (2, 0), (4, 0), (4, 8)]                      # five notes, two of them short
+    notes = _notes(phrase * 4)                                              # 20 notes
+    lines = ["la la la la la"] * 4 + ["na na na na na"] * 8                # 60 syllables
+    placed = aligner.assign_lyrics_to_vocal_notes(lines, notes, 16)
+    assert 0 < placed <= 20
+    assert notes[0]["lyric"] == "la" and notes[5]["lyric"] == "la"         # the start is where it should be
+    assert any(n["lyric"] == "_" for n in notes)                           # and notes are still held
+
+
+def test_every_note_gets_a_syllable_or_a_hold():
+    notes = _notes([(4, 0)] * 7 + [(8, 4)])
+    aligner.assign_lyrics_to_vocal_notes(["a b c d"], notes, 16)
+    assert all(n["lyric"] for n in notes)

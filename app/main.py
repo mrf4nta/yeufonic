@@ -506,6 +506,7 @@ class RetrackIn(BaseModel):
     vocal_track: int
     ins_track: int | None = None
     octave_shift: int | None = None
+    bar_offset: int | None = None
 
 
 ADVANCED_KEYS = (
@@ -1549,6 +1550,7 @@ def retrack_source(source_id: str, body: RetrackIn) -> dict:
             vocal_track=body.vocal_track,
             ins_track=body.ins_track,
             octave_shift=body.octave_shift,
+            bar_offset=body.bar_offset,
         )
         new_abc = parsed["abc"]
         if source.get("lyrics"):
@@ -1726,6 +1728,15 @@ async def delete_take(take_id: str) -> dict:
     return {"deleted": True}
 
 
+def _locked_score(abc: str, adv: dict) -> str:
+    """The score with the take's tempo and key locks applied, so the Score the person reads is
+    the one that is sung.  A key it cannot move leaves the score in the key it has."""
+    locked = jobs.lock_tempo(abc or "", adv.get("target_bpm"))
+    if adv.get("target_key"):
+        locked = transpose.to_key(locked, adv["target_key"]) or locked
+    return locked
+
+
 def _check_score(abc: str | None, kind: str | None = None) -> None:
     """Refuse to render a score that cannot be the song.  An empty score is allowed:
     the engine then writes its own."""
@@ -1765,13 +1776,14 @@ async def create_take(body: TakeIn) -> dict:
     _space(body.space_id)
     take_id = uuid.uuid4().hex[:12]
     seed = body.seed if body.seed is not None else int.from_bytes(os.urandom(4), "big")
+    adv = _advanced_of(body)
     record = {
         "id": take_id,
         "source_id": body.source_id,
         "title": body.title or source["title"],
         "style": body.style.strip() or config.DEFAULT_STYLE,
         "lyrics": body.lyrics,
-        "abc": abc_to_use,
+        "abc": _locked_score(abc_to_use, adv),
         "mode": body.mode if body.mode in ("full", "melody") else "full",
         "seed": seed,
         "checkpoint": _checkpoint(),
@@ -1787,7 +1799,7 @@ async def create_take(body: TakeIn) -> dict:
         "voice_lora_strength": body.voice_lora_strength,
         "voice_lora_clip": body.voice_lora_clip,
         **_style_lora_of(body),
-        **_advanced_of(body),
+        **adv,
     }
     execute(
         """INSERT INTO takes(id, source_id, title, style, lyrics, abc, mode, seed, checkpoint, max_duration, status, created_at,
@@ -2067,9 +2079,7 @@ async def render_take(take_id: str, body: RenderIn | None = None) -> dict:
     adv = _advanced_of(body, fallback=take)
     # The locks are on the score itself, so the Score the person reads is the one that is sung.
     stored = one("SELECT abc FROM takes WHERE id = ?", (take_id,))["abc"] or ""
-    locked = jobs.lock_tempo(stored, adv["target_bpm"])
-    if adv["target_key"]:
-        locked = transpose.to_key(locked, adv["target_key"]) or locked
+    locked = _locked_score(stored, adv)
     if locked != stored:
         execute("UPDATE takes SET abc = ? WHERE id = ?", (locked, take_id))
     if body is not None and body.seed is not None:

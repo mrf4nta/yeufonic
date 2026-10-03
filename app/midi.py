@@ -259,6 +259,48 @@ class MidiParser:
                 })
 
 
+def detect_bar_phase(parser: MidiParser, num: int, den: int) -> int:
+    """How many beats into the file the first real bar line falls, 0 when the file starts on
+    a downbeat or the answer is unclear.
+
+    Many sequences start with the melody's first word on the beat before the downbeat (a
+    lead-in), and the file has no bar line to say so.  The rhythm section does: a kick lands on
+    the downbeat and the third beat, a snare on the second and fourth, and the bass changes
+    note at the bar line.  Each beat of the bar is scored by those, and a shift is only
+    reported when one beat clearly beats the file's own start."""
+    if den != 4 or num not in (3, 4):
+        return 0
+    scores = [0.0] * num
+    division = parser.division
+    for n in parser.notes:
+        beat = n["start_tick"] / division
+        if abs(beat - round(beat)) > 0.1 or n["channel"] != 9:
+            continue
+        k = int(round(beat)) % num
+        if n["pitch"] in (35, 36):
+            scores[k] += 1
+        elif n["pitch"] in (38, 40, 37) and num == 4:
+            scores[(k - 1) % num] += 1
+    by_start: dict[int, int] = {}
+    for n in parser.notes:
+        if n["channel"] != 9 and n["pitch"] < 52:
+            by_start[n["start_tick"]] = min(by_start.get(n["start_tick"], 127), n["pitch"])
+    last = None
+    for tick in sorted(by_start):
+        low = by_start[tick]
+        beat = tick / division
+        if last is not None and low % 12 != last % 12 and abs(beat - round(beat)) <= 0.1:
+            scores[int(round(beat)) % num] += 1
+        last = low
+    best = max(range(num), key=lambda k: scores[k])
+    rivals = [scores[k] for k in range(num) if k != best]
+    # Kicks and snares repeat every two beats, so a drum pattern alone cannot tell the downbeat
+    # from the third beat; it is the bass changing note that settles it.  A tie is not guessed.
+    if best == 0 or scores[best] < 20 or scores[best] < 1.3 * scores[0] or scores[best] < 1.15 * max(rivals):
+        return 0
+    return best
+
+
 def calculate_duration(parser: MidiParser) -> float:
     """Calculate exact duration in seconds from tempo map and note/track ticks."""
     tempo_map = sorted(parser.tempo_events, key=lambda x: x[0])
@@ -611,6 +653,7 @@ def parse_midi(
     vocal_track: int | None = None,
     ins_track: int | None = None,
     octave_shift: int | None = None,
+    bar_offset: int | None = None,
 ) -> dict[str, Any]:
     """Parse MIDI data into ABC score, duration, tempo, meter, key, and lyrics."""
     parser = MidiParser(data)
@@ -645,6 +688,12 @@ def parse_midi(
     ticks_per_quarter = parser.division
     ticks_per_16th = ticks_per_quarter / 4.0
     ticks_per_bar = num * (16 // den) if den in (1, 2, 4, 8, 16) else 16
+
+    # A lead-in: when the first real bar line falls `phase` beats into the file, the music is
+    # moved later by the rest of that bar, so "Hey" is the last beat of a bar of its own and
+    # "Jude" lands on the downbeat.  `bar_offset` overrides the detection (0 turns it off).
+    phase = detect_bar_phase(parser, num, den) if bar_offset is None else max(0, int(bar_offset))
+    lead_in = ((num - phase) % num) * (16 // den) if phase and den == 4 else 0
 
     # Filter melodic notes (skip channel 9 General MIDI percussion)
     melodic_notes = [n for n in parser.notes if n["channel"] != 9]
@@ -747,8 +796,8 @@ def parse_midi(
     def quantize_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         q = []
         for e in events:
-            qs = round(e["start_tick"] / ticks_per_16th)
-            qe = max(qs + 1, round(e["end_tick"] / ticks_per_16th))
+            qs = round(e["start_tick"] / ticks_per_16th) + lead_in
+            qe = max(qs + 1, round(e["end_tick"] / ticks_per_16th) + lead_in)
             q.append({"start_tick": qs, "end_tick": qe, "pitches": e["pitches"]})
         return q
 
@@ -806,7 +855,7 @@ def parse_midi(
     sections: list[tuple[int, str]] = []
     if parser.markers:
         for m_tick, m_text in parser.markers:
-            q_tick = round(m_tick / ticks_per_16th)
+            q_tick = round(m_tick / ticks_per_16th) + lead_in
             b_idx = min(total_bars - 1, q_tick // ticks_per_bar)
             name = m_text.strip().lower()
             if any(s in name for s in ("intro", "verse", "chorus", "bridge", "outro")):
@@ -999,5 +1048,6 @@ def parse_midi(
         "sections": [s_name for _, s_name in sections],
         "tracks": track_info,
         "octave_shift": applied_octave_shift,
+        "bar_offset": phase,
     }
 

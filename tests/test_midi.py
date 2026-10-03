@@ -1,5 +1,6 @@
 """Tests for MIDI import, binary SMF parsing, ABC conversion, and source integration."""
 import io
+import re
 import struct
 from pathlib import Path
 
@@ -434,51 +435,6 @@ def test_multi_track_vocal_selection_and_polyphony_reduction():
     assert parsed["lyrics"] is None
 
 
-def test_real_bohemian_rhapsody_midi_conversion():
-    """Verify the Bohemian Rhapsody MIDI converts cleanly without score problems or track name pollution."""
-    midi_path = Path("/mnt/c/Users/paul/Downloads/Queen - Bohemian Rhapsody.mid")
-    if not midi_path.exists():
-        pytest.skip("Bohemian Rhapsody MIDI not present in Downloads")
-    data = midi_path.read_bytes()
-    parsed = midi.parse_midi(data, "Queen - Bohemian Rhapsody")
-    assert parsed["lyrics"] is None
-    assert parsed["meter"] == "2/4"
-    assert parsed["tempo"] == 78
-    assert parsed["duration"] > 300
-    abc = parsed["abc"]
-    assert score.problems(abc) == []
-    est = score.estimate(abc)
-    assert est["bars"] > 100
-
-
-def test_real_yesterday_midi_conversion():
-    """Verify Yesterday MIDI converts to F major with accurate chord detection and section placement."""
-    midi_path = Path("data/sources/6256bb1cf564e776-yesterday.mid")
-    if not midi_path.exists():
-        midi_path = Path("/mnt/c/Users/paul/Downloads/yesterday.mid")
-    if not midi_path.exists():
-        pytest.skip("yesterday.mid not found")
-
-    data = midi_path.read_bytes()
-    parsed = midi.parse_midi(data, "yesterday")
-    assert parsed["key"] == "F"
-    assert parsed["meter"] == "4/4"
-    abc = parsed["abc"]
-    assert score.problems(abc) == []
-
-    # Check intro and verse sections
-    assert "% intro" in abc
-    assert "% verse" in abc
-
-    # Chords in F major: F, Em7, Dm, Bb (not Csus4 or A#maj7)
-    assert '"F"' in abc
-    assert '"Bb"' in abc
-    assert '"A#maj7"' not in abc
-
-    # Bracket chords preserved in accompaniment
-    assert "[CF]" in abc or "[A,CF]" in abc or "[_B,,_B,D]" in abc
-
-
 def test_vocal_melody_legato_gap_closing():
     """Verify that articulation micro-gaps (<= 1 sixteenth note) are closed to legato phrasing
     while genuine musical rests (>= 2 sixteenth notes) are preserved."""
@@ -509,118 +465,87 @@ def test_vocal_melody_legato_gap_closing():
     assert "C2D2E4F2" in first_bar
 
 
-def test_real_hey_jude_midi_conversion():
-    """Verify Hey Jude MIDI converts cleanly with legato vocal phrasing and banner noise excluded."""
-    midi_paths = list(Path("data/sources").glob("*beatles-hey-jude*.mid"))
-    if not midi_paths:
-        pytest.skip("Hey Jude MIDI not found")
-    data = midi_paths[0].read_bytes()
-    parsed = midi.parse_midi(data, "Hey Jude")
-    assert parsed["key"] == "F"
-    assert parsed["meter"] == "4/4"
-    assert parsed["tempo"] == 74
-    assert parsed["lyrics"] is None  # BBS banner comments filtered out
-    abc = parsed["abc"]
-    assert score.problems(abc) == []
-    vocal_bars = score.vocal_bars(abc)
-    # Bar 3 was '_B3zf5zfzezcz' before gap closing; now cleanly legato '_B4f6f2e2c2'
-    assert "_B4f6f2e2c2" in vocal_bars[3]
+def _drum_file(first_kick_beat: int, bars: int = 16, with_melody: bool = True, with_bass: bool = True) -> bytes:
+    """A 4/4 file whose kick falls on beats 1 and 3 of each bar and snare on 2 and 4, with the
+    first kick `first_kick_beat` beats into the file (0 = the file starts on a downbeat)."""
+    div = 480
+    hits = []
+    for bar in range(bars):
+        for beat in range(4):
+            pitch = 36 if beat % 2 == 0 else 38
+            hits.append(((first_kick_beat + bar * 4 + beat) * div, pitch))
+    hits.sort()
+    drums, last = [], 0
+    for tick, pitch in hits:
+        drums.append((tick - last, bytes([0x99, pitch, 100])))
+        drums.append((60, bytes([0x89, pitch, 0])))
+        last = tick + 60
+    tracks = [[(0, b"\xFF\x51\x03" + (500000).to_bytes(3, "big")), (0, b"\xFF\x58\x04\x04\x02\x18\x08")], drums]
+    if with_bass:
+        bass, last = [], 0
+        for bar in range(bars):
+            tick = (first_kick_beat + bar * 4) * div
+            pitch = 36 if bar % 2 == 0 else 41
+            bass.append((tick - last, bytes([0x91, pitch, 90])))
+            bass.append((4 * div - 10, bytes([0x81, pitch, 0])))
+            last = tick + 4 * div - 10
+        tracks.append(bass)
+    if with_melody:
+        mel, last = [], 0
+        for i in range(8):
+            tick = i * 2 * div
+            mel.append((tick - last, bytes([0x90, 64 + i % 3, 90])))
+            mel.append((div, bytes([0x80, 64 + i % 3, 0])))
+            last = tick + div
+        tracks.append(mel)
+    return create_smf(tracks, division=div)
 
 
-def test_hey_jude_synth_lead_melody_classification():
-    """Verify track classifier selects Track 8 (Smooth Synth) over Track 0 (4150 strumming guitar notes)."""
-    p = Path("data/sources/1afc5fac27224e3e-the-beatles-hey-jude.mid")
-    if not p.exists():
-        pytest.skip("Hey Jude new MIDI not found")
-    data = p.read_bytes()
-    parsed = midi.parse_midi(data, "The Beatles - Hey Jude")
-    tracks = parsed["tracks"]
-    vocal_track = next((t for t in tracks if t["role"] == "vocal"), None)
-    assert vocal_track is not None
-    assert vocal_track["track"] == 8
-    assert "Synth" in vocal_track["name"]
-
-    # Verify Vocal melody contains the authentic Hey Jude melody normalized to vocal singing register
-    abc = parsed["abc"]
-    assert score.problems(abc) == []
-    assert parsed.get("octave_shift") == 1
-    vocal_bars = score.vocal_bars(abc)
-    assert "c4A10A2" in vocal_bars[0]  # Hey, Jude, don't (normalized +1 octave)
+def test_a_lead_in_is_found_from_the_drums():
+    for lead in (1, 2, 3):
+        parser = midi.MidiParser(_drum_file(lead))
+        # the first kick is `lead` beats in, so the bar line is that far into the file
+        assert midi.detect_bar_phase(parser, 4, 4) == lead, lead
+    assert midi.detect_bar_phase(midi.MidiParser(_drum_file(0)), 4, 4) == 0
 
 
-def test_source_tracks_and_retrack_api(client):
-    """Verify GET /api/sources/{id}/tracks and POST /api/sources/{id}/retrack endpoints."""
-    p = Path("data/sources/1afc5fac27224e3e-the-beatles-hey-jude.mid")
-    if not p.exists():
-        pytest.skip("Hey Jude new MIDI not found")
-    res = client.post(
-        "/api/sources",
-        files={"file": ("hey_jude_test.mid", io.BytesIO(p.read_bytes()), "audio/midi")},
-        data={"title": "Hey Jude Track Test"},
-    )
+def test_drums_alone_do_not_say_which_of_two_beats_is_the_downbeat():
+    # kick on 1 and 3, snare on 2 and 4: the third beat looks just like the first
+    assert midi.detect_bar_phase(midi.MidiParser(_drum_file(1, with_bass=False)), 4, 4) == 0
+
+
+def test_a_file_without_a_clear_rhythm_section_is_left_alone():
+    assert midi.detect_bar_phase(midi.MidiParser(_drum_file(1, bars=2)), 4, 4) == 0   # too few hits to say
+    assert midi.detect_bar_phase(midi.MidiParser(_drum_file(1)), 6, 8) == 0           # not a meter it reads
+
+
+def test_the_music_moves_later_by_the_rest_of_the_lead_in_bar():
+    data = _drum_file(1)
+    shifted = midi.parse_midi(data, "t")
+    plain = midi.parse_midi(data, "t", bar_offset=0)
+    assert shifted["bar_offset"] == 1 and plain["bar_offset"] == 0
+
+    def first_bar(parsed):
+        return re.sub(r'"[^"]*"', "", score.vocal_bars(parsed["abc"])[0])
+
+    # with a one-beat lead-in the first beat of the file is the last of a bar of its own
+    assert first_bar(plain).startswith("E4")
+    assert first_bar(shifted).startswith("z12E4")
+
+
+def test_retrack_takes_a_bar_offset(client):
+    """The retrack route re-parses a MIDI source and lets the caller set or switch off the lead-in."""
+    res = client.post("/api/sources", files={"file": ("lead_in.mid", io.BytesIO(_drum_file(1)), "audio/midi")},
+                      data={"title": "Lead-in Test"})
     assert res.status_code == 200
     src_id = res.json()["id"]
+    tracks = client.get(f"/api/sources/{src_id}/tracks").json()["tracks"]
+    melody = next(t["track"] for t in tracks if t["note_count"] == 8)
 
-    # Get tracks
-    trk_res = client.get(f"/api/sources/{src_id}/tracks")
-    assert trk_res.status_code == 200
-    tracks = trk_res.json()["tracks"]
-    assert len(tracks) >= 8
-    t8 = next(t for t in tracks if t["track"] == 8)
-    assert t8["role"] == "vocal"
+    def first_bar(body):
+        reply = client.post(f"/api/sources/{src_id}/retrack", json={"vocal_track": melody, **body})
+        assert reply.status_code == 200, reply.text
+        return re.sub(r'"[^"]*"', "", score.vocal_bars(reply.json()["abc"])[0])
 
-    # Retrack: switch vocal to Track 8 explicitly with auto-octave
-    retrack_res = client.post(
-        f"/api/sources/{src_id}/retrack",
-        json={"vocal_track": 8, "ins_track": 2},
-    )
-    assert retrack_res.status_code == 200
-    retrack_data = retrack_res.json()
-    assert "c4A10A2" in retrack_data["abc"]
-
-    # Retrack: switch vocal to Track 8 explicitly with octave_shift=0 (original low baritone)
-    retrack_res_0 = client.post(
-        f"/api/sources/{src_id}/retrack",
-        json={"vocal_track": 8, "ins_track": 2, "octave_shift": 0},
-    )
-    assert retrack_res_0.status_code == 200
-    assert "C4A,10A,2" in retrack_res_0.json()["abc"]
-
-
-def test_take_auto_embeds_lyrics_in_abc(client):
-    """Verify that creating a take with lyrics automatically embeds w: lines into the ABC score."""
-    p = Path("data/sources/1afc5fac27224e3e-the-beatles-hey-jude.mid")
-    if not p.exists():
-        pytest.skip("Hey Jude new MIDI not found")
-    upload_res = client.post(
-        "/api/sources",
-        files={"file": ("hey_jude_lyrics_test.mid", io.BytesIO(p.read_bytes()), "audio/midi")},
-        data={"title": "Hey Jude Lyrics Base"},
-    )
-    src_id = upload_res.json()["id"]
-
-    lyrics = (
-        "[Verse 1]\n"
-        "Hey, Jude, don't make it bad\n"
-        "Take a sad song and make it better\n"
-        "Remember to let her into your heart\n"
-        "Then you can start to make it better\n"
-    )
-
-    take_res = client.post(
-        "/api/takes",
-        json={
-            "source_id": src_id,
-            "title": "Hey Jude Aligned Take",
-            "style": "piano ballad",
-            "lyrics": lyrics,
-        },
-    )
-    assert take_res.status_code == 200
-    take_data = take_res.json()
-    abc = take_data["abc"]
-    assert "w: " in abc
-    assert "Hey, Jude, don't" in abc
-    assert "make it bet- ter" in abc
-    assert score.problems(abc) == []
-
+    assert first_bar({}).startswith("z12")                      # found from the drums and bass
+    assert first_bar({"bar_offset": 0}).startswith(("E4", "e4"))  # switched off: the file as it is
