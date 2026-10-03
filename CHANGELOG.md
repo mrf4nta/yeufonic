@@ -34,6 +34,18 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## 0.0.20 (2026-10-03)
+
+### Added
+
+- **Canned styles dropdown.** A searchable dropdown directly under the Style box with 100 curated styles alphabetized for quick selection, prepending active LoRA triggers automatically.
+- **Editor transport for active takes.** The transport controls now display in the editor for playable takes so songs can be auditioned directly.
+
+### Changed & Fixed
+
+- **Cleaner status bar.** Unified status reporting in the bottom status bar and eliminated transient status boxes across views.
+- **Empty style default on new take.** Creating a new song, cover, or instrumental starts with a clean, empty style box.
+
 ## 0.0.19 (2026-10-02)
 
 ### Fixed
