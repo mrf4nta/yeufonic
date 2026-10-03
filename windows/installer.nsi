@@ -128,15 +128,12 @@ Function WaitForYeufonicClosed
     Return
   ${EndIf}
   ${Do}
-    nsExec::ExecToStack '"$PowerShell" -NoProfile -Command "@(Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\Yeufonic.exe$\' }).Count"'
-    Pop $0   ; exit code
-    Pop $1   ; the count
-    ${If} $0 != 0
-      ${Break}   ; could not ask: do not hold the install hostage to that
-    ${EndIf}
-    StrCpy $1 $1 1
-    ${If} $1 == "0"
-    ${OrIf} $1 == ""
+    ; The answer is PowerShell's exit code, 10 plus the number running, because the text it
+    ; prints does not come back through nsExec intact (a "0" arrived as a "?").  Any other code
+    ; means it could not ask, and that does not hold the install hostage.
+    nsExec::Exec '"$PowerShell" -NoProfile -Command "exit (10 + @(Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\Yeufonic.exe$\' }).Count)"'
+    Pop $0
+    ${If} $0 <= 10
       ${Break}
     ${EndIf}
     MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${APPNAME} is running.$\r$\n$\r$\nClose its window and give it a few seconds to finish, then choose Retry. Anything it is working on, a render or a training run, stops when it closes.$\r$\n$\r$\nCancel leaves ${APPNAME} as it is." IDRETRY +2
