@@ -34,13 +34,6 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## 0.0.25 (2026-10-03)
-
-### Fixed
-- **The installer wrongly saw Yeufonic as running.** The new check for a running Yeufonic read
-  PowerShell's printed answer, which did not come back intact, and so always asked for Yeufonic to
-  be closed. It now reads the answer from PowerShell's exit code.
-
 ## 0.0.24 (2026-10-03)
 
 ### Fixed
