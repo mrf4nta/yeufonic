@@ -81,6 +81,16 @@ powershell -ExecutionPolicy Bypass -File setup.ps1 -InstallDir C:\somewhere -Ski
 powershell -ExecutionPolicy Bypass -File setup.ps1 -InstallDir C:\somewhere -CheckOnly
 ```
 
+## Trying an update before it is released
+
+A test build of the installer (`TEST_BUILD=1`, which installs as "Yeufonic (test)" in a folder of
+its own) can be given `TEST_MANIFEST=<url>`. The installer then writes `update_manifest` into the
+install's `settings.ini`, the launcher hands it to the app as `YEUFONIC_UPDATE_MANIFEST`, and the
+app asks that address only: not the site's manifest and not GitHub. Build an older and a newer
+test installer (`VERSION=0.0.98` and `VERSION=0.0.99`, versions that will never be real), serve a
+manifest naming the newer one, install the older one and run the update with the app open. A
+release build never sets it. The steps are in [CONTRIBUTING.md](../CONTRIBUTING.md).
+
 ## Not done yet
 
 - **Signing.** Until the installer is signed, Windows shows *Windows protected your PC*; choose

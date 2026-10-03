@@ -17,6 +17,9 @@ To deploy a change:
 
 To cut a release:
 
+0. **If the installer or the updater changed, try the update before tagging.** A test build of the
+   installer can be pointed at a manifest of its own, so an update runs end to end with no tag and no
+   GitHub release: see "Trying an update before it is released" in [CONTRIBUTING.md](CONTRIBUTING.md).
 1. Add an entry here, newest first.
 2. `git tag -a vX.Y.Z -m "..."`
 3. `git push origin main --tags`   (homer only, unless GitHub is wanted)
