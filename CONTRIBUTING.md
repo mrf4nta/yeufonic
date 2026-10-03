@@ -77,6 +77,10 @@ alone) can be told where to look for updates:
 TEST_BUILD=1 TEST_MANIFEST=https://example.org/private-path/updates.json VERSION=0.0.98 sh windows/build.sh
 ```
 
+A test build normally skips the models. `TEST_FULL=1` makes one that sets up for real under the test name, so
+it can sit beside a normal install, and `TEST_SMALL=1` starts it with the low-memory model chosen
+(`TEST_BUILD=1 TEST_FULL=1 TEST_SMALL=1 sh windows/build.sh`).
+
 That writes `update_manifest` into the install's `settings.ini`; the launcher passes it to the app
 as `YEUFONIC_UPDATE_MANIFEST`, and the app then asks that address only, never the site's manifest
 or GitHub. Serve a manifest of the usual shape there that names a newer test build, install the

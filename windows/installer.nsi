@@ -22,6 +22,13 @@ Unicode true
   !define OUTFILE "Yeufonic-Setup-${VERSION}.exe"
 !endif
 
+; TEST_INSTALL is a test build that sets up for real (nothing skipped), so it needs no setup arguments of its own.
+!ifdef TEST_INSTALL
+  !ifndef SETUP_ARGS
+    !define SETUP_ARGS ""
+  !endif
+!endif
+
 ; A test build (setup given -SkipModels or -CheckOnly) has its own name, shortcuts and
 ; uninstall entry, so trying it out on a PC with Yeufonic installed leaves that alone.
 ; LEGACY is the app's name before it was Yeufonic: an install of YuE2 Studio is taken
@@ -285,6 +292,11 @@ FunctionEnd
 Function .onInit
   !insertmacro FindPowerShell
   Call WaitForYeufonicClosed
+!ifdef TEST_SMALL
+  ; A test build that starts with the low-memory model chosen (the choice can still be changed).
+  !insertmacro UnselectSection ${SecFull}
+  !insertmacro SelectSection ${SecSmall}
+!endif
   StrCpy $Updating 0
   StrCpy $Legacy 0
   StrCpy $R9 "${REGNAME}"     ; where the Gemma choice was remembered
