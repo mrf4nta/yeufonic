@@ -4191,7 +4191,7 @@ function openUpdateModal(info) {
         '<span>Download complete &amp; verified</span>' +
       '</div>' +
       '<p class="update-modal-desc"><strong>' + fname + '</strong> has been saved to your <strong>Downloads</strong> folder.</p>' +
-      '<p class="muted small" style="margin-top: 8px;">Click <strong>Run installer</strong> to start updating now. Yeufonic will close automatically.</p>';
+      '<p class="muted small" style="margin-top: 8px;">Click <strong>Run installer</strong> to start updating now. The installer will ask you to close Yeufonic first, and carries on when you have.</p>';
 
     actionsEl.innerHTML = '';
 

@@ -116,6 +116,34 @@ Function un.onInit
   !insertmacro FindPowerShell
 FunctionEnd
 
+; Yeufonic's launcher (Yeufonic.exe in the install folder) is running while the app, its engine
+; and its window are.  Replacing files under it half-works, so the person is asked to close it
+; and the installer waits.  Nothing is stopped for them: a render or a training run would be
+; lost.  A silent install has nobody to ask, and stops it as the section below always did.
+Function WaitForYeufonicClosed
+  ${If} ${Silent}
+    Return
+  ${EndIf}
+  ${If} $PowerShell == ""
+    Return
+  ${EndIf}
+  ${Do}
+    nsExec::ExecToStack '"$PowerShell" -NoProfile -Command "@(Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\Yeufonic.exe$\' }).Count"'
+    Pop $0   ; exit code
+    Pop $1   ; the count
+    ${If} $0 != 0
+      ${Break}   ; could not ask: do not hold the install hostage to that
+    ${EndIf}
+    StrCpy $1 $1 1
+    ${If} $1 == "0"
+    ${OrIf} $1 == ""
+      ${Break}
+    ${EndIf}
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${APPNAME} is running.$\r$\n$\r$\nClose its window and give it a few seconds to finish, then choose Retry. Anything it is working on, a render or a training run, stops when it closes.$\r$\n$\r$\nCancel leaves ${APPNAME} as it is." IDRETRY +2
+    Abort
+  ${Loop}
+FunctionEnd
+
 Function StartNow
   ExecShell "" "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
 FunctionEnd
@@ -135,6 +163,7 @@ Section "${APPNAME}" SecCore
   SetOutPath "$INSTDIR"
   ; A running copy holds its files open.  Only its own programs are stopped, never
   ; this installer, which may be running from the same folder.
+  Call WaitForYeufonicClosed
   nsExec::Exec '"$PowerShell" -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -like $\'$INSTDIR\*$\' -and $$_.Name -in $\'Yeufonic.exe$\',$\'python.exe$\',$\'pythonw.exe$\',$\'ffmpeg.exe$\',$\'ffprobe.exe$\',$\'fluidsynth.exe$\' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"'
   Pop $0
   RMDir /r "$INSTDIR\studio"
@@ -224,6 +253,7 @@ LangString DESC_Lyrics ${LANG_ENGLISH} "Gemma 4, for lyric drafts and song analy
 ; After the sections, so their names can be used here.
 Function .onInit
   !insertmacro FindPowerShell
+  Call WaitForYeufonicClosed
   StrCpy $Updating 0
   StrCpy $Legacy 0
   StrCpy $R9 "${REGNAME}"     ; where the Gemma choice was remembered

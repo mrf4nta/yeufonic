@@ -391,3 +391,36 @@ def test_download_api_endpoints(client, monkeypatch, tmp_path):
     reveal_res = client.post("/api/update/reveal").json()
     assert "revealed" in reveal_res
 
+
+
+def test_the_installer_is_started_outside_the_apps_job(tmp_path, monkeypatch):
+    """The launcher ends everything in its job when it closes, the app is in that job, and the
+    installer asks the person to close Yeufonic: so it is started with the break-away flag."""
+    installer = tmp_path / "Yeufonic-Setup-9.9.9.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.setitem(update.DOWNLOAD_STATE, "path", str(installer))
+    monkeypatch.setattr(update.sys, "platform", "win32")
+    started = []
+    monkeypatch.setattr(update.subprocess, "Popen", lambda args, **kw: started.append((args, kw)))
+
+    assert update.launch_installer() is True
+    args, kw = started[0]
+    assert args == [str(installer)]
+    assert kw["creationflags"] & update.CREATE_BREAKAWAY_FROM_JOB
+    assert kw["creationflags"] & update.DETACHED_PROCESS
+
+
+def test_an_installer_that_cannot_break_away_is_still_started(tmp_path, monkeypatch):
+    installer = tmp_path / "Yeufonic-Setup-9.9.9.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.setitem(update.DOWNLOAD_STATE, "path", str(installer))
+    monkeypatch.setattr(update.sys, "platform", "win32")
+
+    def refused(*args, **kw):
+        raise OSError(5, "Access is denied")
+    opened = []
+    monkeypatch.setattr(update.subprocess, "Popen", refused)
+    monkeypatch.setattr(update.os, "startfile", lambda path: opened.append(path), raising=False)
+
+    assert update.launch_installer() is True
+    assert opened == [str(installer)]

@@ -403,6 +403,11 @@ def cancel_download() -> dict[str, Any]:
     return download_state()
 
 
+CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+DETACHED_PROCESS = 0x00000008
+CREATE_NEW_PROCESS_GROUP = 0x00000200
+
+
 def launch_installer() -> bool:
     """Launch the installer executable on Windows."""
     path_str = DOWNLOAD_STATE.get("path")
@@ -416,6 +421,19 @@ def launch_installer() -> bool:
                 path_str = str(candidate)
     if not path_str or not Path(path_str).is_file():
         return False
+    if sys.platform == "win32":
+        # The launcher keeps everything it starts in a job that ends with it, and the app is in
+        # that job.  An installer started the ordinary way would be in it too, and would be
+        # ended the moment Yeufonic is closed, which is what it asks the person to do.  The job
+        # allows a program to break away, so the installer is started outside it.
+        flags = CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        try:
+            subprocess.Popen([path_str], creationflags=flags, close_fds=True,
+                             cwd=str(Path(path_str).parent))
+            return True
+        except OSError as exc:
+            log.warning("Could not start the installer outside the app's job (%s); starting it normally. "
+                        "If it stops when Yeufonic closes, run it from the Downloads folder.", exc)
     if sys.platform == "win32" and hasattr(os, "startfile"):
         try:
             os.startfile(path_str)
