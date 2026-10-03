@@ -824,6 +824,22 @@ browser and survive a rebuild: the output audio format for stems and a take's Sa
 separation model, where stems are written, whether training checkpoints are kept, and how
 instrumentals are checked for singing.
 
+### The YuE2 model
+
+YuE2 comes in two sizes, and an install has one: **full quality**, which we recommend, or **low
+memory**, a smaller copy for graphics cards with little video memory. **About**, in the same menu,
+says which you have. It is chosen when Yeufonic is installed, not here:
+
+- **On Windows**, run the installer again. Its components page offers both sizes, shows the one you
+  have, and switching downloads the other and removes the first.
+- **With Docker**, `sh scripts/fetch-models.sh` fetches full quality and
+  `sh scripts/fetch-models.sh --int8` the low-memory one. With both files in `models/checkpoints`, the
+  app uses full quality unless `YUE2_CHECKPOINT=int8` is set in `.env`.
+
+Try low memory if renders are very slow or the engine runs out of GPU memory. Training a LoRA uses
+the full-quality model and says so if only the small one is installed. The README on GitHub has
+a section, *Choosing a model size*, with what to expect from each.
+
 **Check for a new version** is the one thing here that uses the internet on its own account: every
 four hours the app asks yeufonic.com whether a later release is out, and says so with a pill beside the
 version in the top right. That pill hands you the installer, or, for a Docker copy, the two commands

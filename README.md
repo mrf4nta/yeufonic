@@ -205,13 +205,14 @@ the trainer out of the engine image.
 
 A small installer sets Yeufonic up natively on Windows.
 It needs no Docker, no WSL and no administrator rights. Running a newer installer will automatically update an existing
-installation.
+installation, and running it again is also how you change the model size (below).
 
 **You need:**
 
 - Windows 10 22H2 or Windows 11, 64-bit.
 - An NVIDIA graphics card, RTX 30-series or newer, with a recent driver. 12 GB of video memory is
-  recommended, and 8 GB works for making songs. Training a LoRA needs more: about 12.5 GB free
+  recommended, and 8 GB works for making songs (with 6 GB or less, choose the low-memory model: see
+  [Choosing a model size](#choosing-a-model-size)). Training a LoRA needs more: about 12.5 GB free
   while it prepares the songs, so 16 GB is the practical minimum, and an 8 GB card can't train
   (it can still use LoRAs trained elsewhere). AMD and Intel graphics are not supported.
 - 16 GB of RAM and about 40 GB of free disk.
@@ -229,6 +230,10 @@ The installer checks all of this before it downloads anything.
    Choose *More info*, then *Run anyway*.
 3. **Choose your options:**
    - Accept the terms.
+   - Choose the **YuE2 model size**: *Full quality* (the default, and what we recommend) or *Low
+     memory*, a smaller model for graphics cards with little video memory. You get one or the other.
+     To change your mind later, run the installer again and pick the other on this page; it downloads
+     the new one and removes the old. [Choosing a model size](#choosing-a-model-size) says how to decide.
    - Choose whether to include **Lyric drafts (Gemma 4)**. Leave it out if you will set up an
      external LLM; that saves an 8 GB download.
    - Keep or change the folder. The default is `%LOCALAPPDATA%\Programs\Yeufonic`.
@@ -740,4 +745,4 @@ Copyright (c) 2026 Paul Shields. All rights reserved.
 
 The code in this repository is licensed for free personal, non-commercial use under the [Yeufonic Software License Agreement](LICENSE.md). For commercial licensing, contact yeufonic@paulshields.com.
 
-The AI models run by this software are not part of this repository; they are downloaded directly from their respective creators and are governed by their own individual licenses and terms of use (summarized in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). Users are solely responsible for reviewing the upstream model terms and ensuring that their use and any distribution or monetization of generated audio complies with those licenses.
+The AI models run by this software are not part of this repository; they are downloaded directly from their respective creators and are governed by their own individual licenses and terms of use (summarized in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). You are responsible for reviewing the upstream model terms and ensuring that their use and any distribution or monetization of generated audio complies with those licenses.
