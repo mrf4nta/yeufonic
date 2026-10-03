@@ -3671,37 +3671,6 @@ function updateMenuItem() {
   return item;
 }
 
-/* What changed, beside getting it.  Acting and reading are different errands: one is a
-   copy or an installer, the other is the release notes, and a press that did the first
-   while you wanted the second is how this line came to exist. */
-
-function whatsNewItem() {
-  var item = $('menu-whatsnew');
-  if (!item) {
-    var menu = $('brand-menu');
-    if (!menu) { return null; }
-    item = document.createElement('button');
-    item.id = 'menu-whatsnew';
-    item.className = 'menu-item hidden';
-    item.setAttribute('role', 'menuitem');
-    item.innerHTML = '<svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-      'stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
-      '<polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/>' +
-      '<line x1="8" y1="17" x2="13" y2="17"/></svg>' +
-      '<span id="menu-whatsnew-text">What is new</span>';   // the version is on the line above
-    menu.appendChild(item);
-  }
-  if (!item.dataset.wired) {
-    item.dataset.wired = '1';
-    item.addEventListener('click', function () {
-      var url = (State.update || {}).notes;
-      if (url) { openExternal(url); }
-      seenUpdate();
-    });
-  }
-  return item;
-}
-
 /* Open a link in the system's default browser rather than inside the launcher's
    app window, so downloads and SmartScreen prompts appear in the user's regular browser. */
 function openExternal(url) {
@@ -3804,15 +3773,6 @@ function openUpdateModal(info) {
       '<p class="muted small" style="margin-top: 8px;">Your library, settings, LoRAs and models will all be kept.</p>';
 
     actionsEl.innerHTML = '';
-
-    if (info.notes) {
-      var notesBtn = document.createElement('button');
-      notesBtn.type = 'button';
-      notesBtn.className = 'ghost';
-      notesBtn.textContent = 'Release notes';
-      notesBtn.onclick = function () { openExternal(info.notes); };
-      actionsEl.appendChild(notesBtn);
-    }
 
     var cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
@@ -4094,15 +4054,6 @@ function paintUpdateMenuItem() {
       item.removeAttribute('title');
     }
   }
-  // The reading line appears only when there is something to read about.
-  var news = whatsNewItem();
-  if (news) {
-    var show = Boolean(info.newer && info.latest);
-    news.classList.toggle('hidden', !show);
-    // "What is new" rather than "What is new in 0.0.12": the version is on the line above,
-    // and the menu is only as wide as its widest one-line item.
-    news.title = show ? 'What is new in ' + info.latest + ' — the release notes' : '';
-  }
 }
 
 function paintUpdate(info) {
@@ -4123,7 +4074,6 @@ function paintUpdate(info) {
     }
   }
   updateMenuItem();
-  whatsNewItem();
   paintUpdateMenuItem();
 }
 

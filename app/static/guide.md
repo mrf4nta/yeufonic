@@ -797,10 +797,8 @@ that update it. It is one request and nothing else leaves the computer; **Do not
 off. The menu's **Check for updates** asks then and there whether this is on or off, and answers in
 the menu: which version you are on, and whether it is the latest.
 
-When there is a newer one, the menu offers two lines where there was one: **Get x.y.z**, which hands
-you the installer on a Windows install or puts the two commands on the clipboard for a Docker copy,
-and **What is new**, which opens the release notes for it. Reading and doing are separate errands, so
-they are separate lines.
+When there is a newer one, the menu offers **Get x.y.z**, which downloads the installer on a Windows install or puts the two commands on the clipboard for a Docker copy.
+
 
 **Theme** sets how the app looks: **Dark**, **Light**, **Match the computer**, which follows your
 system's light or dark and changes with it, **Studio**, a warm dark with amber, or **High
