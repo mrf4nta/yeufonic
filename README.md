@@ -736,6 +736,6 @@ cut.
 
 Copyright (c) 2026 Paul Shields. All rights reserved.
 
-The code in this repository is licensed for free personal, non-commercial use under the [Yeufonic Software License Agreement](LICENSE.md). For commercial licensing, contact paul@paulshields.com.
+The code in this repository is licensed for free personal, non-commercial use under the [Yeufonic Software License Agreement](LICENSE.md). For commercial licensing, contact yeufonic@paulshields.com.
 
 The AI models run by this software are not part of this repository; they are downloaded directly from their respective creators and are governed by their own individual licenses and terms of use (summarized in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). Users are solely responsible for reviewing the upstream model terms and ensuring that their use and any distribution or monetization of generated audio complies with those licenses.

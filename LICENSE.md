@@ -35,4 +35,4 @@ This Agreement shall be governed by and construed in accordance with the laws of
 If you wish to use this Software for commercial purposes, business use, or any purpose outside the scope of this Agreement, you must obtain a separate commercial license from the Licensor.
 
 ---
-**Contact:** Paul Shields — paul@paulshields.com
+**Contact:** Paul Shields — yeufonic@paulshields.com
