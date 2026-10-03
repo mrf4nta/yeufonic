@@ -2097,7 +2097,6 @@ async function initScoreSf2Select() {
       var hint = 'Place .sf2 files in data/models/soundfonts/sf2 to enable studio rendering';
       if ($('score-render-sf2')) $('score-render-sf2').title = hint;
       if ($('notation-render-sf2')) $('notation-render-sf2').title = hint;
-      if ($('roll-render-sf2')) $('roll-render-sf2').title = hint;
       return;
     }
     sel.disabled = false;
@@ -2127,11 +2126,17 @@ async function initScoreSf2Select() {
   }
 }
 
-async function renderScoreSf2() {
+function studioScoreAbc() {
   var score = notationAbc();
-  var abc = (window.PianoRoll && scoreView() === 'roll')
+  return (window.PianoRoll && scoreView() === 'roll')
     ? (window.PianoRoll.model ? window.serializeToAbc(window.PianoRoll.model) : '')
     : (score.text || ($('score-big') && $('score-big').value) || '');
+}
+
+async function renderScoreSf2() {
+  // The button is a switch: pressed again, it puts the score back on the ordinary preview.
+  if (STUDIO.mode) { studioModeOff(); return; }
+  var abc = studioScoreAbc();
 
   if (!abc.trim()) {
     notationNote('There is no score to render yet.');
@@ -2141,7 +2146,20 @@ async function renderScoreSf2() {
   var sel = $('score-sf2-select');
   var chosenSf2 = sel && sel.value ? sel.value : null;
 
-  var btns = [$('score-render-sf2'), $('notation-render-sf2'), $('roll-render-sf2')].filter(Boolean);
+  // The same score with the same SoundFont is already rendered: play that.
+  var held = $('audio');
+  if (STUDIO.url && STUDIO.abc === abc && STUDIO.sf2 === chosenSf2 && held &&
+      (held.src || held.currentSrc || '').indexOf(STUDIO.url) >= 0) {
+    if (window.PianoRoll && window.PianoRoll.isPlaying) { window.PianoRoll.stop(); }
+    notationStop();
+    STUDIO.mode = true;
+    held.currentTime = 0;
+    held.play().catch(function () {});
+    paintRollStudio();
+    return;
+  }
+
+  var btns = [$('score-render-sf2'), $('notation-render-sf2')].filter(Boolean);
   btns.forEach(function (b) { b.disabled = true; b.textContent = 'Rendering...'; });
 
   try {
@@ -2177,6 +2195,10 @@ async function renderScoreSf2() {
         State.audition = null;
         State.loadedId = null;
         audio.src = res.audio_url;
+        STUDIO.url = res.audio_url;
+        STUDIO.abc = abc;
+        STUDIO.sf2 = chosenSf2;
+        STUDIO.mode = true;
         audio.play().catch(function () {});
         var sfLabel = res.soundfont ? res.soundfont.replace(/_/g, ' ').replace(/\.sf2$/i, '') : 'SoundFont';
         $('np-title').textContent = ($('title') && $('title').value) || 'Score';
@@ -2196,9 +2218,112 @@ async function renderScoreSf2() {
       if (b.id === 'score-render-sf2') b.textContent = 'Studio Audio';
       else b.textContent = 'Studio Audio (SF2)';
     });
+    paintRollStudio();
   }
 }
 window.renderScoreSf2 = renderScoreSf2;
+
+/* Only one thing plays at a time.  Studio Audio runs through the main player, the roll and
+   the notation preview each have a transport of their own, and starting any of them stops the
+   others.  Studio Audio is a mode: while it is on its button is lit, and the roll's Play, Pause
+   and seek controls act on the studio audio instead of the roll's own sounds. */
+var STUDIO = { url: null, abc: null, sf2: null, mode: false };
+
+function studioAudioPlaying() {
+  var audio = $('audio');
+  return !!(STUDIO.url && audio && !audio.paused && (audio.src || audio.currentSrc || '').indexOf(STUDIO.url) >= 0);
+}
+
+function paintStudioButtons() {
+  ['score-render-sf2', 'notation-render-sf2'].forEach(function (id) {
+    var el = $(id);
+    if (!el) { return; }
+    el.classList.toggle('active', STUDIO.mode);
+    el.title = STUDIO.mode ? 'Studio audio is on. Press to go back to the ordinary preview'
+                          : 'Render score with SoundFont via FluidSynth';
+  });
+  // The roll's own instrument is not what is heard while the studio audio plays.
+  var sound = $('roll-sound-val');
+  if (sound) {
+    sound.disabled = STUDIO.mode;
+    sound.title = STUDIO.mode ? 'Not used while studio audio is on' : 'Interactive piano roll preview instrument';
+  }
+}
+
+function paintRollStudio() {
+  var audio = $('audio');
+  if (STUDIO.mode && !(STUDIO.url && audio && (audio.src || audio.currentSrc || '').indexOf(STUDIO.url) >= 0)) {
+    STUDIO.mode = false;       // something else has taken the main player
+  }
+  if (window.PianoRoll && window.PianoRoll.followAudio) {
+    // The roll's cursor follows the studio audio while it plays, and lets go when it stops.
+    if (studioAudioPlaying()) { window.PianoRoll.followAudio(audio); }
+    else { window.PianoRoll.stopFollowing(); }
+  }
+  paintStudioButtons();
+  var btn = $('roll-play');
+  if (!btn) { return; }
+  if (STUDIO.mode) {
+    var playing = studioAudioPlaying();
+    btn.dataset.studio = '1';
+    btn.textContent = playing ? '\u23f8 Pause' : '\u25b6 Play';
+    btn.title = playing ? 'Pause the studio audio (Space)' : 'Play the studio audio (Space)';
+  } else if (btn.dataset.studio === '1') {
+    delete btn.dataset.studio;
+    var rolling = window.PianoRoll && window.PianoRoll.isPlaying;
+    btn.textContent = rolling ? '\u23f8 Pause' : '\u25b6 Play';
+    btn.title = rolling ? 'Pause (Space)' : 'Play (Space)';
+  }
+}
+
+function studioModeOff() {
+  var audio = $('audio');
+  STUDIO.mode = false;
+  if (audio && !audio.paused && (audio.src || audio.currentSrc || '').indexOf(STUDIO.url || '\u0000') >= 0) { audio.pause(); }
+  paintRollStudio();
+}
+
+window.studioAudio = {
+  playing: studioAudioPlaying,
+  mode: function () { return STUDIO.mode; },
+  stop: studioModeOff,
+  // The roll's Play button while the mode is on: pause or resume the studio audio.  False
+  // when the mode is off, or the score has been edited since the render, and the roll plays.
+  toggle: function () {
+    if (!STUDIO.mode) { return false; }
+    var audio = $('audio');
+    if (!audio) { return false; }
+    if (STUDIO.abc !== studioScoreAbc()) {
+      studioModeOff();
+      notationNote('The score has changed since the studio render, so this is the ordinary preview.');
+      return false;
+    }
+    if (studioAudioPlaying()) {
+      audio.pause();
+    } else {
+      if (window.PianoRoll && window.PianoRoll.isPlaying) { window.PianoRoll.stop(); }
+      notationStop();
+      audio.play().catch(function () {});
+    }
+    return true;
+  },
+  // The roll's seek controls move the studio audio too.
+  seekTick: function (tick) {
+    var model = window.PianoRoll && window.PianoRoll.model;
+    var audio = $('audio');
+    if (!STUDIO.mode || !model || !audio) { return false; }
+    var perBeat = Math.max(1, Math.round((model.unitLength || 16) / 4));
+    audio.currentTime = Math.max(0, tick * (60 / (model.bpm || 120)) / perBeat);
+    return true;
+  },
+  // Called by whatever is about to play: the main player and the notation preview give way.
+  takeOver: function () {
+    var audio = $('audio');
+    if (audio && !audio.paused) { audio.pause(); }
+    notationStop();
+    paintRollStudio();
+  }
+};
 
 function notationInit() {
   if (NOTATION.synth) { return NOTATION.synth; }
@@ -2221,6 +2346,10 @@ function notationInit() {
   var holder = $('notation-audio');
   if (holder) {
     holder.addEventListener('click', function (event) {
+      if (NOTATION.synth && !NOTATION.synth.isStarted) {
+        if (window.PianoRoll && window.PianoRoll.isPlaying) { window.PianoRoll.stop(); }
+        stopStudioAudio();
+      }
       if (notationSoundsReady()) {
         // Let abcjs handle it, but say what is happening until sound starts.
         if (!NOTATION.synth.isStarted && !NOTATION.preparing) { NOTATION.preparing = true; notationPaintNote(); }
@@ -6762,7 +6891,7 @@ async function openTracksModal() {
     listEl.innerHTML = tracks.map(function (t) {
       var isVocal = t.role === 'vocal';
       var octNote = (isVocal && t.avg_pitch < 64) ? ' \u00b7 +1 oct vocal transposed' : '';
-      return '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:var(--bg-elevated, #2a2a2a); border-radius:6px; border:1px solid ' + (isVocal ? 'var(--accent, #4caf50)' : 'transparent') + '">' +
+      return '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:var(--card-2); color:var(--text); border-radius:6px; border:1px solid ' + (isVocal ? 'var(--accent-a)' : 'var(--line)') + '">' +
         '<div><strong>Track ' + t.track + ': ' + esc(t.name || 'Unnamed') + '</strong>' +
         '<div class="muted small">' + t.note_count + ' notes \u00b7 ' + esc(t.role) + octNote + ' \u00b7 mono ' + Math.round(t.mono_ratio * 100) + '% \u00b7 score ' + t.vocal_score + '</div></div>' +
         '<button class="chip action select-vocal-track" data-track="' + t.track + '">' + (isVocal ? 'Lead Vocal \u2713' : 'Set as Vocal') + '</button>' +
@@ -11159,8 +11288,9 @@ function wire() {
   $('score-close').addEventListener('click', closeScoreEditor);
   var sf2Btn = $('score-render-sf2');
   if (sf2Btn) { sf2Btn.addEventListener('click', renderScoreSf2); }
-  var rollSf2Btn = $('roll-render-sf2');
-  if (rollSf2Btn) { rollSf2Btn.addEventListener('click', renderScoreSf2); }
+  if ($('audio')) {
+    ['play', 'pause', 'ended', 'emptied'].forEach(function (name) { $('audio').addEventListener(name, paintRollStudio); });
+  }
   $('score-big').addEventListener('input', syncScoreFromBig);
   $('do-replace-big').addEventListener('click', function () {
     var find = $('find-chord-big').value.trim();

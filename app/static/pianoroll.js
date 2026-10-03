@@ -1049,13 +1049,6 @@
         });
       }
 
-      var rollSf2Btn = document.getElementById('roll-render-sf2');
-      if (rollSf2Btn) {
-        rollSf2Btn.addEventListener('click', function () {
-          if (global.renderScoreSf2) { global.renderScoreSf2(); }
-        });
-      }
-
       // Transport Rewind / Prev / Play / Next / Metronome
       var rewindBtn = document.getElementById('roll-rewind');
       if (rewindBtn) {
@@ -2193,6 +2186,7 @@
     },
 
     togglePlay: function () {
+      if (typeof window !== 'undefined' && window.studioAudio && window.studioAudio.toggle()) { return; }   // studio audio is on: it plays or pauses
       if (this.isPlaying) {
         this.stop();
       } else {
@@ -2203,6 +2197,7 @@
     play: function () {
       if (!this.model) { return; }
       this.stop();
+      if (typeof window !== 'undefined' && window.studioAudio) { window.studioAudio.takeOver(); }   // one thing plays at a time
 
       var ctx = getAudioContext();
       if (ctx && ctx.state === 'suspended') {
@@ -2369,7 +2364,35 @@
       this.updatePlayhead(startTick);
     },
 
+    // The cursor for audio that plays elsewhere (the studio audio, which comes from the main
+    // player): it follows that player's clock, which starts with the score's first tick.
+    followAudio: function (audio) {
+      if (!this.model || !audio || this._following) { return; }
+      var self = this;
+      var ticksPerBeat = Math.max(1, Math.round((this.model.unitLength || 16) / 4));
+      var secondsPerTick = (60 / (this.model.bpm || 120)) / ticksPerBeat;
+      this._following = true;
+      function loop() {
+        if (!self._following) { return; }
+        if (audio.paused) { self._following = false; return; }
+        var tick = Math.min(audio.currentTime / secondsPerTick, self.getTotalTicks());
+        self.playheadTick = Math.floor(tick);
+        self.updatePlayhead(tick);
+        self._followTimer = requestAnimationFrame(loop);
+      }
+      loop();
+    },
+
+    stopFollowing: function () {
+      this._following = false;
+      if (this._followTimer) {
+        cancelAnimationFrame(this._followTimer);
+        this._followTimer = null;
+      }
+    },
+
     stop: function () {
+      this.stopFollowing();
       this.isPlaying = false;
       if (this.playTimer) {
         cancelAnimationFrame(this.playTimer);
@@ -2394,6 +2417,12 @@
     },
 
     seekTick: function (tick) {
+      if (typeof window !== 'undefined' && window.studioAudio && window.studioAudio.seekTick(tick)) {
+        this.playheadTick = Math.max(0, tick);
+        this.updatePlayhead();
+        this.ensurePlayheadVisible();
+        return;
+      }
       var wasPlaying = this.isPlaying;
       if (wasPlaying) {
         this.stop();
