@@ -34,6 +34,15 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## 0.0.24 (2026-10-03)
+
+### Fixed
+- **Updating from inside the app on Windows.** The installer was started inside the app's own
+  process group, so closing Yeufonic, which it needs, ended the installer with it. It is now
+  started outside it, and it checks first whether Yeufonic is running: if so it asks you to close
+  it and waits (Retry, or Cancel to leave everything as it is), instead of carrying on or
+  stopping it for you. A silent install is unchanged.
+
 ## 0.0.23 (2026-10-03)
 
 ### Added
