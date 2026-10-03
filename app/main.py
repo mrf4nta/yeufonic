@@ -966,6 +966,51 @@ def update_open(body: UpdateOpenIn) -> dict:
     return {"opened": False}
 
 
+@app.post("/api/update/download")
+async def update_download() -> dict:
+    """Start downloading the update installer directly in the background."""
+    try:
+        return await update.start_download()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        log.warning("Could not start update download: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/update/download")
+def update_download_status() -> dict:
+    """Current state of the in-app update installer download."""
+    return update.download_state()
+
+
+@app.post("/api/update/download/cancel")
+def update_download_cancel() -> dict:
+    """Cancel an ongoing update download."""
+    return update.cancel_download()
+
+
+@app.post("/api/update/launch")
+def update_launch() -> dict:
+    """Launch the downloaded installer."""
+    try:
+        launched = update.launch_installer()
+        return {"launched": launched}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/update/reveal")
+def update_reveal() -> dict:
+    """Reveal the downloaded installer in Windows Explorer."""
+    try:
+        revealed = update.reveal_installer()
+        return {"revealed": revealed}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+
 @app.get("/api/state")
 def state() -> dict:
     """Served from what the keeper last saw, so a page poll never waits on the engine."""

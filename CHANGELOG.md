@@ -34,6 +34,13 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## 0.0.21 (2026-10-03)
+
+### Added
+
+- **In-app update download with live progress.** The Windows update flow now streams the installer directly into the user's Downloads folder within the app, displaying real-time download progress, byte counters, and checksum verification. This completely avoids background browser windows opening behind maximized app windows or being intercepted by browser SmartScreen prompts.
+- **Direct installer launch and folder reveal.** Once downloaded and verified, the update modal offers direct "Run installer" and "Show in folder" actions.
+
 ## 0.0.20 (2026-10-03)
 
 ### Added

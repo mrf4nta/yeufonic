@@ -14,11 +14,16 @@ static file is not a cost to anyone.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import re
+import subprocess
 import sys
 import time
+import urllib.parse
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -240,3 +245,209 @@ async def watcher(enabled) -> None:
         except Exception as exc:                       # noqa: BLE001 - a watcher never dies
             log.warning("Update watcher: %s", exc)
         await asyncio.sleep(EVERY)
+
+
+def get_downloads_dir() -> Path:
+    """The user's Downloads folder on Windows, or ~/Downloads across platforms."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            # Known folder GUID for User Shell Folders 'Downloads' is {374DE290-123F-4565-9164-39C4925E467B}
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            ) as key:
+                val, _ = winreg.QueryValueEx(key, "{374DE290-123F-4565-9164-39C4925E467B}")
+                p = Path(os.path.expandvars(val))
+                if p.exists():
+                    return p
+        except Exception:
+            pass
+    p = Path.home() / "Downloads"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+DOWNLOAD_STATE: dict[str, Any] = {
+    "status": "idle",  # "idle" | "downloading" | "done" | "error"
+    "progress": 0.0,
+    "downloaded_bytes": 0,
+    "total_bytes": 0,
+    "filename": "",
+    "path": "",
+    "error": None,
+}
+_download_task: asyncio.Task | None = None
+
+
+def download_state() -> dict[str, Any]:
+    return dict(DOWNLOAD_STATE)
+
+
+async def start_download() -> dict[str, Any]:
+    """Start streaming the installer to the Downloads folder with SHA-256 validation."""
+    global _download_task
+    if _download_task and not _download_task.done():
+        return download_state()
+
+    installer_url = STATE.get("installer")
+    if not installer_url:
+        raise ValueError("No installer URL available for this update")
+
+    version = STATE.get("latest") or ""
+    filename = (
+        f"Yeufonic-Setup-{version}.exe"
+        if version
+        else Path(urllib.parse.urlsplit(installer_url).path).name or "Yeufonic-Setup.exe"
+    )
+    downloads = get_downloads_dir()
+    target_path = downloads / filename
+    part_path = downloads / f"{filename}.part"
+    expected_hash = str(STATE.get("sha256") or "").replace("sha256:", "").strip().lower()
+
+    # If the installer was already downloaded and matches the expected hash, reuse it
+    if target_path.is_file() and expected_hash:
+        try:
+            hasher = hashlib.sha256()
+            with target_path.open("rb") as f:
+                while chunk := f.read(1024 * 1024):
+                    hasher.update(chunk)
+            if hasher.hexdigest().lower() == expected_hash:
+                size = target_path.stat().st_size
+                DOWNLOAD_STATE.update({
+                    "status": "done",
+                    "progress": 1.0,
+                    "downloaded_bytes": size,
+                    "total_bytes": size,
+                    "filename": filename,
+                    "path": str(target_path),
+                    "error": None,
+                })
+                return download_state()
+        except Exception:
+            pass
+
+    DOWNLOAD_STATE.update({
+        "status": "downloading",
+        "progress": 0.0,
+        "downloaded_bytes": 0,
+        "total_bytes": 0,
+        "filename": filename,
+        "path": "",
+        "error": None,
+    })
+
+    async def _runner():
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(15.0, read=60.0)) as client:
+                async with client.stream("GET", installer_url, headers={"User-Agent": USER_AGENT}) as resp:
+                    resp.raise_for_status()
+                    total = int(resp.headers.get("content-length") or 0)
+                    DOWNLOAD_STATE["total_bytes"] = total
+                    DOWNLOAD_STATE["downloaded_bytes"] = 0
+                    hasher = hashlib.sha256()
+                    with part_path.open("wb") as f:
+                        async for chunk in resp.aiter_bytes(chunk_size=128 * 1024):
+                            f.write(chunk)
+                            hasher.update(chunk)
+                            DOWNLOAD_STATE["downloaded_bytes"] += len(chunk)
+                            if total > 0:
+                                DOWNLOAD_STATE["progress"] = min(1.0, DOWNLOAD_STATE["downloaded_bytes"] / total)
+
+            actual_hash = hasher.hexdigest().lower()
+            if expected_hash and actual_hash != expected_hash:
+                part_path.unlink(missing_ok=True)
+                raise ValueError(f"Checksum mismatch: expected {expected_hash}, got {actual_hash}")
+
+            if target_path.exists():
+                target_path.unlink(missing_ok=True)
+            part_path.replace(target_path)
+            DOWNLOAD_STATE.update({
+                "status": "done",
+                "progress": 1.0,
+                "path": str(target_path),
+                "error": None,
+            })
+            log.info("Downloaded and verified update installer to %s", target_path)
+        except asyncio.CancelledError:
+            part_path.unlink(missing_ok=True)
+            DOWNLOAD_STATE.update({
+                "status": "idle",
+                "progress": 0.0,
+                "error": None,
+            })
+            raise
+        except Exception as exc:
+            part_path.unlink(missing_ok=True)
+            log.warning("Update installer download failed: %s", exc)
+            DOWNLOAD_STATE.update({
+                "status": "error",
+                "error": str(exc) or exc.__class__.__name__,
+            })
+
+    _download_task = asyncio.create_task(_runner())
+    return download_state()
+
+
+def cancel_download() -> dict[str, Any]:
+    global _download_task
+    if _download_task and not _download_task.done():
+        _download_task.cancel()
+    filename = DOWNLOAD_STATE.get("filename")
+    if filename:
+        part_path = get_downloads_dir() / f"{filename}.part"
+        part_path.unlink(missing_ok=True)
+    DOWNLOAD_STATE.update({
+        "status": "idle",
+        "progress": 0.0,
+        "error": None,
+    })
+    return download_state()
+
+
+def launch_installer() -> bool:
+    """Launch the installer executable on Windows."""
+    path_str = DOWNLOAD_STATE.get("path")
+    if not path_str or not Path(path_str).is_file():
+        filename = DOWNLOAD_STATE.get("filename") or (
+            f"Yeufonic-Setup-{STATE['latest']}.exe" if STATE.get("latest") else None
+        )
+        if filename:
+            candidate = get_downloads_dir() / filename
+            if candidate.is_file():
+                path_str = str(candidate)
+    if not path_str or not Path(path_str).is_file():
+        return False
+    if sys.platform == "win32" and hasattr(os, "startfile"):
+        try:
+            os.startfile(path_str)
+            return True
+        except Exception as exc:
+            log.warning("Could not launch installer: %s", exc)
+            raise
+    return False
+
+
+def reveal_installer() -> bool:
+    """Reveal the downloaded installer in Windows Explorer."""
+    path_str = DOWNLOAD_STATE.get("path")
+    if not path_str or not Path(path_str).is_file():
+        filename = DOWNLOAD_STATE.get("filename") or (
+            f"Yeufonic-Setup-{STATE['latest']}.exe" if STATE.get("latest") else None
+        )
+        if filename:
+            candidate = get_downloads_dir() / filename
+            if candidate.is_file():
+                path_str = str(candidate)
+    if not path_str or not Path(path_str).is_file():
+        return False
+    if sys.platform == "win32":
+        try:
+            subprocess.Popen(["explorer.exe", f"/select,{path_str}"])
+            return True
+        except Exception as exc:
+            log.warning("Could not reveal installer: %s", exc)
+            raise
+    return False
+

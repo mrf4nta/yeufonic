@@ -201,3 +201,171 @@ def test_the_setting_is_offered_with_a_sensible_default(client):
             if item["key"] == "app.update_check"]
     assert spec and spec[0]["default"] == "on"
     assert [option["value"] for option in spec[0]["options"]] == ["on", "off"]
+
+
+import hashlib
+from pathlib import Path
+
+
+def test_get_downloads_dir_exists():
+    p = update.get_downloads_dir()
+    assert isinstance(p, Path)
+    assert p.is_dir()
+
+
+@pytest.mark.anyio
+async def test_start_download_and_verify_success(monkeypatch, tmp_path):
+    monkeypatch.setattr(update, "get_downloads_dir", lambda: tmp_path)
+    fake_content = b"fake-exe-installer-binary-data"
+    content_hash = hashlib.sha256(fake_content).hexdigest()
+
+    update.STATE["latest"] = "0.0.12"
+    update.STATE["installer"] = "https://example.invalid/Yeufonic-Setup-0.0.12.exe"
+    update.STATE["sha256"] = content_hash
+
+    class MockResponse:
+        def __init__(self):
+            self.headers = {"content-length": str(len(fake_content))}
+
+        def raise_for_status(self):
+            pass
+
+        async def aiter_bytes(self, chunk_size=1024):
+            yield fake_content
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    class MockClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def stream(self, method, url, headers=None):
+            return MockResponse()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", MockClient)
+
+    state = await update.start_download()
+    # Wait for background task if running
+    if update._download_task:
+        await update._download_task
+
+    final_state = update.download_state()
+    assert final_state["status"] == "done"
+    assert final_state["progress"] == 1.0
+    target_file = tmp_path / "Yeufonic-Setup-0.0.12.exe"
+    assert target_file.is_file()
+    assert target_file.read_bytes() == fake_content
+    assert not (tmp_path / "Yeufonic-Setup-0.0.12.exe.part").exists()
+
+
+@pytest.mark.anyio
+async def test_start_download_hash_mismatch(monkeypatch, tmp_path):
+    monkeypatch.setattr(update, "get_downloads_dir", lambda: tmp_path)
+    fake_content = b"fake-exe-installer-binary-data"
+
+    update.STATE["latest"] = "0.0.12"
+    update.STATE["installer"] = "https://example.invalid/Yeufonic-Setup-0.0.12.exe"
+    update.STATE["sha256"] = "wrong_hash"
+
+    class MockResponse:
+        def __init__(self):
+            self.headers = {"content-length": str(len(fake_content))}
+
+        def raise_for_status(self):
+            pass
+
+        async def aiter_bytes(self, chunk_size=1024):
+            yield fake_content
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    class MockClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def stream(self, method, url, headers=None):
+            return MockResponse()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", MockClient)
+
+    await update.start_download()
+    if update._download_task:
+        try:
+            await update._download_task
+        except Exception:
+            pass
+
+    final_state = update.download_state()
+    assert final_state["status"] == "error"
+    assert "Checksum mismatch" in str(final_state["error"])
+    assert not (tmp_path / "Yeufonic-Setup-0.0.12.exe").exists()
+    assert not (tmp_path / "Yeufonic-Setup-0.0.12.exe.part").exists()
+
+
+@pytest.mark.anyio
+async def test_start_download_reuses_existing_valid_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(update, "get_downloads_dir", lambda: tmp_path)
+    fake_content = b"already-downloaded-installer-data"
+    content_hash = hashlib.sha256(fake_content).hexdigest()
+
+    target_file = tmp_path / "Yeufonic-Setup-0.0.12.exe"
+    target_file.write_bytes(fake_content)
+
+    update.STATE["latest"] = "0.0.12"
+    update.STATE["installer"] = "https://example.invalid/Yeufonic-Setup-0.0.12.exe"
+    update.STATE["sha256"] = content_hash
+
+    state = await update.start_download()
+    assert state["status"] == "done"
+    assert state["progress"] == 1.0
+    assert state["path"] == str(target_file)
+
+
+def test_cancel_download_cleans_up(monkeypatch, tmp_path):
+    monkeypatch.setattr(update, "get_downloads_dir", lambda: tmp_path)
+    part_file = tmp_path / "Yeufonic-Setup-0.0.12.exe.part"
+    part_file.write_bytes(b"partial-data")
+    update.DOWNLOAD_STATE["filename"] = "Yeufonic-Setup-0.0.12.exe"
+    update.DOWNLOAD_STATE["status"] = "downloading"
+
+    res = update.cancel_download()
+    assert res["status"] == "idle"
+    assert not part_file.exists()
+
+
+def test_download_api_endpoints(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(update, "get_downloads_dir", lambda: tmp_path)
+    res = client.get("/api/update/download").json()
+    assert "status" in res
+
+    cancel_res = client.post("/api/update/download/cancel").json()
+    assert cancel_res["status"] == "idle"
+
+    launch_res = client.post("/api/update/launch").json()
+    assert "launched" in launch_res
+
+    reveal_res = client.post("/api/update/reveal").json()
+    assert "revealed" in reveal_res
+

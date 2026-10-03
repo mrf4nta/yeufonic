@@ -3761,6 +3761,261 @@ function copyForTerminal(text) {
   return copied ? Promise.resolve() : Promise.reject(new Error('the browser refused the copy'));
 }
 
+var UPDATE_MODAL_POLL = null;
+
+function formatUpdateBytes(bytes) {
+  if (!bytes || bytes <= 0) { return '0 B'; }
+  if (bytes < 1024 * 1024) { return (bytes / 1024).toFixed(1) + ' KB'; }
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function closeUpdateModal() {
+  if (UPDATE_MODAL_POLL) {
+    clearInterval(UPDATE_MODAL_POLL);
+    UPDATE_MODAL_POLL = null;
+  }
+  var modal = $('update-modal');
+  if (modal) { modal.classList.add('hidden'); }
+}
+
+function openUpdateModal(info) {
+  info = info || State.update || {};
+  var modal = $('update-modal');
+  if (!modal) { return; }
+
+  var titleEl = $('update-modal-title');
+  var closeBtn = $('update-modal-close');
+  var bodyEl = $('update-modal-body');
+  var actionsEl = $('update-modal-actions');
+  var version = info.latest || '';
+
+  closeBtn.onclick = function () {
+    closeUpdateModal();
+  };
+
+  function renderPrompt() {
+    titleEl.textContent = 'Update to Yeufonic ' + version;
+    closeBtn.textContent = 'Cancel';
+    closeBtn.onclick = closeUpdateModal;
+
+    bodyEl.innerHTML =
+      '<p class="update-modal-desc">A newer version of Yeufonic is available (<strong>v' + (info.current || '0.0.0') + '</strong> \u2192 <strong>v' + version + '</strong>).</p>' +
+      '<p class="update-modal-desc" style="margin-top: 8px;">Yeufonic will download the installer directly to your <strong>Downloads</strong> folder and verify it.</p>' +
+      '<p class="muted small" style="margin-top: 8px;">Your library, settings, LoRAs and models will all be kept.</p>';
+
+    actionsEl.innerHTML = '';
+
+    if (info.notes) {
+      var notesBtn = document.createElement('button');
+      notesBtn.type = 'button';
+      notesBtn.className = 'ghost';
+      notesBtn.textContent = 'Release notes';
+      notesBtn.onclick = function () { openExternal(info.notes); };
+      actionsEl.appendChild(notesBtn);
+    }
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'ghost';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = closeUpdateModal;
+    actionsEl.appendChild(cancelBtn);
+
+    var dlBtn = document.createElement('button');
+    dlBtn.type = 'button';
+    dlBtn.className = 'primary';
+    dlBtn.textContent = 'Download update';
+    dlBtn.onclick = function () { startDownloadFlow(); };
+    actionsEl.appendChild(dlBtn);
+  }
+
+  function renderDownloading(dlState) {
+    titleEl.textContent = 'Downloading Yeufonic ' + version;
+    closeBtn.textContent = 'Cancel';
+    closeBtn.onclick = function () {
+      api('/api/update/download/cancel', { method: 'POST' }).catch(function () {});
+      closeUpdateModal();
+    };
+
+    var progress = Math.min(100, Math.round((dlState.progress || 0) * 100));
+    var bytesInfo = formatUpdateBytes(dlState.downloaded_bytes);
+    if (dlState.total_bytes > 0) {
+      bytesInfo += ' / ' + formatUpdateBytes(dlState.total_bytes);
+    }
+
+    bodyEl.innerHTML =
+      '<p class="update-modal-desc">Downloading <code>' + (dlState.filename || ('Yeufonic-Setup-' + version + '.exe')) + '</code>...</p>' +
+      '<div class="update-progress-wrap">' +
+        '<div class="update-progress-bar">' +
+          '<div class="update-progress-fill" style="width: ' + progress + '%;"></div>' +
+        '</div>' +
+        '<div class="update-progress-info">' +
+          '<span>' + bytesInfo + '</span>' +
+          '<span>' + progress + '%</span>' +
+        '</div>' +
+      '</div>';
+
+    actionsEl.innerHTML = '';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'ghost';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = function () {
+      api('/api/update/download/cancel', { method: 'POST' }).catch(function () {});
+      closeUpdateModal();
+    };
+    actionsEl.appendChild(cancelBtn);
+  }
+
+  function renderDone(dlState) {
+    if (UPDATE_MODAL_POLL) {
+      clearInterval(UPDATE_MODAL_POLL);
+      UPDATE_MODAL_POLL = null;
+    }
+    titleEl.textContent = 'Update ready to install';
+    closeBtn.textContent = '✕';
+    closeBtn.onclick = closeUpdateModal;
+
+    var fname = dlState.filename || ('Yeufonic-Setup-' + version + '.exe');
+    bodyEl.innerHTML =
+      '<div class="update-success-badge">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
+        '<span>Download complete &amp; verified</span>' +
+      '</div>' +
+      '<p class="update-modal-desc"><strong>' + fname + '</strong> has been saved to your <strong>Downloads</strong> folder.</p>' +
+      '<p class="muted small" style="margin-top: 8px;">Click <strong>Run installer</strong> to start updating now. Yeufonic will close automatically.</p>';
+
+    actionsEl.innerHTML = '';
+
+    var revealBtn = document.createElement('button');
+    revealBtn.type = 'button';
+    revealBtn.className = 'ghost';
+    revealBtn.textContent = 'Show in folder';
+    revealBtn.onclick = function () {
+      api('/api/update/reveal', { method: 'POST' }).catch(function (err) {
+        statusLine('Could not open folder: ' + (err.message || err), 'bad');
+      });
+    };
+    actionsEl.appendChild(revealBtn);
+
+    var closeActionBtn = document.createElement('button');
+    closeActionBtn.type = 'button';
+    closeActionBtn.className = 'ghost';
+    closeActionBtn.textContent = 'Close';
+    closeActionBtn.onclick = closeUpdateModal;
+    actionsEl.appendChild(closeActionBtn);
+
+    var installBtn = document.createElement('button');
+    installBtn.type = 'button';
+    installBtn.className = 'primary';
+    installBtn.textContent = 'Run installer';
+    installBtn.onclick = async function () {
+      installBtn.disabled = true;
+      installBtn.textContent = 'Starting installer…';
+      try {
+        await api('/api/update/launch', { method: 'POST' });
+        bodyEl.innerHTML =
+          '<p class="update-modal-desc">Starting installer... You may close this Yeufonic window.</p>';
+      } catch (err) {
+        installBtn.disabled = false;
+        installBtn.textContent = 'Run installer';
+        statusLine('Could not launch installer: ' + (err.message || err), 'bad');
+      }
+    };
+    actionsEl.appendChild(installBtn);
+  }
+
+  function renderError(msg) {
+    if (UPDATE_MODAL_POLL) {
+      clearInterval(UPDATE_MODAL_POLL);
+      UPDATE_MODAL_POLL = null;
+    }
+    titleEl.textContent = 'Download failed';
+    closeBtn.textContent = '✕';
+    closeBtn.onclick = closeUpdateModal;
+
+    bodyEl.innerHTML =
+      '<p class="update-error-text">Could not complete download:</p>' +
+      '<p class="muted small" style="margin-top: 6px; word-break: break-word;">' + (msg || 'Unknown error occurred.') + '</p>' +
+      '<p class="update-modal-desc" style="margin-top: 10px;">You can retry, or download the installer directly via your browser.</p>';
+
+    actionsEl.innerHTML = '';
+
+    var browserBtn = document.createElement('button');
+    browserBtn.type = 'button';
+    browserBtn.className = 'ghost';
+    browserBtn.textContent = 'Download in browser';
+    browserBtn.onclick = function () {
+      openExternal(info.installer || info.notes);
+      closeUpdateModal();
+    };
+    actionsEl.appendChild(browserBtn);
+
+    var closeActionBtn = document.createElement('button');
+    closeActionBtn.type = 'button';
+    closeActionBtn.className = 'ghost';
+    closeActionBtn.textContent = 'Close';
+    closeActionBtn.onclick = closeUpdateModal;
+    actionsEl.appendChild(closeActionBtn);
+
+    var retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'primary';
+    retryBtn.textContent = 'Try again';
+    retryBtn.onclick = function () { startDownloadFlow(); };
+    actionsEl.appendChild(retryBtn);
+  }
+
+  async function pollDownload() {
+    try {
+      var dl = await api('/api/update/download');
+      if (!dl) { return; }
+      if (dl.status === 'downloading') {
+        renderDownloading(dl);
+      } else if (dl.status === 'done') {
+        renderDone(dl);
+      } else if (dl.status === 'error') {
+        renderError(dl.error);
+      }
+    } catch (err) {
+      // transient network error while polling local backend
+    }
+  }
+
+  async function startDownloadFlow() {
+    renderDownloading({ progress: 0, downloaded_bytes: 0, total_bytes: 0, filename: 'Yeufonic-Setup-' + version + '.exe' });
+    try {
+      var res = await api('/api/update/download', { method: 'POST' });
+      if (res && res.status === 'done') {
+        renderDone(res);
+        return;
+      }
+    } catch (err) {
+      renderError(err.message || 'Could not initiate download.');
+      return;
+    }
+    if (UPDATE_MODAL_POLL) { clearInterval(UPDATE_MODAL_POLL); }
+    UPDATE_MODAL_POLL = setInterval(pollDownload, 400);
+  }
+
+  modal.classList.remove('hidden');
+
+  // Check current status before deciding view:
+  api('/api/update/download').then(function (dl) {
+    if (dl && dl.status === 'downloading') {
+      renderDownloading(dl);
+      if (UPDATE_MODAL_POLL) { clearInterval(UPDATE_MODAL_POLL); }
+      UPDATE_MODAL_POLL = setInterval(pollDownload, 400);
+    } else if (dl && dl.status === 'done' && dl.filename && dl.filename.indexOf(version) !== -1) {
+      renderDone(dl);
+    } else {
+      renderPrompt();
+    }
+  }).catch(function () {
+    renderPrompt();
+  });
+}
+
 /* Acting on it: a Windows install runs the installer, and a Docker copy gets the commands
    to paste.  Neither updates itself, so this is as far as the app can take anyone. */
 async function actOnUpdate() {
@@ -3783,19 +4038,9 @@ async function actOnUpdate() {
   if (!url) { return; }
 
   if (info.install === 'windows') {
-    var version = info.latest || '';
-    var proceed = await confirmModal({
-      title: 'Update to Yeufonic ' + version,
-      message: 'The installer will download to your Downloads folder.\n\n' +
-               'To complete the update:\n' +
-               '1. Download the installer\n' +
-               '2. Close this Yeufonic window\n' +
-               '3. Run Yeufonic-Setup-' + version + '.exe from your Downloads folder\n\n' +
-               'Your library, settings, LoRAs and models will all be kept.',
-      confirmText: 'Download installer',
-      cancelText: 'Cancel'
-    });
-    if (!proceed) { return; }
+    openUpdateModal(info);
+    seenUpdate();
+    return;
   }
 
   openExternal(url);
