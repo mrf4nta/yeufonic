@@ -415,6 +415,7 @@ async function pollState() {
     State.stemsOptions = data.stems || State.stemsOptions || {};
     if (data.settings) { adoptSettings(data.settings); }
     if (data.version) { $('app-version').textContent = 'v' + data.version; }
+    State.about = { version: data.version || '', build: data.build || '' };
     paintUpdate(data.update);
     paintOptions();
     paintJob(data.current, data.queue || [], data.options);
@@ -4745,6 +4746,40 @@ function openBrandMenu() {
   if (menu) { menu.classList.remove('hidden'); }
   var brand = $('brand');
   if (brand) { brand.setAttribute('aria-expanded', 'true'); }
+}
+
+/* About: who made it, how it is licensed, and which build this is.  The same version number can
+   be rebuilt, so the build (a commit and a date) is what pins a copy down. */
+function openAbout() {
+  var about = State.about || {};
+  var line = about.version ? 'Version ' + about.version : '';
+  if (about.build) { line += (line ? ' \u00b7 build ' : 'Build ') + about.build; }
+  $('about-build').textContent = line;
+  $('about-modal').classList.remove('hidden');
+}
+
+function closeAbout() {
+  $('about-modal').classList.add('hidden');
+}
+
+function wireAbout() {
+  var item = $('menu-about');
+  if (item) {
+    item.addEventListener('click', function (event) {
+      event.stopPropagation();
+      closeBrandMenu();
+      openAbout();
+    });
+  }
+  var modal = $('about-modal');
+  if (!modal) { return; }
+  if ($('about-close')) { $('about-close').addEventListener('click', closeAbout); }
+  modal.addEventListener('click', function (event) {
+    // Links open in the system's browser, as the update links do, not inside the app's window.
+    var link = event.target.closest('a[data-external]');
+    if (link) { event.preventDefault(); openExternal(link.href); return; }
+    if (backdropClick(event, modal)) { closeAbout(); }
+  });
 }
 
 function closeBrandMenu() {
@@ -11161,6 +11196,7 @@ function wire() {
       openIdentities();
     });
   }
+  wireAbout();
   var menuSettings = $('menu-settings');
   if (menuSettings) {
     menuSettings.addEventListener('click', function (event) {
@@ -11374,6 +11410,7 @@ function wire() {
     if (event.key === 'Escape' && $('lora-picker-menu') && !$('lora-picker-menu').classList.contains('hidden')) { closeLoraPicker(); return; }
     if (event.key === 'Escape' && $('style-picker-menu') && !$('style-picker-menu').classList.contains('hidden')) { closeStylePicker(); return; }
     if (event.key === 'Escape' && $('brand-menu') && !$('brand-menu').classList.contains('hidden')) { closeBrandMenu(); return; }
+    if (event.key === 'Escape' && $('about-modal') && !$('about-modal').classList.contains('hidden')) { closeAbout(); return; }
     if (event.key === 'Escape' && !$('sung-modal').classList.contains('hidden')) { closeSungWarning(); return; }
     if (event.key === 'Escape' && !$('move-modal').classList.contains('hidden')) { closeMoveModal(); return; }
     var idModal = $('identities-modal') || $('personas-modal');

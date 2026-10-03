@@ -22,6 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fluidsyn
 # With it above them, a version bump invalidated both pip layers and cost three
 # minutes of re-downloading torch and demucs for a one character change.
 COPY VERSION ./VERSION
+# Which build this is, for the About window: BUILD=$(git rev-parse --short HEAD) docker compose build app
+ARG BUILD=""
+RUN echo "$BUILD" > /app/BUILD
 COPY app ./app
 
 # The image runs as a non-root user, so the code must be world readable.  Files

@@ -53,6 +53,10 @@
         <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><polyline points="21 3 21 9 15 9"/></svg>
         <span id="menu-update-text">Check for updates</span>
       </button>
+      <button id="menu-about" class="menu-item" role="menuitem">
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>About</span>
+      </button>
     </div>
   </div>
   <div class="topbar-right">
@@ -520,6 +524,29 @@
     <div id="logs-console" class="logs-console" tabindex="0">
       <div class="logs-empty">No logs available.</div>
     </div>
+  </div>
+</div>
+
+<div id="about-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="about-title">
+  <div class="modal-box narrow about">
+    <div class="modal-head">
+      <span></span>
+      <button id="about-close" class="ghost" title="Close (Esc)">Close</button>
+    </div>
+    <div class="about-id">
+      <img class="about-logo" src="/static/logo.svg" alt="">
+      <strong id="about-title">Yeufonic</strong>
+      <span id="about-build" class="muted small"></span>
+    </div>
+    <p>Copyright &copy; 2026 Paul Shields. All rights reserved.</p>
+    <p>The code is licensed for free personal, non-commercial use under the
+      <a href="https://github.com/yeufonic/yeufonic/blob/main/LICENSE.md" data-external>Yeufonic Software License Agreement</a>.
+      For commercial licensing, contact <a href="mailto:paul@paulshields.com">paul@paulshields.com</a>.</p>
+    <p>The AI models run by this software are not part of this repository; they are downloaded directly from their
+      respective creators and are governed by their own individual licenses and terms of use (summarized in
+      <a href="https://github.com/yeufonic/yeufonic/blob/main/THIRD_PARTY_NOTICES.md" data-external>THIRD_PARTY_NOTICES.md</a>).
+      Users are solely responsible for reviewing the upstream model terms and ensuring that their use and any
+      distribution or monetization of generated audio complies with those licenses.</p>
   </div>
 </div>
 

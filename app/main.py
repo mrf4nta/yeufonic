@@ -1110,6 +1110,7 @@ def state() -> dict:
 
     return {
         "version": config.VERSION,
+        "build": config.BUILD,
         # Whether a newer release is out, and what to do about it: a background task keeps
         # this current, and this route only ever reads it.
         "update": update.state(),

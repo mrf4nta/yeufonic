@@ -23,6 +23,11 @@ mkdir -p "$STAGE/studio/engine-nodes"
 tar -C "$ROOT" --exclude='__pycache__' --exclude='static/__*' -cf - app | tar -C "$STAGE/studio" -xf -
 cp "$ROOT/requirements.txt" "$STAGE/studio/"
 echo "$VERSION" > "$STAGE/studio/VERSION"
+# Which build of this version it is, for the About window: the commit, whether the tree had
+# uncommitted changes, and when it was built.
+BUILD_ID=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)
+[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ] || BUILD_ID="$BUILD_ID+"
+echo "$BUILD_ID, $(date -u +'%-d %b %Y %H:%M UTC')${TEST_BUILD:+, test build}" > "$STAGE/studio/BUILD"
 tar -C "$ROOT/engine/custom_nodes" --exclude='__pycache__' -cf - yue2_harmony | tar -C "$STAGE/studio/engine-nodes" -xf -
 cp "$ROOT/windows/setup.ps1" "$ROOT/windows/launcher.py" "$ROOT/windows/yeufonic.ico" "$ROOT/windows/installer-panel.bmp" \
    "$ROOT/windows/terms.txt" "$ROOT/LICENSE.md" "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/"

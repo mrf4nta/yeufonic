@@ -54,6 +54,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        BUILD: ${BUILD:-}
     image: yeufonic-app:latest
     container_name: yeufonic-app
     restart: unless-stopped

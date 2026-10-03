@@ -16,6 +16,15 @@ try:
 except OSError:
     VERSION = "unknown"
 
+# Which build of this version is running: a short commit id and the date, written beside VERSION
+# when an image or an installer is built.  The same version number can be rebuilt, so the number
+# alone does not say.  Empty when the copy was not built with one.
+BUILD_FILE = Path(os.environ.get("BUILD_FILE", "/app/BUILD"))
+try:
+    BUILD = BUILD_FILE.read_text(encoding="utf-8").strip()
+except OSError:
+    BUILD = ""
+
 # A test build of the Windows installer sets this (through settings.ini) to a manifest that only
 # the tester knows, so an update can be tried before it is released.  When it is set, nothing
 # else is asked, GitHub included.  Public builds never set it.

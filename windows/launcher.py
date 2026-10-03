@@ -621,6 +621,7 @@ class Launcher:
             "DATA_DIR": str(data),
             "MODELS_DIR": str(COMFY / "models"),
             "VERSION_FILE": str(HERE / "studio" / "VERSION"),
+            "BUILD_FILE": str(HERE / "studio" / "BUILD"),
             "ENGINE_URL": f"http://127.0.0.1:{self.engine_port}",
             "ENGINE_INPUT_DIR": str(COMFY / "input"),
             "ENGINE_OUTPUT_DIR": str(COMFY / "output"),
