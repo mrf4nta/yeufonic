@@ -80,6 +80,7 @@ Var WelcomeText
 Var InstHeader
 Var InstSubtext
 Var FinishText
+Var ModelRadio     ; the model size section that is ticked (SecFull or SecSmall)
 Var LyricsText      ; the Gemma option's description, which says when it is already here
 
 !define MUI_WELCOMEPAGE_TITLE "$WelcomeTitle"
@@ -280,12 +281,33 @@ LangString DESC_Lyrics ${LANG_ENGLISH} "Gemma 4, for lyric drafts and song analy
   !insertmacro MUI_DESCRIPTION_TEXT ${SecLyrics} $LyricsText
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
-; The two sizes of the model are radio buttons: ticking one unticks the other.
+; The two sizes of the model are radio buttons: ticking one unticks the other, and one is always ticked.
+; Written out here rather than with the radio-button macros, which take a variable holding the previous
+; choice and untick *that section first*: with it unset they unticked the core section, and nothing installed.
+; This touches the two model sections only. $ModelRadio is the one that was ticked before the click.
 Function .onSelChange
-  !insertmacro StartRadioButtons $1
-    !insertmacro RadioButton ${SecFull}
-    !insertmacro RadioButton ${SecSmall}
-  !insertmacro EndRadioButtons
+  SectionGetFlags ${SecFull} $0
+  SectionGetFlags ${SecSmall} $1
+  IntOp $0 $0 & ${SF_SELECTED}
+  IntOp $1 $1 & ${SF_SELECTED}
+  ${If} $0 != 0
+  ${AndIf} $1 != 0
+    ; Both are ticked: the one that was not the choice before is the new choice.
+    ${If} $ModelRadio == ${SecFull}
+      !insertmacro UnselectSection ${SecFull}
+      StrCpy $ModelRadio ${SecSmall}
+    ${Else}
+      !insertmacro UnselectSection ${SecSmall}
+      StrCpy $ModelRadio ${SecFull}
+    ${EndIf}
+  ${ElseIf} $0 != 0
+    StrCpy $ModelRadio ${SecFull}
+  ${ElseIf} $1 != 0
+    StrCpy $ModelRadio ${SecSmall}
+  ${Else}
+    ; Neither: unticking the one that was ticked, or the group's own box. A size is always chosen.
+    !insertmacro SelectSection $ModelRadio
+  ${EndIf}
 FunctionEnd
 
 ; After the sections, so their names can be used here.
@@ -394,6 +416,14 @@ Function .onInit
     StrCpy $InstHeader "Installing ${APPNAME}"
     StrCpy $InstSubtext "The setup window shows its progress, and may be behind this one."
     StrCpy $FinishText "${APPNAME} has been installed on this PC."
+  ${EndIf}
+  ; Which model size is ticked to begin with, for .onSelChange.
+  SectionGetFlags ${SecSmall} $0
+  IntOp $0 $0 & ${SF_SELECTED}
+  ${If} $0 != 0
+    StrCpy $ModelRadio ${SecSmall}
+  ${Else}
+    StrCpy $ModelRadio ${SecFull}
   ${EndIf}
 FunctionEnd
 
