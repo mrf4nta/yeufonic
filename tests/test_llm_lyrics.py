@@ -38,7 +38,7 @@ def test_a_line_whisper_missed_is_placed_between_its_neighbours():
 
 def test_words_that_are_not_this_recording_are_refused():
     """A famous song written out from memory barely matches what was sung."""
-    other = ["Yesterday all my troubles seemed so far away", "Now it looks as though they're here to stay"]
+    other = ["The morning light came over the hill", "And all the day was warm and still"]
     assert identities.time_lines(WHISPER, other) is None
 
 
@@ -109,8 +109,8 @@ def test_words_that_do_not_match_whisper_still_win_and_are_spread_over_the_song(
     """Whisper can miss a vocal buried in a mix.  A reply that looks like lyrics is kept even when
     nothing in it matches what Whisper heard: it has no times to borrow, so it is laid out between
     the first and last line Whisper found."""
-    other = ["Yesterday all my troubles seemed so far away", "Now it looks as though they are here to stay",
-             "Oh I believe in yesterday"]
+    other = ["The morning light came over the hill", "And all the day was warm and still",
+             "Oh I remember the morning"]
 
     async def heard(vocal):
         return list(other)

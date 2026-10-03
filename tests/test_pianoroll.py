@@ -1429,7 +1429,7 @@ def test_parse_and_serialize_chords_in_abc():
 def test_extract_lyrics_sections_with_markdown_headers():
     """Verify markdown headers like **[Verse 1]** and ## Chorus are extracted as section tags, not lyric words."""
     js = """
-    const text = '**[Verse 1]**\\nYesterday, all my troubles seemed so far away\\n[Verse 2]\\nSuddenly, I\\x27m not half the man I used to be\\n## Chorus\\nWhy she had to go';
+    const text = '**[Verse 1]**\\nMorning light, all my worries seemed far away\\n[Verse 2]\\nSlowly, I\\x27m not the one I used to be\\n## Chorus\\nWhy the road had to end';
     const sections = extractLyricsSections(text);
     console.log(JSON.stringify({ sections }));
     """
@@ -1437,11 +1437,11 @@ def test_extract_lyrics_sections_with_markdown_headers():
     sections = res["sections"]
     assert len(sections) == 3
     assert sections[0]["name"] == "Verse 1"
-    assert sections[0]["lines"] == ["Yesterday, all my troubles seemed so far away"]
+    assert sections[0]["lines"] == ["Morning light, all my worries seemed far away"]
     assert sections[1]["name"] == "Verse 2"
-    assert sections[1]["lines"] == ["Suddenly, I'm not half the man I used to be"]
+    assert sections[1]["lines"] == ["Slowly, I'm not the one I used to be"]
     assert sections[2]["name"] == "Chorus"
-    assert sections[2]["lines"] == ["Why she had to go"]
+    assert sections[2]["lines"] == ["Why the road had to end"]
 
 
 
