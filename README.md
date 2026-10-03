@@ -308,7 +308,7 @@ for Docker and delete the first. The Settings page doesn't switch it, and **Abou
 | Download | 7.8 GB | 4.0 GB |
 | Video memory a render adds | about 8 GB | about 5 GB |
 | LoRA training | yes | no: training uses the full-quality model |
-| Sound | the model as released | a compressed copy; it can differ in small ways |
+| Sound | the model as released | a compressed copy; in our listening it sounded fine, with and without the production polish decoder |
 
 **What to expect.** We timed one short song on one PC: an RTX 4070 Ti SUPER (16 GB) on a PCIe 3.0 x16
 link with 64 GB of RAM, using the Windows install's engine (CUDA 13.0). To see what smaller cards would

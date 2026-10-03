@@ -263,7 +263,7 @@ SectionEnd
 
 LangString DESC_Core ${LANG_ENGLISH} "The app, the engine (ComfyUI), and the YuE2 models."
 LangString DESC_Full ${LANG_ENGLISH} "The full-quality YuE2 model (BF16), 7.8 GB. Recommended. It needs a graphics card with plenty of memory to run at full speed, and it is the one that LoRA training uses."
-LangString DESC_Small ${LANG_ENGLISH} "A smaller YuE2 model (INT8), 4.0 GB, for graphics cards with little memory (6 GB or less). It is the choice to try if the full one is too slow on this PC, and it can sound a little different. LoRA training needs the full-quality model. Only one size is installed: run this installer again to change."
+LangString DESC_Small ${LANG_ENGLISH} "A smaller YuE2 model (INT8), 4.0 GB, for graphics cards with little memory (6 GB or less). It is the choice to try if the full one is too slow on this PC, and it sounded fine in our listening. LoRA training needs the full-quality model. Only one size is installed: run this installer again to change."
 LangString DESC_Lyrics ${LANG_ENGLISH} "Gemma 4, for lyric drafts and song analysis on this PC. Leave it out if you intend to configure an external LLM. This will save an 8 GB download."
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecCore} $(DESC_Core)
