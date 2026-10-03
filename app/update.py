@@ -215,12 +215,9 @@ def mark_seen(version: str | None = None) -> dict:
 
 
 def restore() -> None:
-    """Pick up where the last run left off: the hour of the last check, and the answer it
-    gave, so a restart neither asks again at once nor forgets what it was offering."""
-    try:
-        STATE["checked"] = float(db.get_setting(KEY_CHECKED) or 0)
-    except (TypeError, ValueError):
-        STATE["checked"] = 0.0
+    """Pick up where the last run left off: what was seen and the last answer it gave,
+    so a restart remembers the notice while checking for a newer release on startup."""
+    STATE["checked"] = 0.0
     try:
         remembered = json.loads(db.get_setting(KEY_ANSWER) or "{}")
     except ValueError:

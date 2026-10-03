@@ -129,6 +129,28 @@ async def test_the_check_waits_between_times_and_the_manual_one_does_not(monkeyp
 
 
 @pytest.mark.anyio
+async def test_startup_checks_fresh_after_restore(monkeypatch):
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        return MANIFEST
+    monkeypatch.setattr(update, "_fetch_json", fetch)
+
+    await update.check(force=False)
+    assert len(asked) == 1
+
+    # App restarts: restore() is called
+    monkeypatch.setattr(update, "STATE", update._initial())
+    update.restore()
+
+    # The watcher runs check(force=False) on startup
+    await update.check(force=False)
+    assert len(asked) == 2
+
+
+
+@pytest.mark.anyio
 async def test_the_setting_stops_the_automatic_check_only(monkeypatch):
     asked = []
 
