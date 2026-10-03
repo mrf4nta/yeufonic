@@ -1066,6 +1066,222 @@ function withStyleLora(data) {
   return data;
 }
 
+/* ============================================== advanced take settings (#32) */
+var ADVANCED_DEFAULTS = {
+  sampler_steps: 32,
+  avoid: '',
+  target_key: '',
+  target_bpm: null,
+  max_abc_tokens: 8192,
+  chord_hold_limit: 8,
+  chord_outside_bonus: 0.0,
+  target_lufs: -14.0,
+  fade_out_seconds: 3.0
+};
+
+function readAdvancedSettings() {
+  if (!$('adv-sampler-steps')) { return Object.assign({}, ADVANCED_DEFAULTS); }
+  var steps = parseInt($('adv-sampler-steps').value, 10);
+  if (isNaN(steps) || steps < 16 || steps > 64) { steps = ADVANCED_DEFAULTS.sampler_steps; }
+  var avoid = ($('adv-avoid').value || '').trim();
+  var targetKey = ($('adv-target-key').value || '').trim();
+  var bpmRaw = parseInt($('adv-target-bpm').value, 10);
+  var targetBpm = (!isNaN(bpmRaw) && bpmRaw >= 20 && bpmRaw <= 400) ? bpmRaw : null;
+  var tokens = parseInt($('adv-max-abc-tokens').value, 10);
+  if (isNaN(tokens) || tokens < 512 || tokens > 8192) { tokens = ADVANCED_DEFAULTS.max_abc_tokens; }
+  var hold = parseInt($('adv-chord-hold-limit').value, 10);
+  if (isNaN(hold) || hold < 1 || hold > 32) { hold = ADVANCED_DEFAULTS.chord_hold_limit; }
+  var outside = parseFloat($('adv-chord-outside-bonus').value);
+  if (isNaN(outside) || outside < 0.0 || outside > 10.0) { outside = ADVANCED_DEFAULTS.chord_outside_bonus; }
+  var lufs = parseFloat($('adv-target-lufs').value);
+  if (isNaN(lufs) || lufs < -30.0 || lufs > -4.0) { lufs = ADVANCED_DEFAULTS.target_lufs; }
+  var fade = parseFloat($('adv-fade-out-seconds').value);
+  if (isNaN(fade) || fade < 0.5 || fade > 15.0) { fade = ADVANCED_DEFAULTS.fade_out_seconds; }
+  return {
+    sampler_steps: steps,
+    avoid: avoid,
+    target_key: targetKey,
+    target_bpm: targetBpm,
+    max_abc_tokens: tokens,
+    chord_hold_limit: hold,
+    chord_outside_bonus: outside,
+    target_lufs: lufs,
+    fade_out_seconds: fade
+  };
+}
+
+function isAdvancedDirty() {
+  var cur = readAdvancedSettings();
+  return cur.sampler_steps !== ADVANCED_DEFAULTS.sampler_steps ||
+    cur.avoid !== ADVANCED_DEFAULTS.avoid ||
+    cur.target_key !== ADVANCED_DEFAULTS.target_key ||
+    cur.target_bpm !== ADVANCED_DEFAULTS.target_bpm ||
+    cur.max_abc_tokens !== ADVANCED_DEFAULTS.max_abc_tokens ||
+    cur.chord_hold_limit !== ADVANCED_DEFAULTS.chord_hold_limit ||
+    Math.abs(cur.chord_outside_bonus - ADVANCED_DEFAULTS.chord_outside_bonus) > 0.001 ||
+    Math.abs(cur.target_lufs - ADVANCED_DEFAULTS.target_lufs) > 0.001 ||
+    Math.abs(cur.fade_out_seconds - ADVANCED_DEFAULTS.fade_out_seconds) > 0.001;
+}
+
+function updateAdvancedButtonState() {
+  var btn = $('btn-advanced-toggle');
+  var dot = $('adv-active-dot');
+  var resetBtn = $('adv-reset-btn');
+  if (!btn) { return; }
+  var dirty = isAdvancedDirty();
+  if (dirty) {
+    btn.classList.add('is-active');
+    if (dot) { dot.classList.remove('hidden'); }
+    btn.title = 'Advanced take settings (custom values active)';
+    if (resetBtn) { resetBtn.disabled = false; }
+  } else {
+    btn.classList.remove('is-active');
+    if (dot) { dot.classList.add('hidden'); }
+    btn.title = 'Advanced take settings (all defaults)';
+    if (resetBtn) { resetBtn.disabled = true; }
+  }
+}
+
+function writeAdvancedSettings(data) {
+  if (!$('adv-sampler-steps')) { return; }
+  data = data || {};
+  var steps = data.sampler_steps != null ? data.sampler_steps : ADVANCED_DEFAULTS.sampler_steps;
+  $('adv-sampler-steps').value = steps;
+  if ($('adv-sampler-steps-range')) { $('adv-sampler-steps-range').value = steps; }
+  $('adv-avoid').value = data.avoid || '';
+  $('adv-target-key').value = data.target_key || '';
+  $('adv-target-bpm').value = data.target_bpm != null ? data.target_bpm : '';
+  $('adv-max-abc-tokens').value = data.max_abc_tokens != null ? data.max_abc_tokens : ADVANCED_DEFAULTS.max_abc_tokens;
+  $('adv-chord-hold-limit').value = data.chord_hold_limit != null ? data.chord_hold_limit : ADVANCED_DEFAULTS.chord_hold_limit;
+  $('adv-chord-outside-bonus').value = data.chord_outside_bonus != null ? data.chord_outside_bonus : ADVANCED_DEFAULTS.chord_outside_bonus;
+  $('adv-target-lufs').value = data.target_lufs != null ? data.target_lufs : ADVANCED_DEFAULTS.target_lufs;
+  $('adv-fade-out-seconds').value = data.fade_out_seconds != null ? data.fade_out_seconds : ADVANCED_DEFAULTS.fade_out_seconds;
+  updateAdvancedButtonState();
+}
+
+function resetAdvancedSettings() {
+  writeAdvancedSettings(ADVANCED_DEFAULTS);
+  saveForm();
+}
+
+function loadAdvancedTakeSettings(take) {
+  if (!take) {
+    writeAdvancedSettings(ADVANCED_DEFAULTS);
+    return;
+  }
+  writeAdvancedSettings({
+    sampler_steps: take.sampler_steps != null ? take.sampler_steps : ADVANCED_DEFAULTS.sampler_steps,
+    avoid: take.avoid || '',
+    target_key: take.target_key || '',
+    target_bpm: take.target_bpm != null ? take.target_bpm : null,
+    max_abc_tokens: take.max_abc_tokens != null ? take.max_abc_tokens : ADVANCED_DEFAULTS.max_abc_tokens,
+    chord_hold_limit: take.chord_hold_limit != null ? take.chord_hold_limit : ADVANCED_DEFAULTS.chord_hold_limit,
+    chord_outside_bonus: take.chord_outside_bonus != null ? take.chord_outside_bonus : ADVANCED_DEFAULTS.chord_outside_bonus,
+    target_lufs: take.target_lufs != null ? take.target_lufs : ADVANCED_DEFAULTS.target_lufs,
+    fade_out_seconds: take.fade_out_seconds != null ? take.fade_out_seconds : ADVANCED_DEFAULTS.fade_out_seconds
+  });
+}
+
+function withAdvancedSettings(body) {
+  var adv = readAdvancedSettings();
+  body.sampler_steps = adv.sampler_steps;
+  body.avoid = adv.avoid || null;
+  body.target_key = adv.target_key || null;
+  body.target_bpm = adv.target_bpm != null ? adv.target_bpm : null;
+  body.max_abc_tokens = adv.max_abc_tokens;
+  body.chord_hold_limit = adv.chord_hold_limit;
+  body.chord_outside_bonus = adv.chord_outside_bonus;
+  body.target_lufs = Math.abs(adv.target_lufs - ADVANCED_DEFAULTS.target_lufs) > 0.001 ? adv.target_lufs : null;
+  body.fade_out_seconds = adv.fade_out_seconds;
+  return body;
+}
+
+function openAdvancedModal() {
+  if ($('advanced-take-modal')) {
+    updateAdvancedButtonState();
+    $('advanced-take-modal').classList.remove('hidden');
+  }
+}
+
+function closeAdvancedModal() {
+  if ($('advanced-take-modal')) {
+    $('advanced-take-modal').classList.add('hidden');
+  }
+}
+
+function wireAdvancedSettings() {
+  var toggleBtn = $('btn-advanced-toggle');
+  var modal = $('advanced-take-modal');
+  var closeBtn = $('adv-close-btn');
+  var doneBtn = $('adv-done-btn');
+  var resetBtn = $('adv-reset-btn');
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', function () {
+      if (modal && !modal.classList.contains('hidden')) {
+        closeAdvancedModal();
+      } else {
+        openAdvancedModal();
+      }
+    });
+  }
+
+  if (closeBtn) { closeBtn.addEventListener('click', closeAdvancedModal); }
+  if (doneBtn) { doneBtn.addEventListener('click', closeAdvancedModal); }
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      resetAdvancedSettings();
+      updateAdvancedButtonState();
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener('click', function (event) {
+      if (backdropClick(event, modal)) { closeAdvancedModal(); }
+    });
+  }
+
+  var syncRangeNum = function (rangeId, numId) {
+    var r = $(rangeId);
+    var n = $(numId);
+    if (!r || !n) { return; }
+    r.addEventListener('input', function () {
+      n.value = r.value;
+      updateAdvancedButtonState();
+      saveForm();
+    });
+    n.addEventListener('input', function () {
+      r.value = n.value;
+      updateAdvancedButtonState();
+      saveForm();
+    });
+  };
+
+  syncRangeNum('adv-sampler-steps-range', 'adv-sampler-steps');
+
+  var inputs = [
+    'adv-sampler-steps', 'adv-avoid', 'adv-target-key', 'adv-target-bpm',
+    'adv-max-abc-tokens', 'adv-chord-hold-limit',
+    'adv-chord-outside-bonus', 'adv-target-lufs', 'adv-fade-out-seconds'
+  ];
+  inputs.forEach(function (id) {
+    var el = $(id);
+    if (!el) { return; }
+    el.addEventListener('input', function () {
+      updateAdvancedButtonState();
+      saveForm();
+    });
+    if (el.tagName === 'SELECT') {
+      el.addEventListener('change', function () {
+        updateAdvancedButtonState();
+        saveForm();
+      });
+    }
+  });
+
+  updateAdvancedButtonState();
+}
+
 /* The form survives a reload. Nothing here is precious, but losing a verse is annoying. */
 var FORM_KEY = 'yue2.form.v1';
 var FORM_FIELDS = ['title', 'style', 'lyrics', 'mode', 'seed', 'interpretation', 'max-duration', 'variety', 'harmony'];
@@ -1097,6 +1313,7 @@ function saveForm() {
     data.structure = { kind: STRUCTURE.kind, sections: STRUCTURE.sections };
     data.feel = FEEL.value;
     data.ui_mode = State.mode;
+    data.advanced = readAdvancedSettings();
     localStorage.setItem(FORM_KEY, JSON.stringify(data));
   } catch (err) { /* private mode, or storage full. Not worth a message. */ }
 }
@@ -1143,6 +1360,8 @@ function loadForm() {
       return item && SECTIONS.indexOf(item.name) >= 0;
     }).map(function (item) { return { name: item.name, seconds: Math.max(4, Math.min(180, Number(item.seconds) || 20)) }; });
   }
+  if (data.advanced) { writeAdvancedSettings(data.advanced); }
+  else { updateAdvancedButtonState(); }
 }
 
 /* A title from the first real lyric line. Section tags and genre tags do not count. */
@@ -5046,7 +5265,7 @@ function editorRenderSettings() {
     var listed = had && Array.prototype.some.call($('style-lora').options, function (o) { return o.value === had; });
     if (!had || listed) { data.style_lora = ''; }
   }
-  return data;
+  return withAdvancedSettings(data);
 }
 
 /* Same tune, new words. The planner reads every word before it writes a note, so a
@@ -5166,7 +5385,7 @@ function songProblem() {
 }
 
 function songBody(seed) {
-  return withStyleLora({
+  return withAdvancedSettings(withStyleLora({
     title: $('title').value.trim() || guessTitle($('lyrics').value),
     style: $('style').value,
     lyrics: $('lyrics').value,
@@ -5178,7 +5397,7 @@ function songBody(seed) {
     harmony: harmonyStep(),
     space_id: State.spaceId,
     realaudio: $('realaudio').checked, normalise: normaliseWanted()
-  });
+  }));
 }
 
 async function doPlan() {
@@ -5247,9 +5466,10 @@ async function doReroll() {
   if (!id) { statusLine('Nothing to replan yet.', 'bad'); setScoreActions(); return; }
   try {
     // The slider and the variety menu apply to the new plan.
+    var payload = withAdvancedSettings({ harmony: harmonyStep(), variety: $('variety').value });
     await api('/api/takes/' + id + '/replan', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ harmony: harmonyStep(), variety: $('variety').value })
+      body: JSON.stringify(payload)
     });
     awaitNewPlan(id);
     statusLine('Writing a new plan for the same words\u2026');
@@ -6309,7 +6529,7 @@ function instProblem() {
 }
 
 function instBody(seed) {
-  return withStyleLora({
+  return withAdvancedSettings(withStyleLora({
     title: $('title').value.trim(),
     style: $('style').value,
     structure: structureText(),
@@ -6322,7 +6542,7 @@ function instBody(seed) {
     harmony: harmonyStep(),
     space_id: State.spaceId,
     realaudio: $('realaudio').checked, normalise: normaliseWanted()
-  });
+  }));
 }
 
 async function doInstrumental() {
@@ -8348,6 +8568,7 @@ function selectTake(take) {
   if (take.style_lora !== undefined) { showStyleLora(take); }
   $('interpretation').value = INTERPRETATIONS[take.interpretation] ? take.interpretation : 'standard';
   paintInterpretation();
+  loadAdvancedTakeSettings(take);
   // The take owns the score in the box: its own for a song, its recording's
   // transcription for a cover, which boxShowsSource recognises by the take's
   // source_id. A plan still being written owns nothing until it lands.
@@ -9587,7 +9808,7 @@ function coverProblem() {
 
 function coverBody(seed) {
   var source = currentSource();
-  return withStyleLora({
+  return withAdvancedSettings(withStyleLora({
     source_id: source.id,
     title: $('title').value.trim() || guessTitle($('lyrics').value) || source.title,
     style: $('style').value,
@@ -9599,7 +9820,7 @@ function coverBody(seed) {
     max_duration: parseFloat($('max-duration').value) || 360,
     space_id: State.spaceId,
     realaudio: $('realaudio').checked, normalise: normaliseWanted()
-  });
+  }));
 }
 
 async function doRender() {
@@ -11045,6 +11266,7 @@ function wire() {
       closeScoreEditor();
       return;
     }
+    if (event.key === 'Escape' && $('advanced-take-modal') && !$('advanced-take-modal').classList.contains('hidden')) { closeAdvancedModal(); return; }
     if (event.key === 'Escape' && typeof editorOpen === 'function' && editorOpen()) { closeEditor(); return; }
 
     if (compareOpen()) { if (compareKey(event)) { event.preventDefault(); } return; }
@@ -11490,6 +11712,7 @@ function wireEditor() {
     if (editorOpen() && !$('score-box').open) { $('score-box').open = true; }
   });
   wireSheetToggle();
+  wireAdvancedSettings();
   paintSheet();
 }
 

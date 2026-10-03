@@ -69,3 +69,50 @@ def test_a_sound_seed_draws_the_sound_and_leaves_the_notes():
     assert plain["11"]["inputs"]["seed"] == 111 and plain["14"]["inputs"]["seed"] == 111
     voiced = build_render_graph({**take, "sound_seed": 222})
     assert voiced["11"]["inputs"]["seed"] == 111 and voiced["14"]["inputs"]["seed"] == 222
+
+
+def test_plan_graph_advanced_settings():
+    take = {
+        "id": "t_adv", "style": "disco", "lyrics": "dance", "seed": 42,
+        "mode": "full", "max_duration": 180, "variety": "normal",
+        "max_abc_tokens": 2048,
+        "chord_hold_limit": 4,
+        "chord_outside_bonus": 1.5,
+        "target_key": "Dm",
+        "target_bpm": 128,
+        "avoid": "screaming vocals, harsh noise",
+    }
+    graph = build_plan_graph(take)
+    # Token cap
+    assert graph["2"]["inputs"]["max_abc_tokens"] == 2048
+    # Harmony settings wired
+    assert graph["2"]["inputs"]["hold_limit"] == 4
+    assert graph["2"]["inputs"]["outside_bonus"] == 1.5
+    # Style combines style, key, tempo, and avoid
+    style = graph["2"]["inputs"]["style"]
+    assert "disco" in style
+    assert "key of D minor" in style
+    assert "128 BPM" in style
+    assert "avoid: screaming vocals, harsh noise" in style
+
+
+def test_render_graph_advanced_settings():
+    take = {
+        "id": "t_adv_render", "style": "synthpop", "lyrics": "hello", "seed": 99,
+        "mode": "full", "max_duration": 180, "abc": "X:1\nM:4/4\nL:1/8\nQ:1/4=100\nK:C\nCDEF|",
+        "sampler_steps": 48,
+        "target_bpm": 135,
+        "target_key": "Am",
+        "avoid": "guitar solos",
+    }
+    graph = build_render_graph(take)
+    # Sampler steps
+    assert graph["14"]["inputs"]["steps"] == 48
+    # ABC tempo replaced by target_bpm
+    assert "Q:1/4=135" in graph["11"]["inputs"]["abc"]
+    # Style combines style, key, tempo, avoid
+    style = graph["11"]["inputs"]["style"]
+    assert "synthpop" in style
+    assert "key of A minor" in style
+    assert "135 BPM" in style
+    assert "avoid: guitar solos" in style

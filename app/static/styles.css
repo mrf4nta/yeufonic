@@ -2441,12 +2441,139 @@ button.take-status.sung:hover { background: rgb(var(--warn-rgb) / 0.16); }
 .ed-head .create-head h1 { margin: 0; font-size: 20px; white-space: nowrap; }
 .ed-head #sub { display: none; }
 .ed-head .modes { margin: 0; }
-.ed-tabs { display: flex; gap: 4px; margin-left: auto; }
+.ed-advanced-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  margin-left: auto;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.ed-advanced-btn:hover {
+  color: var(--text);
+  border-color: rgb(var(--accent-a-rgb) / 0.5);
+}
+.ed-advanced-btn.is-active {
+  color: var(--accent-a, #38bdf8);
+  border-color: rgb(var(--accent-a-rgb) / 0.7);
+  background: rgb(var(--accent-a-rgb) / 0.12);
+  font-weight: 500;
+}
+.ed-advanced-btn .adv-icon {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.ed-advanced-btn.is-active .adv-icon {
+  opacity: 1;
+}
+.ed-advanced-btn .adv-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-a, #38bdf8);
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.ed-advanced-btn .adv-dot.hidden {
+  display: none;
+}
+.ed-tabs { display: flex; gap: 4px; margin-left: 0; }
 .ed-tabs button, .ed-steps button { border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit;
   font-size: 13.5px; padding: 7px 14px; border-radius: 999px; cursor: pointer; }
 .ed-tabs button.on { color: var(--text); border-color: rgb(var(--accent-a-rgb) / 0.7); background: rgb(var(--accent-a-rgb) / 0.14); }
 .ed-x { border: 0; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px; }
 .ed-x:hover { color: var(--text); }
+
+#advanced-take-modal {
+  z-index: 70;
+}
+.modal-box.advanced-box {
+  width: min(720px, 94vw);
+  max-height: min(90vh, 760px);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+.advanced-box .modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+.advanced-box .modal-head strong {
+  font-size: 17px;
+  font-weight: 600;
+}
+.adv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+  overflow-y: auto;
+  padding-right: 4px;
+  padding-bottom: 4px;
+}
+.adv-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.adv-grid .field label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.adv-grid .field label .muted {
+  font-weight: normal;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.adv-span-2 {
+  grid-column: span 2;
+}
+.adv-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.adv-input-row input[type="range"] {
+  flex: 1;
+  cursor: pointer;
+}
+.adv-input-row input.num-compact {
+  width: 64px;
+  flex: 0 0 auto;
+  text-align: center;
+  padding: 6px 4px;
+}
+.adv-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  margin-top: auto;
+}
+@media (max-width: 640px) {
+  .adv-grid {
+    grid-template-columns: 1fr;
+  }
+  .adv-span-2 {
+    grid-column: span 1;
+  }
+}
 .ed-main { flex: 1; min-height: 0; display: flex; }
 /* A page fills the body, so a pane inside one can be a share of the page it sits in. */
 .ed-body { flex: 1; min-width: 0; overflow: auto; padding: 18px 20px; display: flex; flex-direction: column; }

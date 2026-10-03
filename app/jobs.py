@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, identities, instrumental, llm, loras, lyrics, score, stems, trainsize
+from . import config, identities, instrumental, llm, loras, lyrics, score, stems, trainsize, transpose
 from .db import bump_average, execute, get_setting, one, rows
 from .engine import OUT_OF_MEMORY, Engine, load_template
 from .library import (audio_duration, ensure_peaks, fade_out_end, loudness, inside, normal_target, normalise, normalised_path, original_path, remove_tree,
@@ -134,22 +134,62 @@ def feel_strength(take: dict) -> float:
     return instrumental.FEELS.get(take.get("feel") or "steady", instrumental.FEELS["steady"])
 
 
+KEY_IN_STYLE = re.compile(r"(?i)\bkey of\s+[A-G][#b]?(?:\s*(?:major|minor|maj|min)|m)?(?![a-z#])")
+BPM_IN_STYLE = re.compile(r"(?i)\b\d{2,3}\s*bpm\b")
+
+
+def key_phrase(key: str) -> str:
+    """A key as the planner's training captions say it: 'key of C# minor', not 'Cm'."""
+    found = re.fullmatch(r"\s*([A-Ga-g][#b]?)\s*(m|min|minor|maj|major)?\s*", str(key))
+    if not found:
+        return f"key of {str(key).strip()}"
+    root = found.group(1)[0].upper() + found.group(1)[1:]
+    minor = (found.group(2) or "").lower() in ("m", "min", "minor")
+    return f"key of {root} {'minor' if minor else 'major'}"
+
+
+def effective_style(style: str, target_key: str | None = None, target_bpm: int | None = None, avoid: str | None = None) -> str:
+    """The style the planner and the render read, with the locks said once.  A key or a tempo the
+    style already names is replaced, not added to: 'a 104 BPM groove' and '80 BPM' together are
+    two instructions, and the planner followed neither."""
+    text = (style or "").strip()
+    if target_key and str(target_key).strip():
+        phrase = key_phrase(target_key)
+        text = KEY_IN_STYLE.sub(phrase, text) if KEY_IN_STYLE.search(text) else ", ".join(p for p in (text, phrase) if p)
+    if target_bpm:
+        phrase = f"{int(target_bpm)} BPM"
+        text = BPM_IN_STYLE.sub(phrase, text) if BPM_IN_STYLE.search(text) else ", ".join(p for p in (text, phrase) if p)
+    if avoid and str(avoid).strip():
+        wanted = str(avoid).strip()
+        if wanted.lower() not in text.lower():
+            text = ", ".join(p for p in (text, wanted if wanted.lower().startswith("avoid") else f"avoid: {wanted}") if p)
+    return text
+
+
 def build_plan_graph(take: dict) -> dict:
     """Write a score plan from the style and lyrics alone. No recording involved."""
     graph = load_template("song_plan.json")
     graph["1"]["inputs"]["ckpt_name"] = config.CHECKPOINT
     node = graph["2"]["inputs"]
-    node["style"] = take["style"]
+    node["style"] = effective_style(take["style"], target_key=take.get("target_key"),
+                                    target_bpm=take.get("target_bpm"), avoid=take.get("avoid"))
     node["lyrics"] = take["lyrics"]
     node["seed"] = int(take["seed"])
     node["mode"] = "full"
+    node["max_abc_tokens"] = int(take.get("max_abc_tokens") or 8192)
     variety = PLAN_VARIETY.get(take.get("variety") or "normal", PLAN_VARIETY["normal"])
     node["temperature"] = variety["temperature"]
     node["repetition_penalty"] = variety["repetition_penalty"]
     step = int(take.get("harmony") or 0)
-    if step in HARMONY:
+    hold_limit = int(take["chord_hold_limit"]) if take.get("chord_hold_limit") is not None else 8
+    outside_bonus = float(take["chord_outside_bonus"]) if take.get("chord_outside_bonus") is not None else 0.0
+    if step in HARMONY or hold_limit != 8 or outside_bonus != 0.0:
         graph["2"]["class_type"] = HARMONY_NODE
-        node.update({**HARMONY_OFF, **HARMONY[step]})
+        node.update({**HARMONY_OFF, **HARMONY.get(step, {})})
+        if take.get("chord_hold_limit") is not None:
+            node["hold_limit"] = hold_limit
+        if take.get("chord_outside_bonus") is not None and (step != 4 or outside_bonus != 0.0):
+            node["outside_bonus"] = outside_bonus
     if take.get("kind") == "instrumental":
         instrumental.with_lora(graph, "1", config.INSTRUMENTAL_LORA, ("2",), feel_strength(take))
     style_lora = take.get("style_lora")
@@ -255,27 +295,46 @@ def with_peak_guard(graph: dict, ceiling_db: float | None = None) -> dict:
     return graph
 
 
+def lock_tempo(abc: str, bpm) -> str:
+    """The score at a locked tempo: every Q: header and inline [Q:...] change says
+    `bpm`, and a score with none gets one after its L: line.  No lock, no change."""
+    if not bpm or not abc or not abc.strip():
+        return abc
+    bpm = int(bpm)
+    out = re.sub(r"^Q:.*$", f"Q:1/4={bpm}", abc, flags=re.M)
+    out = re.sub(r"\[Q:[^\]]*\]", f"[Q:1/4={bpm}]", out)
+    if not re.search(r"^Q:", out, re.M):
+        lines = out.split("\n")
+        at = next((i for i, l in enumerate(lines) if l.strip().startswith("L:")), -1)
+        lines.insert(at + 1 if at >= 0 else 1, f"Q:1/4={bpm}")
+        out = "\n".join(lines)
+    return out
+
+
 def build_render_graph(take: dict) -> dict:
     graph = load_template("render.json")
     graph["10"]["inputs"]["ckpt_name"] = config.CHECKPOINT
     node = graph["11"]["inputs"]
     node.update(interpretation_sampling(take.get("interpretation")))
-    node["style"] = take["style"]
+    node["style"] = effective_style(take["style"], target_key=take.get("target_key"),
+                                    target_bpm=take.get("target_bpm"), avoid=take.get("avoid"))
     node["lyrics"] = take["lyrics"]
     # Strip embedded w: lyric lines from ABC before sending to YuE2.
     # The UI uses w: lines for piano roll display, but YuE2's language model
     # expects standard score notation and gets token pollution from w: lines.
     abc_raw = take["abc"] or ""
-    node["abc"] = "\n".join(
+    abc_clean = "\n".join(
         line for line in abc_raw.splitlines()
         if not line.strip().startswith(("w:", "W:"))
     )
+    node["abc"] = lock_tempo(abc_clean, take.get("target_bpm"))
     node["seed"] = int(take["seed"])
     node["mode"] = take["mode"]
     node["max_duration"] = float(take.get("max_duration") or 360)
     # The notes come from the seed on node 11; the noise the decoder shapes into sound
     # comes from this one.  A sound seed of its own draws a new voice over the same notes.
     graph["14"]["inputs"]["seed"] = int(take.get("sound_seed") or take["seed"])
+    graph["14"]["inputs"]["steps"] = int(take.get("sampler_steps") or 32)
     # A prefix unique to this run.  ComfyUI caches an output node whose inputs have
     # not changed and answers with the file it saved last time, which the app has
     # already taken and deleted.  With a new prefix only the save runs again.
@@ -594,6 +653,18 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
         if not abc:
             fail(kind, ref_id, "the engine returned no score plan")
             return
+        # The planner reads "80 BPM" in the style as a hint and may write its own Q:.
+        # A tempo lock is a lock: the score is made to say it, before the checks
+        # below measure its length at that tempo.
+        abc = lock_tempo(abc, record.get("target_bpm"))
+        # The planner ignores a key in the style (measured), so the key is a lock on the finished plan.
+        if record.get("target_key"):
+            moved = transpose.to_key(abc, record["target_key"])
+            if moved is None:
+                log.warning("Plan for '%s': could not move it to %s (not one key it can read), keeping the planner's key",
+                            record.get("title") or ref_id, record["target_key"])
+            else:
+                abc = moved
         is_inst = record.get("kind") == "instrumental"
         # Words to sing: lines that are not section tags.  A song of tags alone has no vocal to miss.
         has_words = any(line.strip() and not line.strip().startswith("[") for line in (record.get("lyrics") or "").splitlines())
@@ -691,8 +762,9 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
     if cap:
         rendered_for = await asyncio.to_thread(audio_duration, dest)
         if rendered_for and rendered_for >= cap - 0.5:
+            fade_seconds = float(record.get("fade_out_seconds") or 3.0)
             try:
-                await asyncio.to_thread(fade_out_end, dest)
+                await asyncio.to_thread(fade_out_end, dest, fade_seconds)
             except Exception as exc:  # noqa: BLE001
                 log.warning("Could not fade out '%s' at its length cap: %s", record.get("title") or ref_id, exc)
     # The level as rendered, before any normalising: a render far quieter than usual
@@ -702,7 +774,7 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
     playing = dest
     if record.get("normalise"):
         try:
-            target = normal_target()
+            target = float(record["target_lufs"]) if record.get("target_lufs") is not None else normal_target()
             playing = await asyncio.to_thread(normalise, dest, target)
             normalised, normalised_to = 1, target
         except Exception as exc:  # noqa: BLE001

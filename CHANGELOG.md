@@ -34,6 +34,33 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Added
+- **Advanced take settings.** An *Advanced* button in the song editor opens a panel of per-take
+  settings: diffusion steps, an *Avoid* hint, key lock, tempo lock, the planner's score length,
+  the chord hold limit and outside-chord bonus, the loudness target and the fade-out. They are
+  saved with the take, the button lights up when any differs from its default, and *Reset to
+  defaults* puts them all back.
+- **Key lock moves the plan.** The planner does not follow a key named in the style, so the
+  finished plan is moved to the key asked for: every note and chord symbol shifts by the same
+  interval and the key signature is rewritten. The plan keeps its mode (a minor plan stays minor,
+  with only the tonic moving). A plan it cannot read with certainty (a modal key, or a key change
+  part way) is left in the planner's own key, and the log says so.
+
+### Fixed
+- **Tempo lock now sets the plan's tempo.** A style that named two tempos, or a planner that wrote
+  its own, could leave the plan at a different tempo from the one asked for. The tempo lock now
+  replaces the tempo in the style and in the stored plan, and the plan that is shown is the one
+  that renders.
+- **Reset to defaults reaches the server.** After a reset, a plan, render or new-words request
+  now puts every setting back to its default instead of keeping the take's earlier values; a
+  request that says nothing about a setting still keeps the take's.
+
+### Notes
+- *Avoid* is added to the style as a hint; the renderer runs without negative conditioning, so it
+  is not a guarantee.
+
 ## 0.0.22 (2026-10-03)
 
 ### Removed

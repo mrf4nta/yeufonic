@@ -89,7 +89,16 @@ CREATE TABLE IF NOT EXISTS takes (
     identity_id TEXT,
     persona_id TEXT,
     voice_lora TEXT,
-    voice_lora_strength REAL NOT NULL DEFAULT 1.0
+    voice_lora_strength REAL NOT NULL DEFAULT 1.0,
+    sampler_steps INTEGER DEFAULT 32,
+    avoid TEXT,
+    target_key TEXT,
+    target_bpm INTEGER,
+    max_abc_tokens INTEGER DEFAULT 8192,
+    chord_hold_limit INTEGER DEFAULT 8,
+    chord_outside_bonus REAL DEFAULT 0.0,
+    target_lufs REAL,
+    fade_out_seconds REAL DEFAULT 3.0
 );
 CREATE TABLE IF NOT EXISTS identities (
     id TEXT PRIMARY KEY,
@@ -449,6 +458,30 @@ def _source_corpus_song() -> None:
         execute("ALTER TABLE sources ADD COLUMN corpus_song_id TEXT")
 
 
+def _advanced_take_settings() -> None:
+    """Per-take generation and mix parameters (steps, avoid, key, bpm, token cap,
+    harmony limits, target loudness, outro fade)."""
+    cols = _columns("takes")
+    if "sampler_steps" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN sampler_steps INTEGER DEFAULT 32")
+    if "avoid" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN avoid TEXT")
+    if "target_key" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN target_key TEXT")
+    if "target_bpm" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN target_bpm INTEGER")
+    if "max_abc_tokens" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN max_abc_tokens INTEGER DEFAULT 8192")
+    if "chord_hold_limit" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN chord_hold_limit INTEGER DEFAULT 8")
+    if "chord_outside_bonus" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN chord_outside_bonus REAL DEFAULT 0.0")
+    if "target_lufs" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN target_lufs REAL")
+    if "fade_out_seconds" not in cols:
+        execute("ALTER TABLE takes ADD COLUMN fade_out_seconds REAL DEFAULT 3.0")
+
+
 MIGRATIONS = [
     lambda: (conn().executescript(BASE_SCHEMA), _legacy_takes()),   # -> 1
     _indexes,                                                        # -> 2
@@ -477,6 +510,7 @@ MIGRATIONS = [
     _normalised_to,                                                  # -> 25
     _source_corpus_song,                                             # -> 26
     _lyrics_versions,                                                # -> 27
+    _advanced_take_settings,                                         # -> 28
 ]
 
 

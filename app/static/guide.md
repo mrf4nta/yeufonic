@@ -41,6 +41,38 @@ layout** offers steps instead, one part at a time, with a summary of what will b
 
 Closing the window, with **Close**, the cross or Escape, keeps what you typed.
 
+### Advanced settings
+
+The **Advanced** button in the editor's header opens settings for this one take. Most songs never
+need them. They are saved with the take, so *Edit and render again* finds them as you left them.
+The button lights up when any setting differs from its default, and **Reset to defaults** puts
+them all back.
+
+Some of these act on the plan, and some on the render and the finished file:
+
+- **Diffusion steps** (16–64, default 32): how many steps the audio decoder takes. More steps take
+  longer to render.
+- **Avoid:** words to steer away from, such as "drums" or "rap vocals". They are added to the style
+  as "avoid: …". It is a hint to the planner, not a guarantee: the renderer has no negative prompt.
+- **Key lock:** the plan is moved to this key once the planner has written it. The planner ignores
+  a key named in the style, so this is done to the score itself: every note and chord shifts by the
+  same interval and the key signature is rewritten. A minor plan stays minor, and only the tonic
+  moves. A plan the app cannot read with certainty, such as one in a modal key or with a key change
+  part way, is left in the planner's key and the log says so.
+- **Tempo lock** (BPM): the plan is set to this tempo, replacing any tempo in the style or in the
+  planner's own score, and the render follows it.
+- **Score token cap** (default 8192): the most the planner may write. A lower cap stops a short
+  song's plan running on.
+- **Chord hold limit** (bars, default 8): the most bars the planner stays on one chord root before
+  it must change.
+- **Outside harmony bonus** (0–10, default 0): how strongly the planner is pushed toward borrowed
+  chords and roots outside the home key. These two act on the planner's choices, so they show as a
+  difference in the chords of the plan rather than as a clear difference by ear. Compare the Score
+  window.
+- **Target loudness:** the level a take is normalised to. It applies only when normalising is on.
+- **Outro fade** (seconds, default 3): the length of the fade when a take is cut off at the length
+  cap.
+
 ### What to put in the Style box
 
 YuE2 reads this as a description of a recording, so describe a recording. Language, genre, voice,

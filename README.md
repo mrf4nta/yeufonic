@@ -89,6 +89,9 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
   **Variations** renders one take in the others, so you can compare them by ear.
 - **Choose the voice.** Chips set female, male or duet and a voice character. YuE2 has no vocal
   parameter, so the chips write into the style text, and the take keeps the choice.
+- **Fine-tune a take.** An **Advanced** panel in the editor sets, per take, the key and tempo the
+  plan is moved to, the render's diffusion steps, the planner's chord habits, and the loudness and
+  fade of the finished file. **Reset to defaults** puts them back.
 - **Train a LoRA from your own songs.** Prepare a corpus from a folder of songs, by one artist,
   in one genre or by a few similar artists, and train a style LoRA from it. It works best in a
   song from a prompt, where the LoRA writes the tune. See Training a LoRA below.
