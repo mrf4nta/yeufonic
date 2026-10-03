@@ -143,8 +143,12 @@ def _ask() -> dict:
     is kept, because "is the site's manifest doing its job?" cannot be told from the answer
     alone: the fallback and the manifest can name the same version."""
     first_error: Exception | None = None
-    for url, read, source in ((MANIFEST_URL, _from_manifest, "yeufonic.com"),
-                              (RELEASE_API, _from_release, "github")):
+    if config.UPDATE_MANIFEST:
+        sources = ((config.UPDATE_MANIFEST, _from_manifest, "test manifest"),)
+    else:
+        sources = ((MANIFEST_URL, _from_manifest, "yeufonic.com"),
+                   (RELEASE_API, _from_release, "github"))
+    for url, read, source in sources:
         try:
             answer = read(_fetch_json(url))
             answer["source"] = source

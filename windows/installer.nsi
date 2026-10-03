@@ -173,6 +173,10 @@ Section "${APPNAME}" SecCore
   File "${STAGE}\THIRD_PARTY_NOTICES.md"
   File "${STAGE}\terms.txt"
   WriteRegStr HKCU "Software\${REGNAME}" "InstallDir" "$INSTDIR"
+!ifdef TEST_MANIFEST
+  ; A test build looks for updates at an address only the tester knows (see windows/build.sh).
+  WriteINIStr "$INSTDIR\settings.ini" "yue2" "update_manifest" "${TEST_MANIFEST}"
+!endif
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "${REGKEY}" "DisplayName" "${APPNAME}"
   WriteRegStr HKCU "${REGKEY}" "DisplayVersion" "${VERSION}"

@@ -16,6 +16,11 @@ try:
 except OSError:
     VERSION = "unknown"
 
+# A test build of the Windows installer sets this (through settings.ini) to a manifest that only
+# the tester knows, so an update can be tried before it is released.  When it is set, nothing
+# else is asked, GitHub included.  Public builds never set it.
+UPDATE_MANIFEST = os.environ.get("YEUFONIC_UPDATE_MANIFEST", "").strip()
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 PORT = int(os.environ.get("PORT", "8090"))
 DB_PATH = DATA_DIR / "yue2.sqlite"

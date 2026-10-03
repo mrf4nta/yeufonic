@@ -424,3 +424,35 @@ def test_an_installer_that_cannot_break_away_is_still_started(tmp_path, monkeypa
 
     assert update.launch_installer() is True
     assert opened == [str(installer)]
+
+
+def test_a_test_manifest_is_the_only_place_asked(monkeypatch):
+    """A test build is pointed at an address only the tester knows, and asks nowhere else: not the
+    site's manifest, and not GitHub, which would answer with the public release."""
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        if url == "https://example.invalid/t/updates.json":
+            return {"latest": "9.9.9", "installer": {"url": "https://example.invalid/t/setup.exe", "sha256": "abc"}}
+        raise AssertionError(f"asked {url}")
+    monkeypatch.setattr(update, "_fetch_json", fetch)
+    monkeypatch.setattr(config, "UPDATE_MANIFEST", "https://example.invalid/t/updates.json")
+
+    answer = update._ask()
+    assert asked == ["https://example.invalid/t/updates.json"]
+    assert answer["latest"] == "9.9.9" and answer["source"] == "test manifest"
+
+
+def test_a_test_manifest_that_does_not_answer_does_not_fall_back_to_github(monkeypatch):
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        raise OSError("down")
+    monkeypatch.setattr(update, "_fetch_json", fetch)
+    monkeypatch.setattr(config, "UPDATE_MANIFEST", "https://example.invalid/t/updates.json")
+
+    with pytest.raises(OSError):
+        update._ask()
+    assert asked == ["https://example.invalid/t/updates.json"]

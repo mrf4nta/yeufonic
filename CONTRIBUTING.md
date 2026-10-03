@@ -67,6 +67,21 @@ after that. `scripts/updates.py` in that repository writes the file from the ver
 installer. Update it in the same sitting as the tag, or the notice goes out late — and if the file
 is missing or stale the app falls back to GitHub's release API, which rate-limits anonymous callers.
 
+### Trying an update before it is released
+
+A Windows update can be tried without a tag or a release. A *test* build of the installer
+(`TEST_BUILD=1`, which installs as "Yeufonic (test)" in its own folder and leaves a real install
+alone) can be told where to look for updates:
+
+```sh
+TEST_BUILD=1 TEST_MANIFEST=https://example.org/private-path/updates.json VERSION=0.0.98 sh windows/build.sh
+```
+
+That writes `update_manifest` into the install's `settings.ini`; the launcher passes it to the app
+as `YEUFONIC_UPDATE_MANIFEST`, and the app then asks that address only, never the site's manifest
+or GitHub. Serve a manifest of the usual shape there that names a newer test build, install the
+older one, and the update can be run end to end. A release build never sets it.
+
 PDFs in the top-level folder are git ignored and never go to GitHub: a pre-push hook refuses a
 GitHub push carrying a commit with one. Enable the hook once per clone:
 

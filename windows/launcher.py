@@ -629,6 +629,8 @@ class Launcher:
             "HF_HOME": str(data / "models" / "whisper"),
             "TRAINING_ENABLED": "1",
             "PYTHONUTF8": "1",
+            # Set only by a test build of the installer: where to look for an update to try.
+            "YEUFONIC_UPDATE_MANIFEST": self.cfg.get("update_manifest", ""),
             # Windows without Developer Mode cannot make symlinks; the library copies instead
             # and says so every time.
             "HF_HUB_DISABLE_SYMLINKS_WARNING": "1",

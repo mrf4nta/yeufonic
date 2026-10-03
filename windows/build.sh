@@ -11,7 +11,8 @@
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-# VERSION=x.y.z in the environment builds as another version, to test an update.
+# VERSION=x.y.z in the environment builds as another version (the installer and the app inside
+# it say so), to test an update.
 VERSION=${VERSION:-$(cat "$ROOT/VERSION")}
 OUT="$ROOT/windows/dist"
 STAGE="$OUT/stage"
@@ -20,7 +21,8 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE/studio/engine-nodes"
 # The app, less caches and the page-test harnesses.
 tar -C "$ROOT" --exclude='__pycache__' --exclude='static/__*' -cf - app | tar -C "$STAGE/studio" -xf -
-cp "$ROOT/VERSION" "$ROOT/requirements.txt" "$STAGE/studio/"
+cp "$ROOT/requirements.txt" "$STAGE/studio/"
+echo "$VERSION" > "$STAGE/studio/VERSION"
 tar -C "$ROOT/engine/custom_nodes" --exclude='__pycache__' -cf - yue2_harmony | tar -C "$STAGE/studio/engine-nodes" -xf -
 cp "$ROOT/windows/setup.ps1" "$ROOT/windows/launcher.py" "$ROOT/windows/yeufonic.ico" "$ROOT/windows/installer-panel.bmp" \
    "$ROOT/windows/terms.txt" "$ROOT/LICENSE.md" "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/"
@@ -30,6 +32,9 @@ EXE="Yeufonic-Setup-$VERSION${TEST_BUILD:+-test}.exe"
 cp "$ROOT/windows/yeufonic-exe.nsi" "$STAGE/"
 # TEST_BUILD=1 makes an installer whose setup skips the 18 GB of models.
 EXTRA=${TEST_BUILD:+-DSETUP_ARGS=${TEST_ARGS:--SkipModels}}
+# TEST_MANIFEST=<url> (with TEST_BUILD) makes the install look for updates at that address only,
+# to try an update before it is released.  Never set for a release.
+EXTRA="$EXTRA${TEST_MANIFEST:+ -DTEST_MANIFEST=$TEST_MANIFEST}"
 if command -v makensis >/dev/null 2>&1; then
   (cd "$STAGE" && makensis -V2 -DVERSION="$VERSION" -DICON=yeufonic.ico -DOUTFILE=Yeufonic.exe yeufonic-exe.nsi)
   makensis -V2 $EXTRA -DVERSION="$VERSION" -DSTAGE="$STAGE" -DOUTFILE="$OUT/$EXE" "$ROOT/windows/installer.nsi"
