@@ -40,6 +40,10 @@ cannot creep back in.
 ## Unreleased
 
 ### Fixed
+- **Training on a fresh install.** The trainer reads the tokenizer head from its own `fs_audio` folder, and neither
+  the Windows installer nor `fetch-models.sh` put it there (only in `audio_encoders`), so a new install refused to
+  train with "tokenizer_head … not in ['(run FS_Audio Training Assets first)']". Both now place it in both folders,
+  and an install updated afterwards is repaired.
 - **Lyric extraction on a fresh install.** A newer release of the audio library PyAV (19) removed an option
   faster-whisper uses to read audio, so on an install set up after it came out, hearing a song's lyrics failed
   with "open() got an unexpected keyword argument 'metadata_errors'". PyAV is now held at the version the app

@@ -91,6 +91,14 @@ fetch "$REAL_AUDIO/tokenizer_head_joint_v9.safetensors" \
 fetch "$REGULARIZER/minted_regularizer_pack_v2.pt" \
       "$ROOT/models/fs_audio/minted_regularizer_pack_v2.pt"
 
+# The trainer lists the tokenizer head from models/fs_audio; the rest of the app reads it from audio_encoders.
+# It has to be in both, or training is refused ("tokenizer_head ... not in ['(run FS_Audio Training Assets first)']").
+if [ -s "$ROOT/models/audio_encoders/tokenizer_head_joint_v9.safetensors" ] && \
+   [ ! -s "$ROOT/models/fs_audio/tokenizer_head_joint_v9.safetensors" ]; then
+  cp "$ROOT/models/audio_encoders/tokenizer_head_joint_v9.safetensors" "$ROOT/models/fs_audio/tokenizer_head_joint_v9.safetensors"
+  echo "copy  tokenizer_head_joint_v9.safetensors for the trainer"
+fi
+
 SF2_DIR="$ROOT/data/models/soundfonts/sf2"
 fetch "https://raw.githubusercontent.com/wrightflyer/SF2_SoundFonts/master/Jnsgm2.sf2" \
       "$SF2_DIR/github_Jnsgm2.sf2"

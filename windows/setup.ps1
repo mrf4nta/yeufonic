@@ -407,6 +407,18 @@ if (-not $SkipModels) {
         Say ("Removing {0}: this install uses the {1} model." -f (Split-Path $unchosen -Leaf), $(if ($Int8) { 'low-memory' } else { 'full-quality' }))
         Remove-Item -Force $unchosen
     }
+    # The trainer lists the tokenizer head from models\fs_audio, while the rest of the app reads it from
+    # models\audio_encoders, so it has to be in both. Without this copy training is refused with
+    # "tokenizer_head ... not in ['(run FS_Audio Training Assets first)']". Done here, after the download, so an
+    # install updated from an earlier version is repaired too.
+    $head = 'tokenizer_head_joint_v9.safetensors'
+    $headFrom = Join-Path (Join-Path $Models 'audio_encoders') $head
+    $headTo = Join-Path (Join-Path $Models 'fs_audio') $head
+    if ((Test-Path $headFrom) -and -not (Test-Path $headTo)) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $headTo) | Out-Null
+        Copy-Item $headFrom $headTo
+        Say "Copied $head for the trainer."
+    }
 }
 
 # ------------------------------------------------------ the app's own models
