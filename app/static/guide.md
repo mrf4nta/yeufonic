@@ -837,6 +837,11 @@ Songs analysed from now on keep their separated vocal as FLAC, the same audio in
 window can **convert the WAV vocals you already have**: each is converted, checked to decode to exactly the same
 audio, and only then is the WAV removed. It runs in the background and can be stopped.
 
+Training checkpoints deserve a second look before they go: each is an entry in the Style LoRA list that you
+can pick for new takes, so removing a corpus's checkpoints takes those entries out of the list for good. Its
+finished LoRA stays and keeps working. A corpus's training set is different: removing it leaves the LoRA and its
+checkpoints in the list, and only training that corpus again needs it.
+
 Your takes, songs, finished LoRAs and models are never listed for removal. Anything belonging to a corpus that is
 training, being exported or being analysed is shown greyed and cannot be touched until it has finished.
 

@@ -244,13 +244,14 @@ def items(busy: Busy, lora_base: Callable[[dict], str]) -> list[dict]:
         marks = loras.checkpoints(lora_base(identity), root) if root else []
         if marks:
             out.append({
-                "id": f"checkpoints:{identity['id']}", "title": f"Training checkpoints: {name}", "corpus": identity["id"],
+                "id": f"checkpoints:{identity['id']}", "title": f"Training checkpoints (earlier stages in the LoRA list): {name}", "corpus": identity["id"],
                 "bytes": sum(m["bytes"] for m in marks), "files": len(marks), "_names": [m["name"] for m in marks],
                 "blocked": busy.corpus(identity["id"]),
-                "what": "A training run saves a checkpoint every 50 steps, each as large as the LoRA itself. They "
-                        "sit folded under the LoRA in the Style LoRA list, so an earlier stage can be tried by ear.",
-                "consequence": "You can no longer choose an earlier stage of this corpus's training. The finished "
-                               "LoRA is kept.",
+                "what": "A training run saves a checkpoint every 50 steps, each as large as the LoRA itself. Each one is "
+                        "an entry in the Style LoRA list, folded under the finished LoRA, and can be chosen for new "
+                        "takes: an earlier stage often sounds different, and sometimes better.",
+                "consequence": "These entries disappear from the Style LoRA list and can no longer be chosen for new "
+                               "takes. The finished LoRA stays and keeps working.",
             })
     return out
 
