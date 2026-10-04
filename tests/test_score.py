@@ -246,7 +246,7 @@ def test_an_unreadable_plan_with_a_style_lora_suggests_another_checkpoint(client
     real_sleep = asyncio.sleep
     monkeypatch.setattr(jobs.asyncio, "sleep", lambda _s: real_sleep(0))
     broken = "X:1\nL:1/16\nM:4/4\nV: Vocal\n" + "z16|" * 4 + "\n"        # no key, no chords: unreadable
-    for lora, expected in (("pink_lora.safetensors", "Write a new plan or try a different checkpoint"),
+    for lora, expected in (("studio_lora.safetensors", "Write a new plan or try a different checkpoint"),
                            (None, "Write a new plan.")):
         monkeypatch.setattr(jobs, "ENGINE", PlanEngine(broken))
         take = make_take(status="queued")

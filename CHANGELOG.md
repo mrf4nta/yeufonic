@@ -37,7 +37,7 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## Unreleased
+## 0.0.25 (2026-10-04)
 
 ### Known limits
 - **Training a LoRA on native Windows.** In our own testing this workflow performs poorly in a native Windows
@@ -55,10 +55,9 @@ cannot creep back in.
   the Windows installer nor `fetch-models.sh` put it there (only in `audio_encoders`), so a new install refused to
   train with "tokenizer_head … not in ['(run FS_Audio Training Assets first)']". Both now place it in both folders,
   and an install updated afterwards is repaired.
-- **Training on Windows was far slower, or stopped the engine.** The engine ComfyUI ships for newer graphics drivers
-  uses torch 2.13 on CUDA 13; training on it either ended the engine soon after it began or kept the card waiting on
-  system memory. The installer now puts in torch 2.9.1 on CUDA 12.8, the pair the Docker engine uses, and an install
-  updated afterwards is repaired.
+- **The Windows engine uses the same PyTorch as the Docker engine.** The engine ComfyUI ships for newer graphics drivers
+  comes with torch 2.13 on CUDA 13. The installer now puts in torch 2.9.1 on CUDA 12.8, the pair the Docker engine uses,
+  and an install updated afterwards is repaired. Training on native Windows still has trade-offs: see Known limits.
 - **Lyric extraction on a fresh install.** A newer release of the audio library PyAV (19) removed an option
   faster-whisper uses to read audio, so on an install set up after it came out, hearing a song's lyrics failed
   with "open() got an unexpected keyword argument 'metadata_errors'". PyAV is now held at the version the app
@@ -67,6 +66,11 @@ cannot creep back in.
   the app also left a copy of its launcher there, outside the install folder, where the uninstaller never looked.
 
 ### Added
+- **An About window,** in the menu: the version, the build it was made from and the model in use.
+- **A clearer message when a plan can't be read and a style LoRA is set.** It now suggests writing a new plan or trying a
+  different checkpoint, and nothing is changed for you.
+- **A line in the Train window on native Windows,** saying training performs poorly there and that Docker with WSL2 is
+  recommended. Training is not refused.
 - **`engine_args` in the Windows `settings.ini`.** Extra switches for the command that starts the engine, for a PC where it
   misbehaves (for example `engine_args = --disable-dynamic-vram`).
 - **A Storage window, in Settings.** It shows where the disk space is going, per area and per corpus, and

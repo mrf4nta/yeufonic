@@ -458,6 +458,10 @@ git pull
 docker compose up -d --build
 ```
 
+On Docker Desktop (Windows), run it in your WSL terminal, inside the Yeufonic folder. First check that
+`docker info --format '{{.OperatingSystem}}'` says *Docker Desktop*. If it names your Linux distribution,
+`docker` is talking to a different engine, and the update would rebuild there.
+
 The database migrates itself on the first start. Read the release notes for anything to do by
 hand, such as a new setting in `compose.yml`.
 
