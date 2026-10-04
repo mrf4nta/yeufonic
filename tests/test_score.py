@@ -234,3 +234,24 @@ def test_a_song_with_no_sung_notes_fails_the_same_way_but_not_when_it_is_only_ta
     assert "describe the style" not in row["error"]                    # the style was fine
     first, row = run_plan_job(monkeypatch, RESTS, lyrics="[Intro]\n\n[Outro]")
     assert first["status"] == "planned" and row["status"] == "planned"
+
+
+def test_an_unreadable_plan_with_a_style_lora_suggests_another_checkpoint(client, monkeypatch):
+    """The message after two unreadable plans: a style LoRA's later checkpoints can collapse where an
+    earlier one does not, so with one in use it says so; without one it is the old sentence."""
+    import asyncio
+    from app import jobs
+    from app.db import one, execute
+    from conftest import make_take
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(jobs.asyncio, "sleep", lambda _s: real_sleep(0))
+    broken = "X:1\nL:1/16\nM:4/4\nV: Vocal\n" + "z16|" * 4 + "\n"        # no key, no chords: unreadable
+    for lora, expected in (("pink_lora.safetensors", "Write a new plan or try a different checkpoint"),
+                           (None, "Write a new plan.")):
+        monkeypatch.setattr(jobs, "ENGINE", PlanEngine(broken))
+        take = make_take(status="queued")
+        execute("UPDATE takes SET style_lora = ?, kind = 'song' WHERE id = ?", (lora, take["id"]))
+        jobs.RETRIED_PLANS.add(take["id"])                                   # the retry has already happened
+        asyncio.run(jobs.run_job("plan", take["id"]))
+        row = one("SELECT status, error FROM takes WHERE id = ?", (take["id"],))
+        assert row["status"] == "failed" and expected in row["error"], row["error"]

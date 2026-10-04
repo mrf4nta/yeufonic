@@ -697,7 +697,9 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
             if variety_val == "calm" and record.get("style_lora"):
                 advice_parts.append("choose Normal Plan variety, which loops less with a style LoRA")
             advice = f". Try to {', or '.join(advice_parts)}" if advice_parts else ""
-            fail(kind, ref_id, f"the plan came out unreadable twice ({', '.join(issues)}). Write a new plan{advice}.")
+            # A style LoRA's later checkpoints can collapse where an earlier one writes a readable plan.
+            again = "Write a new plan or try a different checkpoint" if record.get("style_lora") else "Write a new plan"
+            fail(kind, ref_id, f"the plan came out unreadable twice ({', '.join(issues)}). {again}{advice}.")
             return
         elapsed = time.time() - started
         changed = execute(
