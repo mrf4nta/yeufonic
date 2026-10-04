@@ -87,6 +87,9 @@ def test_removing_an_item_removes_those_files_and_only_those(library):
 def test_removing_a_training_set_says_the_corpus_has_none_written(library):
     execute("UPDATE identities SET exported_at = 5, export_dir = 'x' WHERE id = 'c1'")
     storage.reclaim(["training-set:c1"], storage.Busy(), base)
+    loras = library / "models" / "loras"
+    assert (loras / "invented_corpus_lora.safetensors").exists()           # the trained LoRA is untouched
+    assert len(list(loras.glob("*_step*.safetensors"))) == 2               # and so are its checkpoints
     assert not (library / "data" / "identities" / "c1" / "dataset").exists()
     row = one("SELECT exported_at, export_dir FROM identities WHERE id = 'c1'")
     assert row["exported_at"] is None and row["export_dir"] is None

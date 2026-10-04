@@ -520,8 +520,8 @@ confirm. What it can list:
 - **Copies already uploaded to the engine**, and the engine's copies of finished training sets. Also
   nothing you would notice.
 - **A corpus's training set.** Its songs written again as lossless FLAC, larger than the originals.
-  LoRAs already trained are unaffected; before that corpus can train again you press **Export** to write the
-  set again, which takes a few minutes.
+  The LoRA trained from it is unaffected and stays in the Style LoRA list; only training that corpus again
+  needs the set, so you press **Export** to write it again first, which takes a few minutes.
 - **A corpus's training checkpoints.** The stages a training run saved along the way. Without them you can
   no longer try an earlier stage of that corpus's training by ear; the finished LoRA is kept.
 - **Separated vocals saved as WAV.** Songs analysed now keep their separated vocal as FLAC, which is the same

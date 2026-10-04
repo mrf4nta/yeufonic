@@ -236,8 +236,9 @@ def items(busy: Busy, lora_base: Callable[[dict], str]) -> list[dict]:
                 "what": "This corpus's songs as the trainer reads them: each one written again as lossless FLAC "
                         "(larger than the original, whatever the original was), cut where the training limit "
                         "applies, with its lyrics and caption beside it.",
-                "consequence": "LoRAs already trained are not affected. Before this corpus can train again you "
-                               "press Export to write the set again, which takes a few minutes.",
+                "consequence": "The LoRA trained from it stays in the Style LoRA list and works for new takes as before. "
+                               "Only training this corpus again needs the set: press Export first to write it again, "
+                               "which takes a few minutes.",
             })
         root = loras.folder()
         marks = loras.checkpoints(lora_base(identity), root) if root else []
