@@ -62,11 +62,13 @@ def test_it_lists_what_can_be_given_back_with_what_it_costs(library):
     assert found["checkpoints:c1"]["bytes"] == 14000 and found["checkpoints:c1"]["files"] == 2
     for item in found.values():
         assert item["what"] and item["consequence"] and item["blocked"] is None
-    assert report["reclaimable"] == 14700 + 3000 + 40020 + 14000
+    assert report["reclaimable"] == 14700 + 3000 + 40020 + 14000 + 5000 // 2          # the vocals count as half
 
 
 def test_the_originals_the_vocals_the_scores_and_the_finished_lora_are_never_offered(library):
     for item in storage.items(storage.Busy(), base):
+        if item.get("kind") == "compress":
+            continue                                # offered for conversion, never for removal
         for path in item.get("_paths", []):
             assert path.name not in ("original.mp3", "vocals.wav", "score.abc")
         assert "invented_corpus_lora.safetensors" not in item.get("_names", [])
@@ -150,3 +152,91 @@ def test_the_new_settings_have_the_defaults_that_were_chosen(client):
     assert setting_value("storage.working_copies") == "remove"        # nothing reads them again
     assert setting_value("storage.training_set") == "keep"            # removing one costs an Export
     assert setting_value("training.checkpoints") == "keep"
+
+
+# ------------------------------------------------------------------ vocals: WAV to FLAC
+import subprocess
+
+from app import identities
+
+
+def _tone(path, seconds=1.0, freq=440):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"sine=f={freq}:d={seconds}",
+                    "-ar", "44100", "-ac", "2", "-c:a", "pcm_s16le", str(path)], check=True)
+    return path
+
+
+def test_a_song_vocal_is_found_whether_it_is_flac_or_the_older_wav(tmp_path):
+    assert identities.vocals_file(tmp_path) is None
+    _file(tmp_path / "vocals.wav", 10)
+    assert identities.vocals_file(tmp_path).name == "vocals.wav"
+    _file(tmp_path / "vocals.flac", 10)
+    assert identities.vocals_file(tmp_path).name == "vocals.flac"          # the newer wins
+
+
+def test_the_vocal_is_served_in_either_format(client, library):
+    song = library / "data" / "identities" / "c1" / "songs" / "song-a"
+    execute("""INSERT INTO identity_songs(id, identity_id, file, title, sha256, duration, include, vocals_state, stored_path, position)
+               VALUES('s1', 'c1', 'a.mp3', 'A', 'x', 30, 1, 'done', ?, 0)""", (str(song / "original.mp3"),))
+    assert client.get("/api/identities/c1/songs/s1/audio?which=vocals").status_code == 200        # the WAV
+    (song / "vocals.wav").unlink()
+    assert client.get("/api/identities/c1/songs/s1/audio?which=vocals").status_code == 404
+    _file(song / "vocals.flac", 40)
+    assert client.get("/api/identities/c1/songs/s1/audio?which=vocals").status_code == 200        # the FLAC
+
+
+def test_the_wavs_are_offered_for_conversion_not_for_plain_removal(library):
+    found = by_id(storage.scan(storage.Busy(), base))
+    assert found["vocals-flac"]["kind"] == "compress" and found["vocals-flac"]["files"] == 1
+    result = storage.reclaim(["vocals-flac"], storage.Busy(), base)
+    assert result["freed"] == 0 and "own button" in result["skipped"][0]["reason"]
+    assert (library / "data" / "identities" / "c1" / "songs" / "song-a" / "vocals.wav").exists()
+
+
+def test_a_wav_becomes_a_flac_that_decodes_to_the_same_audio(tmp_path):
+    wav = _tone(tmp_path / "vocals.wav", 2.0)
+    before = wav.stat().st_size
+    saved = storage._convert_vocal(wav)
+    assert saved is not None and saved > 0
+    flac = tmp_path / "vocals.flac"
+    assert flac.exists() and not wav.exists() and not (tmp_path / "vocals.flac.part").exists()
+    assert flac.stat().st_size < before
+    assert storage._decoded_md5(flac) is not None
+
+
+def test_a_conversion_that_does_not_check_out_keeps_the_wav(tmp_path, monkeypatch):
+    wav = _tone(tmp_path / "vocals.wav")
+    monkeypatch.setattr(storage, "_decoded_md5", lambda p: "a" * 32 if p.suffix == ".wav" else "b" * 32)
+    assert storage._convert_vocal(wav) is None
+    assert wav.exists() and not (tmp_path / "vocals.flac").exists() and not (tmp_path / "vocals.flac.part").exists()
+
+
+def test_an_existing_flac_that_differs_is_not_trusted(tmp_path):
+    wav = _tone(tmp_path / "vocals.wav", 1.0, 440)
+    _tone(tmp_path / "other.wav", 1.0, 880)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(tmp_path / "other.wav"), str(tmp_path / "vocals.flac")], check=True)
+    assert storage._convert_vocal(wav) is None and wav.exists()
+
+
+def test_converting_all_of_them_reports_progress_and_can_stop(library):
+    songs = library / "data" / "identities" / "c1" / "songs"
+    for name in ("song-a", "song-b", "song-c"):
+        (songs / name).mkdir(exist_ok=True)
+        _tone(songs / name / "vocals.wav", 0.5)
+    assert storage.begin_compress() and not storage.begin_compress()                  # only one at a time
+    storage.compress_vocals()
+    state = storage.compress_state()
+    assert state["state"] == "done" and state["done"] == 3 and state["kept"] == 0 and state["saved"] > 0
+    assert not list(songs.glob("*/vocals.wav")) and len(list(songs.glob("*/vocals.flac"))) == 3
+    assert storage.begin_compress()                                                    # a second run has nothing to do
+    storage.stop_compress()
+    storage.compress_vocals()
+    assert storage.compress_state()["state"] in ("stopped", "done")
+
+
+def test_the_route_refuses_while_songs_are_being_analysed(client, library):
+    execute("""INSERT INTO identity_songs(id, identity_id, file, title, sha256, duration, include, score_state, position)
+               VALUES('s9', 'c1', 'b.mp3', 'B', 'x', 30, 1, 'running', 1)""")
+    assert client.post("/api/storage/compress-vocals").status_code == 409
+    assert client.get("/api/storage/compress-vocals").json()["state"] in ("idle", "done", "stopped", "failed")

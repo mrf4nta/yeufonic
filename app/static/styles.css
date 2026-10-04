@@ -2879,3 +2879,4 @@ button.ghost.run-all { margin-left: 10px; }
 .storage-table th { color: var(--muted); font-weight: 600; }
 .storage-actions .primary { width: auto; flex: 0 0 auto; padding: 9px 22px; }
 .storage-auto-row select { width: 100%; }
+.storage-convert { grid-column: 2; display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }

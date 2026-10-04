@@ -524,13 +524,19 @@ confirm. What it can list:
   set again, which takes a few minutes.
 - **A corpus's training checkpoints.** The stages a training run saved along the way. Without them you can
   no longer try an earlier stage of that corpus's training by ear; the finished LoRA is kept.
+- **Separated vocals saved as WAV.** Songs analysed now keep their separated vocal as FLAC, which is the same
+  audio in about half the room. A **Convert to FLAC** button does the same for the WAVs you already have: it
+  converts each one, checks that the FLAC decodes to exactly the same audio, and only then removes the WAV
+  (one that does not check out is left as it was). It runs in the background and can be stopped.
 
-Your takes, your songs, the separated vocals, your recordings, the finished LoRAs and the models are never
-listed for removal. A corpus that is training, being exported or being analysed is shown but cannot be
+Your takes, your songs, your recordings, the finished LoRAs and the models are never listed for removal. A corpus that is training, being exported or being analysed is shown but cannot be
 touched until it has finished. The window also lets you choose what is tidied **automatically**: working
 copies are removed as each song's analysis ends (on by default, since nothing reads them again), and you can
 have the training set removed when training ends and the checkpoints deleted when training ends (both off by
 default).
+
+Docker keeps its own images and build cache outside the project, so the Storage window does not cover them;
+`docker system df` shows what they take.
 
 ## Things worth knowing about YuE2
 

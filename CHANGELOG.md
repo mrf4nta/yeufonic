@@ -48,6 +48,10 @@ cannot creep back in.
   refused. The window also holds the settings for tidying automatically: the working copies of a song are
   now removed when its analysis ends (they were never read again), the training set can be removed when
   training ends, and the existing choice about checkpoints moved here.
+- **Separated vocals are saved as FLAC.** A corpus song's separated vocal was an uncompressed WAV; it is now
+  FLAC, the same audio in about half the room. The Storage window has a **Convert to FLAC** button for the
+  vocals already saved as WAV: it converts each, checks the FLAC decodes to exactly the same audio, then
+  removes the WAV, in the background and stoppable.
 - **A smaller YuE2 model for graphics cards with little memory.** The Windows installer offers
   two sizes on its components page, full quality (BF16, recommended) or low memory (INT8, 4.0 GB),
   and the Docker script takes `--int8`. An install has one: running the installer again changes it,

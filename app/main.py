@@ -1443,8 +1443,8 @@ async def source_from_corpus(song_id: str) -> dict:
     abc = abc_file.read_text(encoding="utf-8", errors="replace")
     duration = song["duration"] or await asyncio.to_thread(audio_duration, dest)
     lyrics_text, method = await asyncio.to_thread(_corpus_song_lyrics, song, stored.parent, abc, duration)
-    vocals = stored.parent / "vocals.wav"
-    if vocals.is_file():
+    vocals = identities.vocals_file(stored.parent)
+    if vocals:
         await asyncio.to_thread(_flac_copy, vocals, vocal_path(dest))
     record = {
         "id": uuid.uuid4().hex[:12], "title": title, "filename": Path(song["file"]).name,
@@ -1500,7 +1500,7 @@ def _corpus_song_lyrics(song: dict, folder: Path, abc: str, duration: float | No
 
 
 def _flac_copy(src: Path, dest: Path) -> None:
-    """The corpus keeps its vocal as WAV; a recording keeps it as FLAC beside itself."""
+    """A recording keeps its vocal as FLAC beside itself (the corpus keeps it as FLAC too, WAV for older songs)."""
     try:
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-c:a", "flac", str(dest)],
                        check=True, capture_output=True, timeout=300)
@@ -2748,6 +2748,28 @@ async def storage_reclaim(body: ReclaimIn) -> dict:
     return result
 
 
+@app.get("/api/storage/compress-vocals")
+def storage_compress_state() -> dict:
+    return storage.compress_state()
+
+
+@app.post("/api/storage/compress-vocals")
+async def storage_compress_start() -> dict:
+    """Convert the corpus vocals that are still WAV to FLAC, in the background."""
+    why = _storage_busy().anywhere()
+    if why:
+        raise HTTPException(409, f"Not now: {why}.")
+    if storage.begin_compress():
+        asyncio.create_task(asyncio.to_thread(storage.compress_vocals))
+    return storage.compress_state()
+
+
+@app.post("/api/storage/compress-vocals/stop")
+def storage_compress_stop() -> dict:
+    storage.stop_compress()
+    return storage.compress_state()
+
+
 @app.post("/api/engine/reload-options")
 async def reload_engine_options() -> dict:
     """Read the engine's lists again, for a model file that changed by hand."""
@@ -3036,8 +3058,8 @@ def identity_song_audio(identity_id: str, song_id: str, which: str = "original")
     song = one("SELECT * FROM identity_songs WHERE id = ? AND identity_id = ?", (song_id, identity_id))
     if not song or not song["stored_path"]:
         raise HTTPException(404, "this song has not been copied in yet. Press Analyse.")
-    path = Path(song["stored_path"]) if which == "original" else Path(song["stored_path"]).parent / "vocals.wav"
-    if not path.is_file() or not inside(path, config.DATA_DIR):
+    path = Path(song["stored_path"]) if which == "original" else identities.vocals_file(Path(song["stored_path"]).parent)
+    if not path or not path.is_file() or not inside(path, config.DATA_DIR):
         raise HTTPException(404, "not there yet")
     return FileResponse(path)
 

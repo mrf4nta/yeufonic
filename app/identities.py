@@ -536,6 +536,15 @@ def caption(trigger: str, description: str, voice: str, key: str | None, tempo: 
     return ", ".join(p for p in parts if p)
 
 
+def vocals_file(folder: Path) -> Path | None:
+    """A corpus song's separated vocal: FLAC for songs separated now, WAV for those done before that."""
+    for name in ("vocals.flac", "vocals.wav"):
+        path = folder / name
+        if path.is_file():
+            return path
+    return None
+
+
 def song_dir(identity_id: str, song: dict) -> Path:
     return config.DATA_DIR / "identities" / identity_id / "songs" / f"{slugify(song['title'])}-{song['id']}"
 

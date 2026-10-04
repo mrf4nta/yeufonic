@@ -16,6 +16,8 @@ import logging
 import os
 import re
 import shutil
+import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -128,6 +130,18 @@ def _working_copy_paths() -> list[Path]:
     return found
 
 
+def _vocal_wavs() -> list[Path]:
+    found: list[Path] = []
+    root = config.DATA_DIR / "identities"
+    if not root.is_dir():
+        return found
+    for identity in root.iterdir():
+        songs = identity / "songs"
+        if songs.is_dir():
+            found.extend(p for p in (s / "vocals.wav" for s in songs.iterdir() if s.is_dir()) if p.is_file())
+    return found
+
+
 def _old_enough(path: Path) -> bool:
     try:
         return time.time() - path.stat().st_mtime > MIN_AGE
@@ -194,6 +208,21 @@ def items(busy: Busy, lora_base: Callable[[dict], str]) -> list[dict]:
                     "trainer to read. These belong to runs that have ended.",
             "consequence": "None for a finished run. A run that stopped short can still be finished from what "
                            "it saved, which does not need them.",
+        })
+
+    wavs = _vocal_wavs()
+    size, count = _sum(wavs)
+    if count:
+        out.append({
+            "id": "vocals-flac", "kind": "compress", "title": "Separated vocals saved as WAV",
+            "bytes": size, "files": count, "_paths": wavs, "blocked": busy.anywhere(),
+            "saves": size // 2,                      # FLAC of these is about half; counted as the saving
+            "what": "Each corpus song's separated vocal was written as an uncompressed WAV. Songs analysed from now on "
+                    "are written as FLAC, which holds exactly the same audio in about half the room. This converts the "
+                    "WAVs you already have.",
+            "consequence": "Nothing is lost: each file is converted, then checked to decode to the very same audio "
+                           "before the WAV is removed (one that does not match is left as it was). It takes a few "
+                           "minutes for every hundred songs, and runs in the background.",
         })
 
     for identity in rows("SELECT id, name FROM identities ORDER BY name"):
@@ -290,7 +319,7 @@ def scan(busy: Busy, lora_base: Callable[[dict], str]) -> dict:
         "areas": areas(),
         "corpora": corpora(lora_base),
         "items": [{k: v for k, v in item.items() if not k.startswith("_")} for item in found],
-        "reclaimable": sum(i["bytes"] for i in found if not i["blocked"]),
+        "reclaimable": sum(i.get("saves", i["bytes"]) for i in found if not i["blocked"]),
     }
 
 
@@ -328,6 +357,9 @@ def reclaim(ids: list[str], busy: Busy, lora_base: Callable[[dict], str]) -> dic
         item = by_id.get(item_id)
         if not item:
             skipped.append({"id": item_id, "reason": "nothing there to remove"})
+            continue
+        if item.get("kind") == "compress":
+            skipped.append({"id": item_id, "reason": "converting the vocals has its own button"})
             continue
         if item["blocked"]:
             skipped.append({"id": item_id, "reason": f"{item['blocked']}, so it was left alone"})
@@ -376,3 +408,89 @@ def drop_training_set(identity_id: str, run_id: str) -> int:
             freed += tree(staged)[0]
             remove_tree(staged)
     return freed
+
+
+# ------------------------------------------------------------ vocals: WAV to FLAC
+# Run in a thread, one at a time, with its progress here for the page to ask about.
+
+COMPRESS: dict = {"state": "idle", "done": 0, "total": 0, "saved": 0, "kept": 0, "current": None, "error": None}
+_compress_lock = threading.Lock()
+_compress_stop = threading.Event()
+
+
+def compress_state() -> dict:
+    return dict(COMPRESS)
+
+
+def stop_compress() -> None:
+    _compress_stop.set()
+
+
+def begin_compress() -> bool:
+    """Mark a conversion as started; False if one is running already."""
+    with _compress_lock:
+        if COMPRESS["state"] == "running":
+            return False
+        _compress_stop.clear()
+        COMPRESS.update(state="running", done=0, total=len(_vocal_wavs()), saved=0, kept=0, current=None, error=None)
+        return True
+
+
+def _decoded_md5(path: Path) -> str | None:
+    """A fingerprint of the audio a file decodes to, so a WAV and its FLAC can be compared exactly."""
+    result = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-c:a", "pcm_s16le", "-f", "md5", "-"],
+                            capture_output=True, text=True, timeout=600)
+    match = re.search(r"MD5=([0-9a-f]{32})", result.stdout)
+    return match.group(1) if result.returncode == 0 and match else None
+
+
+def _convert_vocal(wav: Path) -> int | None:
+    """WAV to FLAC beside it.  The WAV goes only once the FLAC decodes to exactly the same audio.
+    Returns the bytes saved, or None if the WAV was kept."""
+    flac = wav.with_name("vocals.flac")
+    part = wav.with_name("vocals.flac.part")
+    try:
+        if not flac.is_file():
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(wav), "-vn", "-map_metadata", "-1",
+                            "-c:a", "flac", "-compression_level", "8", "-f", "flac", str(part)],
+                           check=True, capture_output=True, timeout=600)
+            target = part
+        else:
+            target = flac                       # one is already there: only check it, then drop the WAV
+        mine, theirs = _decoded_md5(wav), _decoded_md5(target)
+        if not mine or mine != theirs:
+            log.warning("Storage: %s does not decode to the same audio as its WAV, so the WAV was kept", target.name)
+            part.unlink(missing_ok=True)
+            return None
+        if target is part:
+            os.replace(part, flac)
+        saved = wav.stat().st_size - flac.stat().st_size
+        wav.unlink()
+        return saved
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("Storage: could not convert %s: %s", wav, exc)
+        part.unlink(missing_ok=True)
+        return None
+
+
+def compress_vocals() -> None:
+    """Convert every corpus vocal that is still a WAV.  Stoppable between files; a failure keeps the WAV."""
+    try:
+        for wav in _vocal_wavs():
+            if _compress_stop.is_set():
+                break
+            COMPRESS["current"] = wav.parent.name
+            saved = _convert_vocal(wav)
+            if saved is None:
+                COMPRESS["kept"] += 1
+            else:
+                COMPRESS["saved"] += saved
+            COMPRESS["done"] += 1
+        COMPRESS["state"] = "stopped" if _compress_stop.is_set() else "done"
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Storage: converting the vocals failed")
+        COMPRESS.update(state="failed", error=str(exc)[:200])
+    finally:
+        COMPRESS["current"] = None
+        log.info("Storage: vocals converted: %d of %d, %s saved, %d kept as WAV (%s)", COMPRESS["done"],
+                 COMPRESS["total"], human(COMPRESS["saved"]), COMPRESS["kept"], COMPRESS["state"])

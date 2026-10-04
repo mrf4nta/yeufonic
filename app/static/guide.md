@@ -833,12 +833,18 @@ saved along the way. The window lists each of these with its size, **what it is*
 costs**, and removes only what you tick, after a last confirmation. **Tick the ones that cost nothing** ticks
 the copies that are simply made again when needed.
 
-Your takes, songs, vocals, finished LoRAs and models are never listed. Anything belonging to a corpus that is
+Songs analysed from now on keep their separated vocal as FLAC, the same audio in about half the room. The
+window can **convert the WAV vocals you already have**: each is converted, checked to decode to exactly the same
+audio, and only then is the WAV removed. It runs in the background and can be stopped.
+
+Your takes, songs, finished LoRAs and models are never listed for removal. Anything belonging to a corpus that is
 training, being exported or being analysed is shown greyed and cannot be touched until it has finished.
 
 Below that, **Tidy up automatically** chooses what Yeufonic removes for you: the working copies of each song
 once its analysis ends (on by default), the training set once a LoRA has trained (off by default; the corpus
 then needs **Export** again before it can train again), and the training checkpoints (kept by default).
+
+Docker's own images and build cache are outside Yeufonic and not covered here; `docker system df` shows them.
 
 ### The YuE2 model
 

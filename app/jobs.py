@@ -1015,9 +1015,10 @@ async def prepare_song(song_id: str) -> None:
         if CURRENT_IDENTITY.get("id") == song_id:
             CURRENT_IDENTITY.update(stage=name, progress=progress)
 
-    if not (folder / "vocals.wav").exists():
+    if not identities.vocals_file(folder):
         stage("Separating the vocal (demucs)", 0.0)
-        await stems.separate(stored, folder, "htdemucs", ["vocals"], "wav", work_root=config.WORK_DIR,
+        # FLAC: the same audio exactly, in about half the room of the WAV it used to be written as.
+        await stems.separate(stored, folder, "htdemucs", ["vocals"], "flac", work_root=config.WORK_DIR,
                              on_progress=lambda frac, _: stage("Separating the vocal (demucs)", frac))
     set_song(song_id, vocals_state="done")
     if identity_song(song_id)["style_state"] in ("none", "failed"):
@@ -1028,7 +1029,7 @@ async def prepare_song(song_id: str) -> None:
         stage("Hearing the lyrics (Whisper)", 0.0)
         stop = CURRENT_IDENTITY.get("stop")
         try:
-            found = await hear_all(folder / "vocals.wav", seconds=song["duration"] or 0.0, title=song_title,
+            found = await hear_all(identities.vocals_file(folder) or folder / "vocals.flac", seconds=song["duration"] or 0.0, title=song_title,
                                    on_progress=lambda frac: stage("Hearing the lyrics (Whisper)", frac),
                                    should_stop=stop.is_set if stop else None)
             lines, method = found["lines"], found["method"]

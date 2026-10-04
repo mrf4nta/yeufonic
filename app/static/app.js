@@ -4826,6 +4826,7 @@ async function openStorage() {
 }
 
 function closeStorage() {
+  clearTimeout(STORAGE.timer);
   $('storage-modal').classList.add('hidden');
   document.body.style.overflow = '';
 }
@@ -4851,6 +4852,18 @@ function paintStorage() {
     sizeText(report.reclaimable) + ' of it can be given back.';
 
   $('storage-items').innerHTML = report.items.length ? report.items.map(function (item) {
+    if (item.kind === 'compress') {
+      // Not ticked and removed with the rest: it converts in the background and says how far it has got.
+      return '<div class="storage-item' + (item.blocked ? ' blocked' : '') + '"><span></span>' +
+        '<span class="storage-title"><span>' + esc(item.title) + '</span><span class="storage-size">' +
+          sizeText(item.bytes) + ' \u00b7 ' + item.files + ' files</span></span>' +
+        '<p>' + esc(item.what) + ' It frees about ' + sizeText(item.saves) + '.</p><p><b>If you convert them:</b> ' + esc(item.consequence) + '</p>' +
+        '<div class="storage-convert"><button type="button" id="storage-convert" class="ghost small"' +
+          (item.blocked ? ' disabled data-blocked="1"' : '') + '>Convert to FLAC</button>' +
+          '<button type="button" id="storage-convert-stop" class="ghost small hidden">Stop</button>' +
+          '<span id="storage-convert-status" class="hint"></span></div>' +
+        (item.blocked ? '<span class="storage-why">Not now: ' + esc(item.blocked) + '.</span>' : '') + '</div>';
+    }
     return '<label class="storage-item' + (item.blocked ? ' blocked' : '') + '">' +
       '<input type="checkbox" data-item="' + esc(item.id) + '"' + (item.blocked ? ' disabled' : '') + '>' +
       '<span class="storage-title"><span>' + esc(item.title) + '</span><span class="storage-size">' +
@@ -4861,6 +4874,7 @@ function paintStorage() {
       '</label>';
   }).join('') : '<p class="hint">Nothing here can be given back at the moment.</p>';
   paintStorageSelection();
+  pollCompress();
 
   var spec = (State.settingSpec || []).filter(function (item) { return item.section === 'storage'; });
   $('storage-auto').innerHTML = spec.map(function (item) {
@@ -4929,6 +4943,41 @@ async function reclaimStorage() {
   }
 }
 
+/* Converting the vocals runs in the background, so this asks how far it has got until it ends. */
+async function pollCompress() {
+  clearTimeout(STORAGE.timer);
+  var status = $('storage-convert-status');
+  if (!status || $('storage-modal').classList.contains('hidden')) { return; }
+  var state;
+  try { state = await api('/api/storage/compress-vocals'); } catch (err) { return; }
+  var running = state.state === 'running';
+  $('storage-convert').disabled = running || $('storage-convert').dataset.blocked === '1';
+  $('storage-convert-stop').classList.toggle('hidden', !running);
+  if (running) {
+    STORAGE.watching = true;      // one that finishes while this window is open is announced; an old result is not
+    status.textContent = 'Converting ' + (state.done + 1) + ' of ' + state.total + '\u2026 ' + sizeText(state.saved) + ' saved so far.';
+    STORAGE.timer = setTimeout(pollCompress, 2000);
+  } else if ((state.state === 'done' || state.state === 'stopped') && STORAGE.watching) {
+    STORAGE.watching = false;
+    var text = (state.state === 'stopped' ? 'Stopped. ' : 'Done. ') + state.done + ' converted, ' +
+      sizeText(state.saved) + ' saved' + (state.kept ? '; ' + state.kept + ' left as WAV because they did not check out' : '') + '.';
+    await loadStorage();
+    $('storage-result').textContent = text;
+  } else if (state.state === 'failed') {
+    status.textContent = 'Stopped by an error: ' + state.error;
+  }
+}
+
+async function startCompress() {
+  try {
+    await api('/api/storage/compress-vocals', { method: 'POST' });
+    STORAGE.watching = true;
+    pollCompress();
+  } catch (err) {
+    $('storage-result').textContent = err.message;
+  }
+}
+
 async function saveStorageSetting(select) {
   try {
     var data = await api('/api/settings', {
@@ -4956,6 +5005,10 @@ function wireStorage() {
     paintStorageSelection();
   });
   $('storage-items').addEventListener('change', paintStorageSelection);
+  $('storage-items').addEventListener('click', function (event) {
+    if (event.target.id === 'storage-convert') { startCompress(); }
+    if (event.target.id === 'storage-convert-stop') { api('/api/storage/compress-vocals/stop', { method: 'POST' }); }
+  });
   $('storage-auto').addEventListener('change', function (event) {
     if (event.target.dataset && event.target.dataset.storageKey) { saveStorageSetting(event.target); }
   });
