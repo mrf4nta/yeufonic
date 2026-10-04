@@ -47,6 +47,10 @@ cannot creep back in.
   the Windows installer nor `fetch-models.sh` put it there (only in `audio_encoders`), so a new install refused to
   train with "tokenizer_head … not in ['(run FS_Audio Training Assets first)']". Both now place it in both folders,
   and an install updated afterwards is repaired.
+- **Training on Windows was far slower, or stopped the engine.** The engine ComfyUI ships for newer graphics drivers
+  uses torch 2.13 on CUDA 13; training on it either ended the engine soon after it began or kept the card waiting on
+  system memory. The installer now puts in torch 2.9.1 on CUDA 12.8, the pair the Docker engine uses, and an install
+  updated afterwards is repaired.
 - **Lyric extraction on a fresh install.** A newer release of the audio library PyAV (19) removed an option
   faster-whisper uses to read audio, so on an install set up after it came out, hearing a song's lyrics failed
   with "open() got an unexpected keyword argument 'metadata_errors'". PyAV is now held at the version the app
@@ -72,8 +76,9 @@ cannot creep back in.
 - **A smaller YuE2 model for graphics cards with little memory.** The Windows installer offers
   two sizes on its components page, full quality (BF16, recommended) or low memory (INT8, 4.0 GB),
   and the Docker script takes `--int8`. An install has one: running the installer again changes it,
-  and `YUE2_CHECKPOINT` forces one. The app uses whichever is installed, **About** says which, and
-  LoRA training stays on the full-quality model. The README has a section on choosing between them.
+  and `YUE2_CHECKPOINT` forces one. The app uses whichever is installed, **About** says which.
+  Training a LoRA needs the full-quality model, so it is not available on a low-memory install.
+  The README has a section on choosing between them.
   Fixes #31.
 
 ## 0.0.24 (2026-10-03)

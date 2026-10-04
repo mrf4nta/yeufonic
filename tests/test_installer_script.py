@@ -43,3 +43,16 @@ def test_the_launcher_shows_a_dead_engine_once_not_on_every_tick():
 def test_extra_engine_switches_can_be_set_in_settings_ini():
     launcher = (Path(__file__).resolve().parent.parent / "windows" / "launcher.py").read_text(encoding="utf-8")
     assert '"engine_args": ""' in launcher and 'shlex.split(self.cfg.get("engine_args", ""))' in launcher
+
+
+def test_the_windows_engine_gets_the_torch_the_docker_engine_uses():
+    """The portable build for newer drivers brings torch 2.13 on CUDA 13, on which training either stopped the
+    engine or ran several times slower than on the 2.9.1/CUDA 12.8 pair the Docker engine pins. The step is
+    its own, keyed on the engine's mark, so an updated install is repaired and a re-unpacked engine is redone."""
+    setup = (Path(__file__).resolve().parent.parent / "windows" / "setup.ps1").read_text(encoding="utf-8")
+    dockerfile = (Path(__file__).resolve().parent.parent / "engine" / "Dockerfile").read_text(encoding="utf-8")
+    block = setup[setup.index("if ($variant -eq 'cu130') {"):setup.index("$nodes = Join-Path")]
+    assert "'torch==2.9.1', 'torchvision==0.24.1', 'torchaudio==2.9.1'" in block
+    assert "https://download.pytorch.org/whl/cu128" in block
+    assert '$torchMark = "torch-2.9.1-cu128-$engineMark"' in block
+    assert 'torch==2.9.*' in dockerfile and "whl/cu128" in dockerfile

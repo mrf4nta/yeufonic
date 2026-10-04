@@ -345,6 +345,21 @@ if (-not (IsDone $engineMark)) {
 }
 $py = Join-Path $Engine 'python_embeded\python.exe'
 
+# The portable build for newer drivers ships torch 2.13 on CUDA 13.  Training on it either
+# stops the engine or runs several times slower than on torch 2.9.1 with CUDA 12.8, which is
+# what the Docker engine uses, so that is what goes in its place.  Kept as a step of its own
+# so an install updated from an earlier version is repaired without unpacking the engine again.
+if ($variant -eq 'cu130') {
+    $torchMark = "torch-2.9.1-cu128-$engineMark"
+    if (-not (IsDone $torchMark)) {
+        Say "Installing the engine's torch (a large download)"
+        Invoke-Checked "The engine's torch" $py @('-s', '-m', 'pip', 'install', '--no-warn-script-location',
+            'torch==2.9.1', 'torchvision==0.24.1', 'torchaudio==2.9.1',
+            '--index-url', 'https://download.pytorch.org/whl/cu128')
+        Done $torchMark
+    }
+}
+
 $nodes = Join-Path $ComfyDir 'custom_nodes'
 if (-not (IsDone "fs_audio-$($Pins.FsAudioCommit.Substring(0, 8))") -or -not (Test-Path (Join-Path $nodes 'ComfyUI-FS_Audio_Suite'))) {
     Get-Commit 'KytraScript/ComfyUI-FS_Audio_Suite' $Pins.FsAudioCommit (Join-Path $nodes 'ComfyUI-FS_Audio_Suite')
