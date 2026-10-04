@@ -20,7 +20,8 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 - **A take panel and an editor:** the left panel shows how the selected take was made, and a large
   window, in three columns or as steps, is where takes are made and changed.
 - **Windows without Docker:** an installer that sets it all up natively, for people who would
-  rather not use Docker.
+  rather not use Docker. Please note that LoRA training in Windows currently has performance
+  trade-offs if this feature is important to you.
 
 Everything runs on one machine, in two parts: the app and the engine. With Docker they are two
 containers; the Windows installer runs the same two natively. No cloud and no accounts; an
