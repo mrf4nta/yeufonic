@@ -9108,8 +9108,12 @@ function paintTakes() {
         actions += tile('again', 'again', 'Replan', 'data-act="replan"' + id);
       }
       // A restarted job leaves a take that often still holds its audio or its score.
-      // Clear puts it back to whatever it reached, without another run.
-      actions += tile('go', 'check', 'Clear', 'data-act="clear"' + id);
+      // Clear puts it back to whatever it reached, without another run.  A take that
+      // failed while planning holds neither, so there is nothing to go back to: the
+      // server refuses, and the button would only look broken.
+      if (take.has_audio || (take.abc && take.abc.trim())) {
+        actions += tile('go', 'check', 'Clear', 'data-act="clear"' + id);
+      }
       // Again comes from the branches below when there is audio, and from here when
       // there is not, so a failed take never shows it twice.
       if (!take.has_audio) {
