@@ -39,6 +39,11 @@ cannot creep back in.
 
 ## Unreleased
 
+### Known limits
+- **Training a LoRA on native Windows.** In our own testing this workflow performs poorly in a native Windows
+  environment (it is slow, and on a 16 GB card the engine sometimes stopped). The README and the guide now say so and
+  point to the Docker and WSL2 route for anyone who needs to train. Making songs is not affected.
+
 ### Fixed
 - **A stopped engine showed dozens of error boxes on Windows.** The launcher raised its "engine stopped unexpectedly"
   box from a half-second timer, and the box let the timer fire again beneath it, stacking another every tick until
