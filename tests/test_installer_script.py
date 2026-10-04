@@ -28,3 +28,18 @@ def test_both_installers_put_the_tokenizer_head_where_the_trainer_looks():
     docker = (root / "scripts" / "fetch-models.sh").read_text(encoding="utf-8")
     assert "tokenizer_head_joint_v9.safetensors" in windows and "'fs_audio'" in windows and "Copy-Item $headFrom $headTo" in windows
     assert "models/fs_audio/tokenizer_head_joint_v9.safetensors" in docker
+
+
+def test_the_launcher_shows_a_dead_engine_once_not_on_every_tick():
+    """fail() shows a message box from inside the half-second timer; the box runs its own message loop, so the
+    timer fired again beneath it and stacked another box each time (126 in one failure)."""
+    launcher = (Path(__file__).resolve().parent.parent / "windows" / "launcher.py").read_text(encoding="utf-8")
+    body = launcher[launcher.index("    def stop_with("):launcher.index("    # ---------- the loop")]
+    assert "self.quitting = True" in body and "KillTimer" in body
+    assert body.index("self.quitting = True") < body.index("fail(text, log)")
+    assert "if self.quitting:\n            return" in launcher[launcher.index("    def tick("):]
+
+
+def test_extra_engine_switches_can_be_set_in_settings_ini():
+    launcher = (Path(__file__).resolve().parent.parent / "windows" / "launcher.py").read_text(encoding="utf-8")
+    assert '"engine_args": ""' in launcher and 'shlex.split(self.cfg.get("engine_args", ""))' in launcher

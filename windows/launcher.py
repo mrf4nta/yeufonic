@@ -20,6 +20,7 @@ import configparser
 import ctypes
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -47,7 +48,7 @@ def settings() -> dict:
     """Ports, the folder the library lives in, and how the page opens.  settings.ini
     overrides the defaults.  window = app opens the page in a window of its own (Edge's
     app mode); window = browser opens it in the default browser instead."""
-    values = {"app_port": "8090", "engine_port": "8188", "data_dir": str(HERE / "data"),
+    values = {"app_port": "8090", "engine_port": "8188", "engine_args": "", "data_dir": str(HERE / "data"),
               "import_roots": str(Path.home()), "open_browser": "yes", "window": "app"}
     ini = HERE / "settings.ini"
     if ini.exists():
@@ -106,6 +107,7 @@ user32.TrackPopupMenu.argtypes = [wintypes.HMENU, wintypes.UINT, ctypes.c_int, c
                                   wintypes.HWND, wintypes.LPVOID]
 user32.DestroyMenu.argtypes = [wintypes.HMENU]
 user32.SetTimer.argtypes = [wintypes.HWND, ctypes.c_size_t, wintypes.UINT, wintypes.LPVOID]
+user32.KillTimer.argtypes = [wintypes.HWND, ctypes.c_size_t]
 user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
 user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
@@ -503,6 +505,11 @@ class Launcher:
         user32.DestroyWindow(self.hwnd)
 
     def stop_with(self, text: str, log: Path | None = None) -> None:
+        # fail() shows a message box, and a message box runs a message loop of its own, so this half-second timer
+        # would fire again underneath it, find the engine still dead, and stack another box: 126 of them in one
+        # failure. Stop the timer and refuse further ticks before the first box goes up.
+        self.quitting = True
+        user32.KillTimer(self.hwnd, 1)
         self.notify(NIM_DELETE)
         fail(text, log)
 
@@ -608,7 +615,8 @@ class Launcher:
         engine_log = LOGS / "engine.log"
         engine = subprocess.Popen(
             [str(engine_python), "-s", str(COMFY / "main.py"), "--windows-standalone-build",
-             "--disable-auto-launch", "--listen", "127.0.0.1", "--port", str(self.engine_port)],
+             "--disable-auto-launch", "--listen", "127.0.0.1", "--port", str(self.engine_port),
+             *shlex.split(self.cfg.get("engine_args", ""))],
             cwd=str(COMFY), stdout=engine_log.open("w", encoding="utf-8"), stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW,
             # Its start-up message then sends people to the app, not the engine.

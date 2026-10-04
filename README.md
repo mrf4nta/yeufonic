@@ -258,7 +258,11 @@ data_dir = D:\YuE2 library
 import_roots = D:\Music
 open_browser = yes
 window = app
+engine_args = --disable-dynamic-vram
 ```
+
+`engine_args` adds switches to the command that starts the engine (ComfyUI), for when it misbehaves on a particular PC;
+its own `--help` lists them. Leave it out unless you need it.
 
 `data_dir` is where the library lives (by default, `data` in the install folder). `import_roots`
 is the folders a corpus may be built from, separated by commas (by default, your user folder).

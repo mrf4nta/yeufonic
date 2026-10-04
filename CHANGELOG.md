@@ -40,6 +40,9 @@ cannot creep back in.
 ## Unreleased
 
 ### Fixed
+- **A stopped engine showed dozens of error boxes on Windows.** The launcher raised its "engine stopped unexpectedly"
+  box from a half-second timer, and the box let the timer fire again beneath it, stacking another every tick until
+  the screen was covered. It now stops the timer and shows the box once.
 - **Training on a fresh install.** The trainer reads the tokenizer head from its own `fs_audio` folder, and neither
   the Windows installer nor `fetch-models.sh` put it there (only in `audio_encoders`), so a new install refused to
   train with "tokenizer_head … not in ['(run FS_Audio Training Assets first)']". Both now place it in both folders,
@@ -52,6 +55,8 @@ cannot creep back in.
   the app also left a copy of its launcher there, outside the install folder, where the uninstaller never looked.
 
 ### Added
+- **`engine_args` in the Windows `settings.ini`.** Extra switches for the command that starts the engine, for a PC where it
+  misbehaves (for example `engine_args = --disable-dynamic-vram`).
 - **A Storage window, in Settings.** It shows where the disk space is going, per area and per corpus, and
   lists what can be given back: the copies made for the engine while songs are analysed, the engine's
   copies of uploads and finished training sets, each corpus's training set (each song written again as
