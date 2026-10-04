@@ -144,7 +144,7 @@ Function WaitForYeufonicClosed
     ${If} $0 <= 10
       ${Break}
     ${EndIf}
-    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${APPNAME} is running.$\r$\n$\r$\nClose its window and give it a few seconds to finish, then choose Retry. Anything it is working on, a render or a training run, stops when it closes.$\r$\n$\r$\nCancel leaves ${APPNAME} as it is." IDRETRY +2
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${APPNAME} is running.$\r$\n$\r$\nQuit it from its icon by the clock (right-click, then Quit) and give it a few seconds to finish, then choose Retry. Closing its window leaves it running. Anything it is working on, a render or a training run, stops when it quits.$\r$\n$\r$\nCancel leaves ${APPNAME} as it is." IDRETRY +2
     Abort
   ${Loop}
 FunctionEnd
@@ -362,17 +362,17 @@ Function .onInit
   ${If} $Updating == 1
     ${If} $Legacy == 1
       StrCpy $WelcomeTitle "${LEGACY_APPNAME} is now ${APPNAME}"
-      StrCpy $WelcomeText "${LEGACY_APPNAME} $OldVersion is installed on this PC. It has been renamed ${APPNAME}, and this updates it to ${APPNAME} ${VERSION} where it is, in $INSTDIR.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and only what has changed is downloaded. The ${LEGACY_APPNAME} shortcuts and Apps list entry are replaced by ${APPNAME} ones.$\r$\n$\r$\nIf ${LEGACY_APPNAME} is running, it is closed first."
+      StrCpy $WelcomeText "${LEGACY_APPNAME} $OldVersion is installed on this PC. It has been renamed ${APPNAME}, and this updates it to ${APPNAME} ${VERSION} where it is, in $INSTDIR.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and only what has changed is downloaded. The ${LEGACY_APPNAME} shortcuts and Apps list entry are replaced by ${APPNAME} ones.$\r$\n$\r$\nIf ${LEGACY_APPNAME} is running, you are asked to quit it first."
       StrCpy $InstHeader "Updating ${LEGACY_APPNAME} to ${APPNAME}"
       StrCpy $FinishText "${LEGACY_APPNAME} $OldVersion is now ${APPNAME} ${VERSION}.$\r$\n$\r$\nYour library and settings are as you left them. Start it from the ${APPNAME} shortcut on the desktop or in the Start menu."
     ${ElseIf} $OldVersion == "${VERSION}"
       StrCpy $WelcomeTitle "Reinstall ${APPNAME} ${VERSION}"
-      StrCpy $WelcomeText "${APPNAME} ${VERSION} is already installed on this PC. This installs it again over itself, which can repair a copy that has stopped working.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and anything already in place is not downloaded again.$\r$\n$\r$\nIf ${APPNAME} is running, it is closed first."
+      StrCpy $WelcomeText "${APPNAME} ${VERSION} is already installed on this PC. This installs it again over itself, which can repair a copy that has stopped working.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and anything already in place is not downloaded again.$\r$\n$\r$\nIf ${APPNAME} is running, you are asked to quit it first."
       StrCpy $InstHeader "Reinstalling ${APPNAME}"
       StrCpy $FinishText "${APPNAME} ${VERSION} has been installed again.$\r$\n$\r$\nYour library and settings are as you left them."
     ${Else}
       StrCpy $WelcomeTitle "Update ${APPNAME}"
-      StrCpy $WelcomeText "${APPNAME} $OldVersion is installed on this PC. This updates it to ${VERSION}.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and only what has changed is downloaded, so it takes minutes rather than hours.$\r$\n$\r$\nIf ${APPNAME} is running, it is closed first."
+      StrCpy $WelcomeText "${APPNAME} $OldVersion is installed on this PC. This updates it to ${VERSION}.$\r$\n$\r$\nYour library, settings, LoRAs and models are kept, and only what has changed is downloaded, so it takes minutes rather than hours.$\r$\n$\r$\nIf ${APPNAME} is running, you are asked to quit it first."
       StrCpy $InstHeader "Updating ${APPNAME}"
       StrCpy $FinishText "${APPNAME} has been updated from $OldVersion to ${VERSION}.$\r$\n$\r$\nYour library and settings are as you left them."
     ${EndIf}

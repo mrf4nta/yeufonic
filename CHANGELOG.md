@@ -45,6 +45,9 @@ cannot creep back in.
   point to the Docker and WSL2 route for anyone who needs to train. Making songs is not affected.
 
 ### Fixed
+- **The installer says how to quit Yeufonic.** Its prompt, the welcome pages, the update window and the README told people
+  to close the window, but that leaves the app running by the clock, so the installer kept waiting. They now say to
+  right-click the icon there and choose Quit.
 - **A stopped engine showed dozens of error boxes on Windows.** The launcher raised its "engine stopped unexpectedly"
   box from a half-second timer, and the box let the timer fire again beneath it, stacking another every tick until
   the screen was covered. It now stops the timer and shows the box once.

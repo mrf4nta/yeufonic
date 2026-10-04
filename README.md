@@ -696,7 +696,7 @@ Values are read once, at start.
 
 **On Windows, without Docker,** they are ordinary Windows environment variables:
 
-1. Close Yeufonic's window, which stops it.
+1. Quit Yeufonic: right-click its icon by the clock and choose **Quit**. Closing the window leaves it running.
 2. Open Start, type *environment*, and choose **Edit environment variables for your account**.
 3. Under *User variables*, press **New**. Enter the name, say `TRAIN_MIN_STEPS`, and the
    value, say `600`, then **OK** twice.
