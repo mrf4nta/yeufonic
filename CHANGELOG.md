@@ -40,6 +40,14 @@ cannot creep back in.
 ## Unreleased
 
 ### Added
+- **A Storage window, in Settings.** It shows where the disk space is going, per area and per corpus, and
+  lists what can be given back: the copies made for the engine while songs are analysed, the engine's
+  copies of uploads and finished training sets, each corpus's training set (each song written again as
+  lossless FLAC) and its training checkpoints. Every item says what it is and what removing it costs, and
+  nothing goes until it is ticked and confirmed. A corpus that is training, being exported or analysed is
+  refused. The window also holds the settings for tidying automatically: the working copies of a song are
+  now removed when its analysis ends (they were never read again), the training set can be removed when
+  training ends, and the existing choice about checkpoints moved here.
 - **A smaller YuE2 model for graphics cards with little memory.** The Windows installer offers
   two sizes on its components page, full quality (BF16, recommended) or low memory (INT8, 4.0 GB),
   and the Docker script takes `--int8`. An install has one: running the installer again changes it,

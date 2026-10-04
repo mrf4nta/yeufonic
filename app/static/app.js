@@ -4488,7 +4488,8 @@ function setting(key, fallback) {
 }
 
 function paintSettings() {
-  var list = State.settingSpec || [];
+  // The settings about disk space live in the Storage window, beside what they act on.
+  var list = (State.settingSpec || []).filter(function (item) { return item.section !== 'storage'; });
   $('settings-list').innerHTML = list.map(function (item) {
     var control;
     if (item.type === 'select') {
@@ -4798,6 +4799,169 @@ function toggleBrandMenu() {
   } else {
     closeBrandMenu();
   }
+}
+
+/* ------------------------------------------------------------------ Storage
+   What is using disk space and what can be given back.  The server measures; this lists the items
+   that were made by Yeufonic and can be made again, each with what it costs to remove, and removes
+   the ones that are ticked after one more look. */
+var STORAGE = { report: null };
+
+function sizeText(bytes) {
+  if (bytes === null || bytes === undefined) { return '?'; }
+  var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  var value = bytes, i = 0;
+  while (value >= 1024 && i < units.length - 1) { value /= 1024; i += 1; }
+  return (i < 2 ? Math.round(value) : value.toFixed(1)) + ' ' + units[i];
+}
+
+// Items that cost the person nothing they would notice: the ones the button ticks.
+var STORAGE_FREE_IDS = ['working-copies', 'engine-uploads', 'engine-training-copies'];
+
+async function openStorage() {
+  $('settings-modal').classList.add('hidden');
+  $('storage-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  await loadStorage();
+}
+
+function closeStorage() {
+  $('storage-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+async function loadStorage() {
+  $('storage-summary').textContent = 'Measuring… a large library takes a few seconds.';
+  $('storage-result').textContent = '';
+  try {
+    STORAGE.report = await api('/api/storage');
+    paintStorage();
+  } catch (err) {
+    $('storage-summary').textContent = 'Could not measure: ' + err.message;
+  }
+}
+
+function paintStorage() {
+  var report = STORAGE.report;
+  if (!report) { return; }
+  var total = report.areas.reduce(function (sum, area) { return sum + area.bytes; }, 0);
+  var disk = report.disk && report.disk.free !== null
+    ? ' The disk has ' + sizeText(report.disk.free) + ' free of ' + sizeText(report.disk.total) + '.' : '';
+  $('storage-summary').textContent = 'Yeufonic is using ' + sizeText(total) + '.' + disk + ' ' +
+    sizeText(report.reclaimable) + ' of it can be given back.';
+
+  $('storage-items').innerHTML = report.items.length ? report.items.map(function (item) {
+    return '<label class="storage-item' + (item.blocked ? ' blocked' : '') + '">' +
+      '<input type="checkbox" data-item="' + esc(item.id) + '"' + (item.blocked ? ' disabled' : '') + '>' +
+      '<span class="storage-title"><span>' + esc(item.title) + '</span><span class="storage-size">' +
+        sizeText(item.bytes) + ' · ' + item.files + (item.files === 1 ? ' file' : ' files') + '</span></span>' +
+      '<p>' + esc(item.what) + '</p>' +
+      '<p><b>If you remove it:</b> ' + esc(item.consequence) + '</p>' +
+      (item.blocked ? '<span class="storage-why">Not now: ' + esc(item.blocked) + '.</span>' : '') +
+      '</label>';
+  }).join('') : '<p class="hint">Nothing here can be given back at the moment.</p>';
+  paintStorageSelection();
+
+  var spec = (State.settingSpec || []).filter(function (item) { return item.section === 'storage'; });
+  $('storage-auto').innerHTML = spec.map(function (item) {
+    return '<div class="storage-auto-row"><label for="auto-' + esc(item.key) + '">' + esc(item.label) + '</label>' +
+      '<select id="auto-' + esc(item.key) + '" data-storage-key="' + esc(item.key) + '">' +
+      item.options.map(function (option) {
+        return '<option value="' + esc(option.value) + '"' + (option.value === item.value ? ' selected' : '') + '>' +
+          esc(option.label) + '</option>';
+      }).join('') + '</select><p>' + esc(item.help || '') + '</p></div>';
+  }).join('');
+
+  var biggest = Math.max.apply(null, report.areas.map(function (a) { return a.bytes; }).concat([1]));
+  $('storage-areas').innerHTML = report.areas.map(function (area) {
+    return '<div class="storage-area"><span>' + esc(area.name) + '</span>' +
+      '<span class="storage-bar"><i style="width:' + Math.max(1, Math.round(100 * area.bytes / biggest)) + '%"></i></span>' +
+      '<span style="text-align:right">' + sizeText(area.bytes) + '</span><small>' + esc(area.note) + '</small></div>';
+  }).join('');
+
+  $('storage-corpora').innerHTML = report.corpora.length ?
+    '<table class="storage-table"><tr><th>Corpus</th><th>Songs and vocals</th><th>Working copies</th>' +
+    '<th>Training set</th><th>Checkpoints</th><th>Total</th></tr>' + report.corpora.map(function (c) {
+      return '<tr><td>' + esc(c.name) + '</td><td>' + sizeText(c.songs) + '</td><td>' + sizeText(c.working_copies) +
+        '</td><td>' + sizeText(c.training_set) + '</td><td>' + sizeText(c.checkpoints) + '</td><td>' +
+        sizeText(c.songs + c.working_copies + c.training_set + c.checkpoints) + '</td></tr>';
+    }).join('') + '</table>' : '<p class="hint">No corpora yet.</p>';
+}
+
+function storageChosen() {
+  return Array.prototype.map.call(document.querySelectorAll('#storage-items input[data-item]:checked'),
+    function (box) { return box.dataset.item; });
+}
+
+function paintStorageSelection() {
+  var chosen = storageChosen();
+  var items = (STORAGE.report && STORAGE.report.items) || [];
+  var bytes = items.filter(function (i) { return chosen.indexOf(i.id) >= 0; })
+    .reduce(function (sum, i) { return sum + i.bytes; }, 0);
+  $('storage-reclaim').disabled = !chosen.length;
+  $('storage-selected').textContent = chosen.length ? chosen.length + ' selected · ' + sizeText(bytes) : '';
+}
+
+async function reclaimStorage() {
+  var chosen = storageChosen();
+  var items = ((STORAGE.report && STORAGE.report.items) || []).filter(function (i) { return chosen.indexOf(i.id) >= 0; });
+  if (!items.length) { return; }
+  var total = items.reduce(function (sum, i) { return sum + i.bytes; }, 0);
+  var message = 'Remove ' + items.length + (items.length === 1 ? ' item' : ' items') + ', ' + sizeText(total) + '?\n\n' +
+    items.map(function (i) { return '• ' + i.title + ' (' + sizeText(i.bytes) + '): ' + i.consequence; }).join('\n\n') +
+    '\n\nThis cannot be undone.';
+  var yes = await confirmModal({ title: 'Remove these files?', message: message, confirmText: 'Remove', danger: true });
+  if (!yes) { return; }
+  $('storage-reclaim').disabled = true;
+  try {
+    var result = await api('/api/storage/reclaim', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: chosen })
+    });
+    var text = 'Freed ' + sizeText(result.freed) + '.';
+    if (result.skipped.length) {
+      text += ' Left alone: ' + result.skipped.map(function (s) { return s.reason; }).join('; ') + '.';
+    }
+    await loadStorage();
+    $('storage-result').textContent = text;
+  } catch (err) {
+    $('storage-result').textContent = 'Could not remove: ' + err.message;
+    paintStorageSelection();
+  }
+}
+
+async function saveStorageSetting(select) {
+  try {
+    var data = await api('/api/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: select.dataset.storageKey, value: select.value })
+    });
+    adoptSettings(data.settings);
+    $('storage-result').textContent = 'Saved.';
+  } catch (err) {
+    $('storage-result').textContent = 'Could not save: ' + err.message;
+  }
+}
+
+function wireStorage() {
+  var open = $('open-storage');
+  if (!open || !$('storage-modal')) { return; }
+  open.addEventListener('click', openStorage);
+  $('storage-close').addEventListener('click', closeStorage);
+  $('storage-refresh').addEventListener('click', loadStorage);
+  $('storage-reclaim').addEventListener('click', reclaimStorage);
+  $('storage-free-ones').addEventListener('click', function () {
+    Array.prototype.forEach.call(document.querySelectorAll('#storage-items input[data-item]'), function (box) {
+      box.checked = !box.disabled && STORAGE_FREE_IDS.indexOf(box.dataset.item) >= 0;
+    });
+    paintStorageSelection();
+  });
+  $('storage-items').addEventListener('change', paintStorageSelection);
+  $('storage-auto').addEventListener('change', function (event) {
+    if (event.target.dataset && event.target.dataset.storageKey) { saveStorageSetting(event.target); }
+  });
+  $('storage-modal').addEventListener('click', function (event) {
+    if (backdropClick(event, $('storage-modal'))) { closeStorage(); }
+  });
 }
 
 function openSettings() {
@@ -11215,6 +11379,7 @@ function wire() {
     }
   });
   $('settings-close').addEventListener('click', closeSettings);
+  wireStorage();
   $('settings-modal').addEventListener('click', function (event) {
     if (backdropClick(event, $('settings-modal'))) { closeSettings(); }
   });
@@ -11428,6 +11593,7 @@ function wire() {
     if (event.key === 'Escape' && !$('lyrics-modal').classList.contains('hidden')) { closeLyricsEditor(); return; }
     if (event.key === 'Escape' && !$('stems-modal').classList.contains('hidden')) { closeStemsModal(); return; }
     if (event.key === 'Escape' && !$('save-modal').classList.contains('hidden')) { closeSaveModal(); return; }
+    if (event.key === 'Escape' && $('storage-modal') && !$('storage-modal').classList.contains('hidden')) { closeStorage(); return; }
     if (event.key === 'Escape' && !$('settings-modal').classList.contains('hidden')) { closeSettings(); return; }
     if (event.key === 'Escape' && !$('score-modal').classList.contains('hidden')) {
       if (scoreView() === 'roll' && window.PianoRoll && window.PianoRoll.hasSelection && window.PianoRoll.hasSelection()) {

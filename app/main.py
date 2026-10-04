@@ -40,7 +40,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import aligner, config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, midi, score, soundfonts, stems, trainsize, transpose, update
+from . import aligner, config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, midi, score, soundfonts, stems, storage, trainsize, transpose, update
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -158,6 +158,7 @@ SETTINGS_SPEC: list[dict] = [
     },
     {
         "key": "training.checkpoints",
+        "section": "storage",
         "label": "Training checkpoints",
         "type": "select",
         # Kept by default: each sounds about as good as the finished LoRA but reads the
@@ -169,6 +170,37 @@ SETTINGS_SPEC: list[dict] = [
         ],
         "help": "A training run saves a checkpoint every 50 steps, folded under its LoRA in the Style LoRA list. "
                 "Each gives its own take on the style. Each is as big as the LoRA itself.",
+    },
+    {
+        "key": "storage.working_copies",
+        "section": "storage",
+        "label": "Working copies of corpus songs",
+        "type": "select",
+        # Removed by default: nothing reads them once a song has been analysed, and a corpus makes about
+        # 40 MB of them per song.
+        "default": "remove",
+        "options": [
+            {"value": "remove", "label": "Remove when a song's analysis ends"},
+            {"value": "keep", "label": "Keep them"},
+        ],
+        "help": "Analysing a corpus song makes copies for the engine to read: the song with its tags stripped, "
+                "a padded copy for the transcriber and a short clip for its style. Nothing reads them again. "
+                "If a song is analysed again they are made again.",
+    },
+    {
+        "key": "storage.training_set",
+        "section": "storage",
+        "label": "Training sets",
+        "type": "select",
+        # Kept by default: removing one means pressing Export again before the corpus can train again.
+        "default": "keep",
+        "options": [
+            {"value": "keep", "label": "Keep them"},
+            {"value": "delete", "label": "Remove when training ends"},
+        ],
+        "help": "A corpus's training set is its songs written again as lossless FLAC, larger than the originals. "
+                "Once a LoRA is trained it is not used again. Removed, it is written again with Export before "
+                "the corpus can train again, which takes a few minutes. LoRAs already trained are not affected.",
     },
     {
         "key": "llm.provider",
@@ -2688,6 +2720,32 @@ def import_browse(path: str | None = None) -> dict:
         return identities.browse(path)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+class ReclaimIn(BaseModel):
+    ids: list[str] = Field(max_length=200)
+
+
+def _storage_busy() -> storage.Busy:
+    return storage.Busy(exporting=set(EXPORTING))
+
+
+@app.get("/api/storage")
+async def storage_report() -> dict:
+    """Where the space is and what can be given back, measured now.  A big library takes a few seconds."""
+    return await asyncio.to_thread(storage.scan, _storage_busy(), _lora_base)
+
+
+@app.post("/api/storage/reclaim")
+async def storage_reclaim(body: ReclaimIn) -> dict:
+    """Remove the named items from the Storage window, and say how much came back."""
+    result = await asyncio.to_thread(storage.reclaim, body.ids, _storage_busy(), _lora_base)
+    if any(r["id"].startswith("checkpoints:") for r in result["removed"]):
+        try:
+            await ENGINE.refresh_options()     # the Style LoRA list follows the files
+        except Exception as exc:  # noqa: BLE001
+            log.warning("the engine's list was not re-read: %s", exc)
+    return result
 
 
 @app.post("/api/engine/reload-options")

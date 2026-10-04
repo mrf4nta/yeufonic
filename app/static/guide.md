@@ -824,6 +824,22 @@ browser and survive a rebuild: the output audio format for stems and a take's Sa
 separation model, where stems are written, whether training checkpoints are kept, and how
 instrumentals are checked for singing.
 
+### Storage
+
+**Settings → Storage** shows where Yeufonic's disk space is going and lets you give some back. Training a
+corpus leaves a lot of files that are not needed again: copies made for the engine while songs were analysed,
+the training set (each song written again as lossless FLAC, larger than the original), and the checkpoints
+saved along the way. The window lists each of these with its size, **what it is** and **what removing it
+costs**, and removes only what you tick, after a last confirmation. **Tick the ones that cost nothing** ticks
+the copies that are simply made again when needed.
+
+Your takes, songs, vocals, finished LoRAs and models are never listed. Anything belonging to a corpus that is
+training, being exported or being analysed is shown greyed and cannot be touched until it has finished.
+
+Below that, **Tidy up automatically** chooses what Yeufonic removes for you: the working copies of each song
+once its analysis ends (on by default), the training set once a LoRA has trained (off by default; the corpus
+then needs **Export** again before it can train again), and the training checkpoints (kept by default).
+
 ### The YuE2 model
 
 YuE2 comes in two sizes, and an install has one: **full quality**, which we recommend, or **low

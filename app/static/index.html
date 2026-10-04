@@ -476,6 +476,45 @@
   </div>
 </div>
 
+<div id="storage-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="storage-title">
+  <div class="modal-box storage">
+    <div class="modal-head">
+      <strong id="storage-title">Storage</strong>
+      <span class="storage-head-buttons">
+        <button type="button" id="storage-refresh" class="ghost small">Measure again</button>
+        <button type="button" id="storage-close" class="ghost">Close</button>
+      </span>
+    </div>
+    <p class="hint" id="storage-summary">Measuring&hellip;</p>
+
+    <section class="storage-section">
+      <h3>Give space back</h3>
+      <p class="hint">Everything listed here was made by Yeufonic and can be made again. Your takes, your songs and your
+        finished LoRAs are never listed. Tick what you want to remove: each item says what it is and what removing it costs.</p>
+      <div id="storage-items"></div>
+      <div class="storage-actions">
+        <button type="button" id="storage-free-ones" class="ghost small" title="Tick the items that cost you nothing">Tick the ones that cost nothing</button>
+        <button type="button" id="storage-reclaim" class="primary" disabled>Remove selected</button>
+        <span id="storage-selected" class="hint"></span>
+      </div>
+      <div id="storage-result" class="hint"></div>
+    </section>
+
+    <section class="storage-section">
+      <h3>Tidy up automatically</h3>
+      <p class="hint">What Yeufonic may remove for you as it goes, so these do not build up.</p>
+      <div id="storage-auto"></div>
+    </section>
+
+    <section class="storage-section">
+      <h3>Where the space is</h3>
+      <div id="storage-areas"></div>
+      <h4>Corpora</h4>
+      <div id="storage-corpora"></div>
+    </section>
+  </div>
+</div>
+
 <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Settings">
   <form id="settings-form" class="modal-box narrow settings" autocomplete="off" onsubmit="return false;">
     <div class="modal-head">
@@ -483,6 +522,10 @@
       <button type="button" id="settings-close" class="ghost">Close</button>
     </div>
     <p class="hint">Saved on the server, so they follow you to any browser.</p>
+    <div class="settings-storage-row">
+      <button type="button" id="open-storage" class="ghost small">Storage&hellip;</button>
+      <span class="hint">What is using disk space, what can be given back, and what is tidied automatically.</span>
+    </div>
     <div id="settings-list"></div>
     <div id="settings-llm-test" class="row" style="margin-top: 14px; gap: 10px; align-items: center;">
       <button type="button" id="btn-test-llm" class="ghost small">Test LLM Connection</button>

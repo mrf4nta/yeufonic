@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, identities, instrumental, llm, loras, lyrics, score, stems, trainsize, transpose
+from . import config, identities, instrumental, llm, loras, lyrics, score, stems, storage, trainsize, transpose
 from .db import bump_average, execute, get_setting, one, rows
 from .engine import OUT_OF_MEMORY, Engine, load_template
 from .library import (audio_duration, ensure_peaks, fade_out_end, loudness, inside, normal_target, normalise, normalised_path, original_path, remove_tree,
@@ -1386,6 +1386,12 @@ async def run_identity_job(kind: str, song_id: str) -> None:
         set_song(song_id, **{field: "failed"}, error=f"{kind.split('_')[1]}: {exc}"[:400])
         if kind in ("identity_score", "persona_score"):
             maybe_draft(song_id)
+    finally:
+        # The copies made for the engine are not read again; Settings > Storage can keep them.
+        if get_setting("storage.working_copies", "remove") != "keep":
+            freed = await asyncio.to_thread(storage.drop_working_copies, folder, song_id)
+            if freed:
+                log.debug("Removed %d bytes of working copies for corpus song %s", freed, song_id)
 
 
 run_persona_job = run_identity_job
@@ -1640,6 +1646,11 @@ async def finish_training(run: dict, identity: dict, stopped: bool = False) -> s
         await asyncio.to_thread(loras.write_note, snapshot, identity["trigger_word"], identity["name"],
                                 title=f"{identity['name']} · step {step}", family=loras.CHECKPOINT_FAMILY)
     execute("UPDATE identities SET lora = ? WHERE id = ?", (produced.name, identity["id"]))
+    # A finished run no longer needs its training set, if Settings says to let it go.  A run that
+    # stopped short keeps it: the person may want to try again.
+    if not stopped and get_setting("storage.training_set", "keep") == "delete":
+        freed = await asyncio.to_thread(storage.drop_training_set, identity["id"], run["id"])
+        log.info("Removed the training set of corpus '%s' (%.1f GB); Export writes it again", identity["name"], freed / 1e9)
     with contextlib.suppress(Exception):
         await ENGINE.refresh_options()
     return produced.name
