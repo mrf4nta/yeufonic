@@ -11,3 +11,7 @@ numpy==2.5.3
 # Persona lyrics: Whisper, run on the CPU through CTranslate2.  The model is
 # downloaded into the data folder on first use.
 faster-whisper==1.2.1
+# faster-whisper opens audio with av.open(..., metadata_errors="ignore"), an option PyAV 19 removed, so
+# with PyAV left to resolve itself lyric hearing failed ("open() got an unexpected keyword argument
+# 'metadata_errors'"). Held at the version the app was tested with until faster-whisper catches up.
+av==18.1.0

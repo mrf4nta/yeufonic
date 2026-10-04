@@ -39,6 +39,12 @@ cannot creep back in.
 
 ## Unreleased
 
+### Fixed
+- **Lyric extraction on a fresh install.** A newer release of the audio library PyAV (19) removed an option
+  faster-whisper uses to read audio, so on an install set up after it came out, hearing a song's lyrics failed
+  with "open() got an unexpected keyword argument 'metadata_errors'". PyAV is now held at the version the app
+  was tested with, and an install updated afterwards is repaired.
+
 ### Added
 - **A Storage window, in Settings.** It shows where the disk space is going, per area and per corpus, and
   lists what can be given back: the copies made for the engine while songs are analysed, the engine's
