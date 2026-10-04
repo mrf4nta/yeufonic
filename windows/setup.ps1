@@ -377,7 +377,9 @@ $appPy = Join-Path $venv 'Scripts\python.exe'
 $reqs = Join-Path $InstallDir 'studio\requirements.txt'
 $appMark = 'app-' + (Get-FileHash -Algorithm SHA256 $reqs).Hash.Substring(0, 12).ToLower()
 if (-not (IsDone $appMark) -or -not (Test-Path $appPy)) {
-    Invoke-Checked 'Python for the app' $uv @('python', 'install', $Pins.AppPython)
+    # --no-bin: uv would also put a python3.13.exe in the user's own .local\bin, outside this folder, where
+    # the uninstaller never looks and where an existing one of the user's makes it warn.
+    Invoke-Checked 'Python for the app' $uv @('python', 'install', '--no-bin', $Pins.AppPython)
     if (-not (Test-Path $appPy)) { Invoke-Checked 'The app environment' $uv @('venv', '--python', $Pins.AppPython, $venv) }
     Invoke-Checked "The app's packages" $uv @('pip', 'install', '--python', $appPy, '-r', $reqs)
     # Stems run on the CPU, as in the app container: the GPU belongs to YuE2.

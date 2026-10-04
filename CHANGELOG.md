@@ -44,6 +44,8 @@ cannot creep back in.
   faster-whisper uses to read audio, so on an install set up after it came out, hearing a song's lyrics failed
   with "open() got an unexpected keyword argument 'metadata_errors'". PyAV is now held at the version the app
   was tested with, and an install updated afterwards is repaired.
+- **The Windows installer no longer puts a `python3.13.exe` in your own `.local\bin` folder.** Setting up Python for
+  the app also left a copy of its launcher there, outside the install folder, where the uninstaller never looked.
 
 ### Added
 - **A Storage window, in Settings.** It shows where the disk space is going, per area and per corpus, and
