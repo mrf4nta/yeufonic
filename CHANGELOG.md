@@ -37,6 +37,17 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Fixed
+- **The MIDI file saved from the Score window now carries its instruments and drums properly.** The file came from abcjs's
+  own writer, which put every instrument change on channel 1, left the bass without an instrument of its own, and wrote a score
+  with drums as an invalid file: the drum pitches were wrong (a kick and snare came out as a tambourine and a cowbell) and one
+  velocity was 128, which a strict MIDI reader rejects. It is now written from the same sequence that plays the preview: a track
+  for each part (the vocal and instrument lines, the chords, the bass, the drums), each on its own channel with its instrument,
+  the drums on channel 10 at General MIDI pitches, and the tempo and metre in the file. The notes, their timing and the tempo
+  are unchanged. Fixes #36.
+
 ## 0.0.26 (2026-10-05)
 
 ### Fixed

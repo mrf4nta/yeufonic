@@ -109,8 +109,8 @@ trained in the app. They play on that page, and the MP3s can be downloaded.
 - **Hear a plan, and export it.** The Score window's **Notation** tab plays the plan as you have
   edited it, with the note it is on picked out and each line played with an instrument the style
   names — a guitar, a piano, strings, a synth — and drums when the style asks for them. **Download
-  MIDI** saves the score for a DAW with the same instruments, the chord symbols included as a part
-  of their own.
+  MIDI** saves the score for a DAW, one track for each part: the vocal and instrument lines, the
+  chords with their bass, and drums when the style asks for them, each with its General MIDI instrument.
 - **MIDI import and audition (Experimental).** Drop a Standard MIDI file (`.mid`, `.midi`) into Cover
   mode to generate different, often off-the-wall takes of original tunes. The app parses tracks into
   vocal melody, accompaniment, and chords, extracts embedded lyrics, and provides high-fidelity audio

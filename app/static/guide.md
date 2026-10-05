@@ -172,9 +172,12 @@ otherwise hear. This is a reading of the style, not of the render: YuE2 decides 
 real performance and adds parts the score never had, so treat it as the plan played in the right
 colours rather than as what the take will sound like.
 
-**Download MIDI** saves the score for a DAW, with the same instruments. It carries the two written
-voices and, unless you untick **Chords**, a part playing the chord symbols, which is the only place
-the harmony is written as notes. A plan that changes its metre part way is written in the metre it
+**Download MIDI** saves the score for a DAW. Each part is a track of its own, on its own channel,
+with the instrument the preview used set on that channel: the vocal line, the instrument line and,
+unless you untick **Chords**, the chord symbols as a chord part with its bass beside it (the only
+place the harmony is written as notes), and drums on channel 10 when the style asks for them. The
+instruments are General MIDI program numbers, so your DAW plays them with its own sounds, and the
+tempo and metre are in the file. A plan that changes its metre part way is written in the metre it
 starts in — only that one is recorded — while the notes keep their own lengths. Clicking a note in
 the staves puts the cursor on the ABC that wrote it.
 

@@ -2055,6 +2055,20 @@ function notationMidiBytes(abc) {
   // the file is written as the score stands.
   delete options.midiTranspose;
   delete options.soundFontUrl;
+  // The file is written from the sequence that plays the preview (midiwrite.js), because abcjs's
+  // own file writer garbles the drums and puts every instrument change on channel 1. A page
+  // loaded before that script existed has no writer, and falls back to abcjs's.
+  if (typeof writeMidi === 'function') {
+    try {
+      var tune = ABCJS.renderAbc('*', abc, {})[0];
+      var meter = tune && tune.getMeterFraction ? tune.getMeterFraction() : null;
+      var made = writeMidi(tune.setUpAudio(options), {
+        meter: meter ? { num: meter.num, den: meter.den } : null,
+        title: (($('title') && $('title').value) || '').trim()
+      });
+      if (made && made.length) { return made; }
+    } catch (err) { /* fall through to abcjs's own writer */ }
+  }
   options.midiOutputType = 'binary';
   var result = ABCJS.synth.getMidiFile(abc, options);
   var first = Array.isArray(result) ? result[0] : result;      // abcjs hands back [Uint8Array]
