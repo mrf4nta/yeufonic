@@ -45,14 +45,14 @@ def test_extra_engine_switches_can_be_set_in_settings_ini():
     assert '"engine_args": ""' in launcher and 'shlex.split(self.cfg.get("engine_args", ""))' in launcher
 
 
-def test_the_windows_engine_gets_the_torch_the_docker_engine_uses():
-    """The portable build for newer drivers brings torch 2.13 on CUDA 13, on which training either stopped the
-    engine or ran several times slower than on the 2.9.1/CUDA 12.8 pair the Docker engine pins. The step is
-    its own, keyed on the engine's mark, so an updated install is repaired and a re-unpacked engine is redone."""
+def test_the_windows_engine_keeps_the_portable_torch_and_undoes_the_0_0_25_pin():
+    """0.0.25 put torch 2.9.1 on CUDA 12.8 into the Windows engine, where the low-memory model renders several
+    times slower than on the CUDA 13 build the portable ships. The installer must not install CUDA 12.8 torch,
+    and must put an install that has the pair back on the portable's own (a step of its own, so an update does it)."""
     setup = (Path(__file__).resolve().parent.parent / "windows" / "setup.ps1").read_text(encoding="utf-8")
-    dockerfile = (Path(__file__).resolve().parent.parent / "engine" / "Dockerfile").read_text(encoding="utf-8")
-    block = setup[setup.index("if ($variant -eq 'cu130') {"):setup.index("$nodes = Join-Path")]
-    assert "'torch==2.9.1', 'torchvision==0.24.1', 'torchaudio==2.9.1'" in block
-    assert "https://download.pytorch.org/whl/cu128" in block
-    assert '$torchMark = "torch-2.9.1-cu128-$engineMark"' in block
-    assert 'torch==2.9.*' in dockerfile and "whl/cu128" in dockerfile
+    block = setup[setup.index("if ($variant -eq 'cu130') {\n    $torchHave"):setup.index("$nodes = Join-Path")]
+    assert "whl/cu128" not in setup
+    assert "'2.9.1+cu128'" in block
+    assert "'torch==2.13.0', 'torchvision==0.28.0', 'torchaudio==2.11.0'" in block
+    assert "https://download.pytorch.org/whl/cu130" in block
+    assert "torch-2.9.1-cu128-*.done" in block

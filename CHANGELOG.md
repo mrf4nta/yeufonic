@@ -37,6 +37,14 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Fixed
+- **The low-memory model was several times slower on Windows in 0.0.25.** That release put the engine on PyTorch with
+  CUDA 12.8, where the low-memory model renders far slower than on CUDA 13, which the Windows engine ships and which the
+  model was tested on. The installer no longer does that, and an install that has it is put back on CUDA 13 when the
+  installer is run over it.
+
 ## 0.0.25 (2026-10-04)
 
 ### Known limits

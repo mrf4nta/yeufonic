@@ -345,19 +345,20 @@ if (-not (IsDone $engineMark)) {
 }
 $py = Join-Path $Engine 'python_embeded\python.exe'
 
-# The portable build for newer drivers ships torch 2.13 on CUDA 13.  Training on it either
-# stops the engine or runs several times slower than on torch 2.9.1 with CUDA 12.8, which is
-# what the Docker engine uses, so that is what goes in its place.  Kept as a step of its own
-# so an install updated from an earlier version is repaired without unpacking the engine again.
+# 0.0.25 put torch 2.9.1 on CUDA 12.8 into the engine, to chase a training problem it did not
+# fix.  On that build the low-memory model renders several times slower than on CUDA 13, which is
+# what the portable build ships and what that model was tested on.  An install that has the
+# 0.0.25 pair is put back on the portable's own.  A step of its own, so an update does it
+# without unpacking the engine again.
 if ($variant -eq 'cu130') {
-    $torchMark = "torch-2.9.1-cu128-$engineMark"
-    if (-not (IsDone $torchMark)) {
-        Say "Installing the engine's torch (a large download)"
+    $torchHave = (& $py -s -c 'import torch; print(torch.__version__)' 2>$null | Select-Object -First 1)
+    if ($torchHave -and "$torchHave".Trim() -eq '2.9.1+cu128') {
+        Say "Putting the engine's torch back (a large download)"
         Invoke-Checked "The engine's torch" $py @('-s', '-m', 'pip', 'install', '--no-warn-script-location',
-            'torch==2.9.1', 'torchvision==0.24.1', 'torchaudio==2.9.1',
-            '--index-url', 'https://download.pytorch.org/whl/cu128')
-        Done $torchMark
+            'torch==2.13.0', 'torchvision==0.28.0', 'torchaudio==2.11.0',
+            '--index-url', 'https://download.pytorch.org/whl/cu130')
     }
+    Get-ChildItem $State -Filter 'torch-2.9.1-cu128-*.done' -ErrorAction SilentlyContinue | Remove-Item -Force
 }
 
 $nodes = Join-Path $ComfyDir 'custom_nodes'
