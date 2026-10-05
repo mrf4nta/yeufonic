@@ -4,6 +4,8 @@ Songs made with Yeufonic from a prompt, each with a style LoRA trained in the ap
 songs. Play them here, or download the MP3s beside this page. Each MP3's tags hold its lyrics and
 the settings it was made with.
 
+## you can also find these and other examples at https://yeufonic.com/examples
+
 ## test - the open road ahead
 
 https://github.com/user-attachments/assets/24f0da8a-adee-4d51-aaa4-8d4a8bf7be36
