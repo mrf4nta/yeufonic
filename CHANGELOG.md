@@ -37,13 +37,14 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## Unreleased
+## 0.0.26 (2026-10-05)
 
 ### Fixed
-- **The low-memory model was several times slower on Windows in 0.0.25.** That release put the engine on PyTorch with
-  CUDA 12.8, where the low-memory model renders far slower than on CUDA 13, which the Windows engine ships and which the
-  model was tested on. The installer no longer does that, and an install that has it is put back on CUDA 13 when the
-  installer is run over it.
+- **The low-memory model was several times slower than full quality on Windows in 0.0.25.** That release put the engine on
+  PyTorch with CUDA 12.8, and on that build the low-memory (INT8) model renders far slower; on CUDA 13, which the Windows
+  engine ships and which the model was tested on, it is no slower than full quality. The installer no longer installs the
+  CUDA 12.8 build, and an install that has it is put back on CUDA 13 when the installer is run over it (only PyTorch is
+  downloaded again). Full-quality installs were not affected. Fixes #35.
 
 ## 0.0.25 (2026-10-04)
 
@@ -63,9 +64,9 @@ cannot creep back in.
   the Windows installer nor `fetch-models.sh` put it there (only in `audio_encoders`), so a new install refused to
   train with "tokenizer_head … not in ['(run FS_Audio Training Assets first)']". Both now place it in both folders,
   and an install updated afterwards is repaired.
-- **The Windows engine uses the same PyTorch as the Docker engine.** The engine ComfyUI ships for newer graphics drivers
-  comes with torch 2.13 on CUDA 13. The installer now puts in torch 2.9.1 on CUDA 12.8, the pair the Docker engine uses,
-  and an install updated afterwards is repaired. Training on native Windows still has trade-offs: see Known limits.
+- **The Windows engine used the same PyTorch as the Docker engine.** The installer put torch 2.9.1 on CUDA 12.8 into the
+  engine, in place of the CUDA 13 build ComfyUI ships. It did not help training, and it slowed the low-memory model:
+  reverted in 0.0.26.
 - **Lyric extraction on a fresh install.** A newer release of the audio library PyAV (19) removed an option
   faster-whisper uses to read audio, so on an install set up after it came out, hearing a song's lyrics failed
   with "open() got an unexpected keyword argument 'metadata_errors'". PyAV is now held at the version the app
