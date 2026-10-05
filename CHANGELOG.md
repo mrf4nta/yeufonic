@@ -37,7 +37,7 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## Unreleased
+## 0.0.27 (2026-10-06)
 
 ### Fixed
 - **The MIDI file saved from the Score window now carries its instruments and drums properly.** The file came from abcjs's
