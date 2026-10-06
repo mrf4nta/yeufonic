@@ -3374,12 +3374,11 @@ async function takeRecordingWords(sourceId) {
   if (!box || State.mode !== 'cover' || !sourceId) { return; }
   var source = sourceById(sourceId);
   var words = '';
-  if (source && source.has_lyrics) {
-    try {
-      var heard = await api('/api/sources/' + encodeURIComponent(sourceId) + '/lyrics');
-      words = (heard && heard.lyrics) || '';
-    } catch (err) { return; }
-  }
+  try {
+    // The words heard in the recording, else the words last used for a cover of it.
+    var heard = await api('/api/sources/' + encodeURIComponent(sourceId) + '/lyrics');
+    words = (heard && (heard.lyrics || heard.last_used)) || '';
+  } catch (err) { return; }
   if ($('source-select').value !== sourceId || sameWords(box.value, words)) { return; }
   var theirs = !box.value.trim() || sameWords(box.value, recordingWords());
   if (!theirs) {
@@ -9031,6 +9030,8 @@ async function startFresh() {
   showPlanLength('');
   if (cover) {
     paintSource();   // loads the recording's transcription back into the box, if it has one
+    // And its words, if they were heard: the recording stays selected, so choosing it again never happens.
+    if (currentSource()) { await takeRecordingWords(currentSource().id); }
   } else {
     $('score-badge').textContent = 'no plan yet';
     $('score-badge').className = 'badge';

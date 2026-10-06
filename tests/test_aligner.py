@@ -228,3 +228,26 @@ def test_every_note_gets_a_syllable_or_a_hold():
     notes = _notes([(4, 0)] * 7 + [(8, 4)])
     aligner.assign_lyrics_to_vocal_notes(["a b c d"], notes, 16)
     assert all(n["lyric"] for n in notes)
+
+
+def test_a_cue_in_brackets_does_not_rename_a_section_of_the_score():
+    """A bracketed line such as [strings] is not a section heading, and a section it stood over used to be
+    relabelled "verse", so a transcription's intro, interlude and outro all read as verses."""
+    assert aligner.clean_section_tag("Verse 2", "intro") == "verse"
+    assert aligner.clean_section_tag("Hook", "intro") == "chorus"
+    assert aligner.clean_section_tag("strings", "interlude") == "interlude"
+    assert aligner.clean_section_tag("full orchestra", "intro") == "intro"
+    assert aligner.clean_section_tag("", "outro") == "outro"
+    assert aligner.clean_section_tag("strings") == "verse"            # nothing of the score's own to keep
+    assert aligner.own_section_name("% interlude") == "interlude"
+    assert aligner.own_section_name("%") is None
+
+
+def test_the_scores_own_section_names_survive_lyrics_that_are_headed_by_cues():
+    abc = ('X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=80\nV: Vocal clef=treble name="Vocal Melody" snm="Vocal"\n'
+           'V: Ins clef=treble name="Ins Melody" snm="Inst."\nK:C\n'
+           '% intro\nV: Vocal\n"C"C4E4G4E4|"F"F4A4c4A4|\nV: Ins\n[C,E,G,]16|[F,,A,C]16|\n'
+           '% chorus\nV: Vocal\n"C"G4G4A4G4|"F"F4A4c4A4|\nV: Ins\n[C,E,G,]16|[F,,A,C]16|\n')
+    lyrics = "[strings]\nOne two three four\nFive six seven eight\n[full orchestra]\nNine ten eleven twelve\nLast line of the song\n"
+    names = [line[1:].strip() for line in aligner.align_lyrics_to_abc(abc, lyrics).splitlines() if line.startswith("% ")]
+    assert names == ["intro", "chorus"]

@@ -375,11 +375,21 @@ def align_tokens_to_notes(tokens: list[dict[str, Any]], groups: list[dict[str, A
     return out
 
 
-def clean_section_tag(name: str) -> str:
-    """Normalize lyric section header name to clean ABC section comment tag."""
-    if not name:
-        return "verse"
-    low = name.strip().lower()
+def own_section_name(score_line: str) -> str | None:
+    """The name a score already gives a section, from its "% name" line."""
+    name = (score_line or "").lstrip("%").strip().lower()
+    return name or None
+
+
+def clean_section_tag(name: str, keep: str | None = None) -> str:
+    """Normalize lyric section header name to clean ABC section comment tag.
+
+    A bracketed line in the lyrics is not always a section: "[strings]" and "[full orchestra]" are cues.
+    One that names no section leaves the score's own name for that section (`keep`) in place, where it
+    used to turn the intro, interlude and outro of a transcription into verses."""
+    low = (name or "").strip().lower()
+    if not low:
+        return keep or "verse"
     for tag in ("pre-chorus", "chorus", "bridge", "intro", "outro", "verse"):
         if tag in low:
             return tag
@@ -387,7 +397,7 @@ def clean_section_tag(name: str) -> str:
         return "chorus"
     if "coda" in low:
         return "outro"
-    return "verse"
+    return keep or "verse"
 
 
 def assign_lyrics_to_vocal_notes(
@@ -620,7 +630,7 @@ def align_lyrics_to_abc(abc_text: str, lyrics_text: str) -> str:
             for si, sec_item in enumerate(vocal_score_sections):
                 for n in sec_item["notes"]:
                     if n.get("lyric_section") is not None and n.get("lyric") not in ("", "_"):
-                        tag = clean_section_tag(lyric_sections[n["lyric_section"]].get("name", ""))
+                        tag = clean_section_tag(lyric_sections[n["lyric_section"]].get("name", ""), own_section_name(sec_item["text"]))
                         bar_to_section_tag[sec_item["bar"]] = f"% {tag}"
                         break
     elif vocal_score_sections and lyric_sections:
@@ -648,18 +658,18 @@ def align_lyrics_to_abc(abc_text: str, lyrics_text: str) -> str:
             lines_to_assign = []
             assigned_tag = "verse"
             if rem_score <= 1:
-                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""))
+                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""), own_section_name(target_sec["text"]))
                 for li in range(curr_lyric_idx, num_lyric):
                     lines_to_assign.extend(lyric_sections[li]["lines"])
                 curr_lyric_idx = num_lyric
             elif rem_score <= rem_lyric:
                 take_count = rem_lyric // rem_score
-                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""))
+                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""), own_section_name(target_sec["text"]))
                 for li2 in range(curr_lyric_idx, curr_lyric_idx + take_count):
                     lines_to_assign.extend(lyric_sections[li2]["lines"])
                 curr_lyric_idx += take_count
             else:
-                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""))
+                assigned_tag = clean_section_tag(lyric_sections[curr_lyric_idx].get("name", ""), own_section_name(target_sec["text"]))
                 lines_to_assign = lyric_sections[curr_lyric_idx]["lines"]
                 curr_lyric_idx += 1
 

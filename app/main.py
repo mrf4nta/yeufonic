@@ -4063,12 +4063,18 @@ def source_lyrics_state(source_id: str) -> dict:
     source = one("SELECT * FROM sources WHERE id = ?", (source_id,))
     if not source:
         raise HTTPException(404, "no such recording")
+    # The words last used for a cover of this recording, for one whose words were typed or pasted and
+    # never heard: the recording has none of its own, and the next cover is likely to want the same.
+    last_used = one(
+        "SELECT lyrics FROM takes WHERE source_id = ? AND kind = 'cover' AND TRIM(COALESCE(lyrics, '')) != ''"
+        " ORDER BY created_at DESC LIMIT 1", (source_id,))
     return {
         "state": source["lyrics_state"],
         "progress": source["lyrics_progress"],
         "stage": source["lyrics_stage"],
         "error": source["lyrics_error"],
         "lyrics": source["lyrics"],
+        "last_used": last_used["lyrics"] if last_used else None,
         # Whisper, or the external LLM timed by Whisper, or Whisper with the reason
         # the LLM was not used.  None for lyrics heard before this was recorded.
         "method": source["lyrics_method"],

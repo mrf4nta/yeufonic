@@ -70,3 +70,16 @@ def test_the_list_says_whether_words_were_heard(client, tmp_path):
     assert client.get("/api/sources").json()[0]["has_lyrics"] == 0
     execute("UPDATE sources SET lyrics = '[Verse]\nwords' WHERE id = ?", (source_id,))
     assert client.get("/api/sources").json()[0]["has_lyrics"] == 1
+
+
+def test_a_recording_offers_the_words_last_used_for_a_cover_of_it(client, tmp_path):
+    from conftest import make_take
+    source_id = a_source(client, tmp_path)
+    assert client.get(f"/api/sources/{source_id}/lyrics").json()["last_used"] is None
+    make_take(kind="cover", source_id=source_id, lyrics="[Verse]\nold words", created_at=1.0)
+    make_take(kind="cover", source_id=source_id, lyrics="[Verse]\nnewer words", created_at=2.0)
+    make_take(kind="cover", source_id=source_id, lyrics="   ", created_at=3.0)          # blank words do not count
+    make_take(kind="song", source_id=source_id, lyrics="[Verse]\nnot a cover", created_at=4.0)
+    body = client.get(f"/api/sources/{source_id}/lyrics").json()
+    assert body["last_used"] == "[Verse]\nnewer words"
+    assert body["lyrics"] is None                      # nothing was heard: the two are kept apart
