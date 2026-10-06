@@ -140,3 +140,47 @@ def test_a_length_asked_for_is_the_cap_the_take_gets(client, on, monkeypatch):
     assert one("SELECT max_duration FROM takes WHERE id = ?", (made["id"],))["max_duration"] == 60
     error, refused = call(client, "make_instrumental", style="edm", max_duration=5)         # below the route's minimum
     assert error and "max_duration" in refused
+
+
+def a_space(name):
+    from app.db import execute
+    import time, uuid
+    ident = uuid.uuid4().hex[:12]
+    execute("INSERT INTO spaces(id, name, created_at) VALUES(?, ?, ?)", (ident, name, time.time()))
+    return ident
+
+
+def test_a_space_is_named_by_its_name(client, on, monkeypatch):
+    from app import jobs
+    from app.db import one
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", ["yue2_3b_bf16.safetensors"])
+    monkeypatch.setitem(jobs.ENGINE.options, "instrumental", True)
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    edm = a_space("EDM")
+    for asked in ("EDM", "edm", "  Edm  ", "EDM space", edm):
+        error, made = call(client, "make_instrumental", style="edm", space=asked)
+        assert not error, asked
+        assert one("SELECT space_id FROM takes WHERE id = ?", (made["id"],))["space_id"] == edm, asked
+        assert made["space"] == "EDM"
+
+
+def test_an_unknown_space_is_an_error_that_names_the_ones_there_are(client, on):
+    a_space("Folk")
+    error, text = call(client, "make_instrumental", style="edm", space="Nowhere")
+    assert error and "No space is called 'Nowhere'" in text and "Folk" in text and "Default" in text
+
+
+def test_two_spaces_with_one_name_are_not_guessed_between(client, on):
+    a_space("Twins")
+    a_space("twins")
+    error, text = call(client, "make_song", style="folk", lyrics="[Verse]\nla", space="Twins")
+    assert error and "More than one space" in text
+
+
+def test_list_takes_can_be_limited_to_a_space_by_name(client, on):
+    folk, edm = a_space("Folk"), a_space("EDM")
+    from app.db import execute
+    for title, space in (("In folk", folk), ("In edm", edm)):
+        execute("UPDATE takes SET space_id = ? WHERE id = ?", (space, make_take(title=title)["id"]))
+    error, found = call(client, "list_takes", space="folk")
+    assert not error and [t["title"] for t in found] == ["In folk"] and found[0]["space"] == "Folk"

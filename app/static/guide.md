@@ -908,7 +908,8 @@ The tools are `list_takes`, `get_take`, `wait_for_take`, `list_spaces`, `make_in
 They do what the page does, through the same routes, so a take an agent starts appears in the library like any other, and a
 refusal (a missing lyric, an engine that is busy) comes back to the agent in the page's own words. Making a take takes
 minutes, so the agent starts it and calls `wait_for_take`, which holds for up to a minute and returns when the take is done or has failed; the take's audio is at the
-`audio_url` it returns. The same Host-name and cross-site checks apply as for the page.
+`audio_url` it returns. A take is made in the space the agent names ("make an instrumental in the EDM space"), by name in any case; a name that matches
+no space gets the list of the spaces there are, and nothing is created. The same Host-name and cross-site checks apply as for the page.
 
 ## System Logs
 

@@ -30,7 +30,7 @@ TOOLS: list[dict] = [
                        "status, length and style. Use get_take for one in full.",
         "inputSchema": {"type": "object", "properties": {
             "query": {"type": "string", "description": "Words that must appear in the title, style or lyrics."},
-            "space_id": {"type": "string", "description": "Only this space (see list_spaces)."},
+            "space": {"type": "string", "description": "Only the takes in this space, by name (see list_spaces)."},
             "favourites": {"type": "boolean", "description": "Only starred takes."},
             "limit": {"type": "integer", "description": f"How many, at most {LIMIT}. Default 20."},
         }},
@@ -72,7 +72,8 @@ TOOLS: list[dict] = [
                                                                  "Ask for the length wanted: 60 for a minute."},
             "title": {"type": "string"},
             "seed": {"type": "integer"},
-            "space_id": {"type": "string"},
+            "space": {"type": "string", "description": "The space to make it in, by name, such as \"EDM\" (see list_spaces). "
+                                                      "Omit for the default space."},
             "render": {"type": "boolean", "description": "Render as well as plan. Default true."},
         }},
     },
@@ -88,7 +89,8 @@ TOOLS: list[dict] = [
                                                                  "Ask for the length wanted: 60 for a minute."},
             "title": {"type": "string"},
             "seed": {"type": "integer"},
-            "space_id": {"type": "string"},
+            "space": {"type": "string", "description": "The space to make it in, by name, such as \"EDM\" (see list_spaces). "
+                                                      "Omit for the default space."},
             "render": {"type": "boolean", "description": "Render as well as plan. Default true."},
         }},
     },
@@ -144,6 +146,26 @@ def _settled(take: dict) -> bool:
     return status == "planned" and not take.get("auto_render")
 
 
+async def _space_of(api: Api, asked: Any) -> str | None:
+    """The id of the space an agent named, by name (any case, with or without the word "space") or by id.
+    None when it named none. A name that matches nothing is an error that lists the spaces there are."""
+    name = str(asked or "").strip()
+    if not name:
+        return None
+    spaces = await api("GET", "/api/spaces")
+    for space in spaces:
+        if space["id"] == name:
+            return space["id"]
+    wanted = {name.lower()}
+    if name.lower().endswith(" space"):
+        wanted.add(name[:-6].strip().lower())
+    found = [space for space in spaces if space["name"].strip().lower() in wanted]
+    if len(found) == 1:
+        return found[0]["id"]
+    names = ", ".join(space["name"] for space in spaces)
+    raise ApiRefused(f"{'More than one space is' if found else 'No space is'} called '{name}'. The spaces are: {names}.")
+
+
 def _text(value: Any, error: bool = False) -> dict:
     return {"content": [{"type": "text", "text": value if isinstance(value, str) else json.dumps(value, indent=2, default=str)}],
             "isError": error}
@@ -156,8 +178,9 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
         if name == "list_takes":
             limit = max(1, min(LIMIT, int(args.get("limit") or 20)))
             params = {"limit": limit, "q": args.get("query") or "", "favourite": bool(args.get("favourites"))}
-            if args.get("space_id"):
-                params["space_id"] = args["space_id"]
+            space = await _space_of(api, args.get("space") or args.get("space_id"))
+            if space:
+                params["space_id"] = space
             spaces = await _space_names(api)
             return _text([_brief(take, spaces) for take in await api("GET", "/api/takes", params=params)])
         if name == "get_take":
@@ -179,7 +202,10 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
             return _text(await api("GET", "/api/spaces"))
         if name in ("make_instrumental", "make_song"):
             body = {"style": args["style"], "auto_render": args.get("render") is not False}
-            for key in ("title", "seed", "space_id", "max_duration"):
+            space = await _space_of(api, args.get("space") or args.get("space_id"))
+            if space:
+                body["space_id"] = space
+            for key in ("title", "seed", "max_duration"):
                 if args.get(key) not in (None, ""):
                     body[key] = args[key]
             if name == "make_instrumental":
