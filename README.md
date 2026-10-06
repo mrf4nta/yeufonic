@@ -15,6 +15,7 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 - **MIDI import for covers and instrumentals:** MIDI editing with piano roll and sf2 (experimental).
 - **Style LoRAs:** use published ones, or train your own from a folder of songs.
 - **Lyrics:** draft them from a sentence, or extract them from a recording.
+- **An MCP server (off by default):** an AI agent on this computer can make songs and instrumentals and read the library.
 - **Stems:** split any take into vocals, drums, bass and more, or into vocals and a backing track.
 - **A library:** spaces, stars, and every take's settings kept so it can be made again.
 - **A take panel and an editor:** the left panel shows how the selected take was made, and a large

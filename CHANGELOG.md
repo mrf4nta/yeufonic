@@ -39,6 +39,15 @@ cannot creep back in.
 
 ## Unreleased
 
+### Added
+- **An MCP server, off by default.** With **MCP server** switched on in Settings, an AI agent on the same computer (Claude Code, Cursor and
+  others) can make songs, covers and instrumentals and read the library, at `/mcp`. A tool calls the app's own routes, so it has the page's
+  checks and effects. It can list and read takes, wait for one to finish, play it (it opens a link in your browser), make a song, a cover from a
+  recording in the library or an instrumental (with a length, in a named space, with a style LoRA by name), render again, cancel, star, rename, move
+  and delete takes. Takes can share a title, so it works by id and shows a short one; deleting asks twice, and a starred take needs asking for
+  again. An instrumental is always given a structure with times, since without times the planner writes plans too long to use. See the guide.
+- A link to a take's audio now plays in a browser instead of saving the file (saving is as before).
+
 ### Fixed
 - **A failed instrumental plan no longer tells you to lower a style LoRA's strength when none was used.** Every take stores a strength,
   1.00 unless changed, whether or not a LoRA was chosen, and the advice read it as if one had been. It now appears only for a take with a LoRA.

@@ -892,6 +892,28 @@ so the page opens in it. The log window stays dark in every theme, like a termin
 
 ---
 
+## Using Yeufonic from an AI agent
+
+Yeufonic can act as an MCP server, so an AI agent on the same computer (Claude Code, Cursor and others) can ask it for
+songs and read the library. It is **off** until you turn on **MCP server** in Settings, because a request can queue work on
+the GPU.
+
+The address is `/mcp` on the app, for example `http://localhost:8090/mcp`. In Claude Code:
+
+```
+claude mcp add --transport http yeufonic http://localhost:8090/mcp
+```
+
+The tools are `list_takes`, `get_take`, `wait_for_take`, `list_spaces`, `make_cover`, `list_recordings`, `list_style_loras`, `star_take`, `rename_take`, `move_take`, `delete_take`, `make_instrumental`, `make_song`, `render_take` and `cancel_take`.
+They do what the page does, through the same routes, so a take an agent starts appears in the library like any other, and a
+refusal (a missing lyric, an engine that is busy) comes back to the agent in the page's own words. Making a take takes
+minutes, so the agent starts it and calls `wait_for_take`, which holds for up to a minute and returns when the take is done or has failed; the take's audio is at the
+`audio_url` it returns. Takes can share a title, so an agent works from a take's id (it shows a short one, and any tool accepts the start of an id when only one take begins that way) and, when more than one matches, asks which. An instrumental is always given a structure with times, sized to the length asked, because without times the planner writes plans too long to use. `delete_take` deletes nothing
+until it is called a second time with `confirm`, and a starred take needs asking for twice. A cover is made from a recording already in the library (it needs a score: transcribe it in the app first), with the words heard in the
+recording unless the agent gives others. A style LoRA is chosen by name or title, and its trigger word is added to the style for the agent, since a
+LoRA does very little without it. A take is made in the space the agent names ("make an instrumental in the EDM space"), by name in any case; a name that matches
+no space gets the list of the spaces there are, and nothing is created. The same Host-name and cross-site checks apply as for the page.
+
 ## System Logs
 
 The app writes a consolidated, real-time log of every major action — score planning, rendering, audio transcription, stem separation, and LoRA training — tagged with `INFO`, `WARN`, and `ERROR` prefixes.

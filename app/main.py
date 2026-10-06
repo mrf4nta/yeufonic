@@ -16,6 +16,7 @@ import asyncio
 import collections
 import contextlib
 import hashlib
+import httpx
 import json
 import logging
 import os
@@ -40,7 +41,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import aligner, config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, midi, score, soundfonts, stems, storage, trainsize, transpose, update
+from . import aligner, config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, mcp, midi, score, soundfonts, stems, storage, trainsize, transpose, update
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -136,6 +137,18 @@ SETTINGS_SPEC: list[dict] = [
         "default": "htdemucs",
         "options": [{"value": key, "label": spec["label"]} for key, spec in stems.MODELS.items()],
         "help": "The model new runs start with.",
+    },
+    {
+        "key": "mcp.enabled",
+        "label": "MCP server",
+        "type": "select",
+        "default": "off",
+        "options": [
+            {"value": "off", "label": "Off"},
+            {"value": "on", "label": "On"},
+        ],
+        "help": "Lets an AI agent on this computer (Claude Code, Cursor and others) make songs and read the library, at "
+                "/mcp. A request can start work on the GPU, so it is off until you turn it on.",
     },
     {
         "key": "stems.folder",
@@ -1990,6 +2003,43 @@ def _space_name(name: str, keep: str | None = None) -> str:
     return name
 
 
+@app.post("/mcp")
+async def mcp_endpoint(request: Request) -> Response:
+    """Yeufonic as an MCP server (app/mcp.py), over the app's own routes."""
+    if get_setting("mcp.enabled", "off") != "on":
+        return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {
+            "code": -32000, "message": "The MCP server is off. Turn it on in Settings, under MCP server."}}, status_code=503)
+    try:
+        message = await request.json()
+    except ValueError:
+        return JSONResponse(mcp.error_reply(None, -32700, "not JSON"), status_code=400)
+
+    async def api(method: str, path: str, json: dict | None = None, params: dict | None = None):
+        # In-process, with this app's own host name, so every route's checks apply as they do for the page.
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost") as client:
+            reply = await client.request(method, path, json=json, params=params)
+        if reply.status_code >= 400:
+            try:
+                detail = reply.json().get("detail", reply.text)
+            except ValueError:
+                detail = reply.text
+            raise mcp.ApiRefused(detail if isinstance(detail, str) else str(detail))
+        return reply.json() if reply.content else {}
+
+    base = str(request.base_url).rstrip("/")          # how this client reached the app, for links it can open
+    batch = message if isinstance(message, list) else [message]
+    replies = [r for r in [await mcp.handle(item, api, config.VERSION, base) for item in batch] if r is not None]
+    if not replies:
+        return Response(status_code=202)
+    return JSONResponse(replies if isinstance(message, list) else replies[0])
+
+
+@app.get("/mcp")
+def mcp_stream() -> Response:
+    """No server-initiated stream: a client that asks for one is told so, as the protocol allows."""
+    return Response(status_code=405, headers={"Allow": "POST"})
+
+
 @app.get("/api/spaces")
 def list_spaces() -> list[dict]:
     """Default first, then by name, each with how many takes it holds."""
@@ -3641,8 +3691,9 @@ def take_audio(take_id: str, download: bool = False, format: str | None = None) 
     if not take or not take["audio_path"] or not Path(take["audio_path"]).exists():
         raise HTTPException(404, "no audio for this take")
     safe = "".join(ch for ch in (take["title"] or "take") if ch.isalnum() or ch in " -_")[:60].strip() or "take"
-    if not download:   # playing: the FLAC as kept
-        return FileResponse(take["audio_path"], media_type="audio/flac", filename=f"{safe}.flac")
+    if not download:   # playing: the FLAC as kept, inline, so a link to it plays in a browser and does not save
+        return FileResponse(take["audio_path"], media_type="audio/flac", filename=f"{safe}.flac",
+                            content_disposition_type="inline")
     # A download is in the format asked for, else the one set in Settings.
     fmt = format or setting_value("stems.format")
     fmt = fmt if fmt in SAVE_FORMATS else "flac"
