@@ -49,7 +49,7 @@ def test_a_notification_gets_no_reply_and_ping_is_answered(client, on):
 
 def test_tools_are_listed_with_schemas(client, on):
     tools = {t["name"]: t for t in rpc(client, "tools/list").json()["result"]["tools"]}
-    assert {"list_takes", "get_take", "list_spaces", "make_instrumental", "make_song", "render_take", "cancel_take"} <= set(tools)
+    assert {"list_takes", "get_take", "wait_for_take", "list_spaces", "make_instrumental", "make_song", "render_take", "cancel_take"} <= set(tools)
     assert all(t["inputSchema"]["type"] == "object" and t["description"] for t in tools.values())
     assert tools["make_song"]["inputSchema"]["required"] == ["style", "lyrics"]
     assert "max_duration" in tools["make_song"]["inputSchema"]["properties"]
@@ -81,6 +81,29 @@ def test_list_and_get_take_read_the_library(client, on):
     error, missing = call(client, "get_take", take_id="nothing")
     assert error and "no such take" in missing
     assert call(client, "get_take")[0] is True                    # a missing argument is an error the agent can read
+
+
+def test_wait_for_take_returns_at_once_for_a_finished_take_and_times_out_for_a_running_one(client, on):
+    import time
+    done = make_take(title="Finished", status="done")
+    began = time.monotonic()
+    error, result = call(client, "wait_for_take", take_id=done["id"], seconds=30)
+    assert not error and result["finished"] is True and time.monotonic() - began < 5
+    running = make_take(title="Still going", status="running")
+    error, result = call(client, "wait_for_take", take_id=running["id"], seconds=1)
+    assert not error and result["finished"] is False and 1 <= result["waited_seconds"] < 4 and result["status"] == "running"
+    failed = make_take(title="Broke", status="failed")
+    assert call(client, "wait_for_take", take_id=failed["id"], seconds=30)[1]["finished"] is True
+    assert call(client, "wait_for_take", take_id="nothing")[0] is True
+
+
+def test_a_plan_that_will_render_is_not_the_end_of_the_wait(client, on):
+    from app.db import execute
+    going = make_take(title="Plan then render", status="planned")
+    execute("UPDATE takes SET auto_render = 1 WHERE id = ?", (going["id"],))
+    assert call(client, "wait_for_take", take_id=going["id"], seconds=1)[1]["finished"] is False
+    resting = make_take(title="Plan only", status="planned")
+    assert call(client, "wait_for_take", take_id=resting["id"], seconds=1)[1]["finished"] is True
 
 
 def test_list_spaces(client, on):

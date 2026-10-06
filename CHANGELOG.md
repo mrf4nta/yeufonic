@@ -41,7 +41,7 @@ cannot creep back in.
 
 ### Added
 - **An MCP server, off by default.** With **MCP server** switched on in Settings, an AI agent on the same computer can make songs
-  and instrumentals, render, cancel and read the library through `/mcp`: `list_takes`, `get_take`, `list_spaces`,
+  and instrumentals, render, cancel and read the library through `/mcp`: `list_takes`, `get_take`, `wait_for_take`, `list_spaces`,
   `make_instrumental`, `make_song`, `render_take` and `cancel_take`. A tool calls the app's own routes, so it has the page's
   checks and effects. (On a feature branch for trying out.)
 

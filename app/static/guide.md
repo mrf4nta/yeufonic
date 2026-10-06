@@ -904,10 +904,10 @@ The address is `/mcp` on the app, for example `http://localhost:8090/mcp`. In Cl
 claude mcp add --transport http yeufonic http://localhost:8090/mcp
 ```
 
-The tools are `list_takes`, `get_take`, `list_spaces`, `make_instrumental`, `make_song`, `render_take` and `cancel_take`.
+The tools are `list_takes`, `get_take`, `wait_for_take`, `list_spaces`, `make_instrumental`, `make_song`, `render_take` and `cancel_take`.
 They do what the page does, through the same routes, so a take an agent starts appears in the library like any other, and a
 refusal (a missing lyric, an engine that is busy) comes back to the agent in the page's own words. Making a take takes
-minutes, so the agent starts it and checks `get_take` until the status is done or failed; the take's audio is at the
+minutes, so the agent starts it and calls `wait_for_take`, which holds for up to a minute and returns when the take is done or has failed; the take's audio is at the
 `audio_url` it returns. The same Host-name and cross-site checks apply as for the page.
 
 ## System Logs

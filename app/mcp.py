@@ -11,13 +11,17 @@ the same network could otherwise start it. The Host and cross-site checks the ap
 apply to it too."""
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from typing import Any, Awaitable, Callable
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 Api = Callable[..., Awaitable[Any]]      # api(method, path, json=None, params=None) -> the route's JSON
 
 LIMIT = 100                              # most takes one call returns
+MOST_WAIT = 55                           # seconds one wait_for_take may hold a call: short of a client's timeout
+POLL = 2.0                               # how often it looks while waiting
 
 TOOLS: list[dict] = [
     {
@@ -38,6 +42,17 @@ TOOLS: list[dict] = [
         "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
             "take_id": {"type": "string"},
             "include_score": {"type": "boolean", "description": "Also return the score (ABC text). Default false: it is long."},
+        }},
+    },
+    {
+        "name": "wait_for_take",
+        "description": "Wait for a take that is being made, for up to about a minute, and return as soon as it is done or "
+                       "has failed (or, for a take that is not rendering, as soon as its plan is ready). Returns the same "
+                       "as get_take plus `finished`: if it is false the take is still going, so call this again. Use this "
+                       "after make_song, make_instrumental or render_take rather than asking the person to check back.",
+        "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
+            "take_id": {"type": "string"},
+            "seconds": {"type": "integer", "description": f"How long to wait, at most {MOST_WAIT}. Default 45."},
         }},
     },
     {
@@ -121,6 +136,14 @@ def _full(take: dict, include_score: bool, spaces: dict | None = None) -> dict:
     return out
 
 
+def _settled(take: dict) -> bool:
+    """Whether there is nothing more to wait for: done, failed, stopped, or a plan that is not going on to render."""
+    status = take.get("status")
+    if status in ("done", "failed", "cancelled", "stopped"):
+        return True
+    return status == "planned" and not take.get("auto_render")
+
+
 def _text(value: Any, error: bool = False) -> dict:
     return {"content": [{"type": "text", "text": value if isinstance(value, str) else json.dumps(value, indent=2, default=str)}],
             "isError": error}
@@ -140,6 +163,18 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
         if name == "get_take":
             take = await api("GET", f"/api/takes/{args['take_id']}")
             return _text(_full(take, bool(args.get("include_score")), await _space_names(api)))
+        if name == "wait_for_take":
+            wait = max(1, min(MOST_WAIT, int(args.get("seconds") or 45)))
+            deadline, started = time.monotonic() + wait, time.monotonic()
+            while True:
+                take = await api("GET", f"/api/takes/{args['take_id']}")
+                if _settled(take) or time.monotonic() >= deadline:
+                    break
+                await asyncio.sleep(min(POLL, max(0.05, deadline - time.monotonic())))
+            result = _full(take, False, await _space_names(api))
+            result["finished"] = _settled(take)
+            result["waited_seconds"] = round(time.monotonic() - started, 1)
+            return _text(result)
         if name == "list_spaces":
             return _text(await api("GET", "/api/spaces"))
         if name in ("make_instrumental", "make_song"):
