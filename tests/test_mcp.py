@@ -49,7 +49,7 @@ def test_a_notification_gets_no_reply_and_ping_is_answered(client, on):
 
 def test_tools_are_listed_with_schemas(client, on):
     tools = {t["name"]: t for t in rpc(client, "tools/list").json()["result"]["tools"]}
-    assert {"list_takes", "get_take", "wait_for_take", "list_spaces", "make_instrumental", "make_song", "render_take", "cancel_take"} <= set(tools)
+    assert {"list_takes", "get_take", "wait_for_take", "list_spaces", "make_instrumental", "make_song", "move_take", "delete_take", "render_take", "cancel_take"} <= set(tools)
     assert all(t["inputSchema"]["type"] == "object" and t["description"] for t in tools.values())
     assert tools["make_song"]["inputSchema"]["required"] == ["style", "lyrics"]
     assert "max_duration" in tools["make_song"]["inputSchema"]["properties"]
@@ -184,3 +184,64 @@ def test_list_takes_can_be_limited_to_a_space_by_name(client, on):
         execute("UPDATE takes SET space_id = ? WHERE id = ?", (space, make_take(title=title)["id"]))
     error, found = call(client, "list_takes", space="folk")
     assert not error and [t["title"] for t in found] == ["In folk"] and found[0]["space"] == "Folk"
+
+
+def test_move_take_moves_by_id_to_a_space_by_name(client, on):
+    from app.db import one
+    folk = a_space("Folk")
+    mine = make_take(title="Wanderer")
+    error, moved = call(client, "move_take", take_id=mine["id"], space="folk")
+    assert not error and moved["space"] == "Folk"
+    assert one("SELECT space_id FROM takes WHERE id = ?", (mine["id"],))["space_id"] == folk
+    assert call(client, "move_take", take_id=mine["id"], space="Nowhere")[0] is True
+    assert call(client, "move_take", take_id="nothing", space="Folk")[0] is True
+    assert call(client, "move_take", take_id=mine["id"])[0] is True
+
+
+def test_takes_that_share_a_title_say_so_and_carry_a_time_to_tell_them_apart(client, on):
+    a = make_take(title="Same name", created_at=1_700_000_000.0)
+    b = make_take(title="Same name", created_at=1_700_000_500.0)
+    make_take(title="Different")
+    error, found = call(client, "list_takes", limit=10)
+    same = [t for t in found if t["title"] == "Same name"]
+    assert {t["id"] for t in same} == {a["id"], b["id"]}
+    assert all(t["same_title_count"] == 2 for t in same) and same[0]["made"] != same[1]["made"]
+    assert "same_title_count" not in [t for t in found if t["title"] == "Different"][0]
+
+
+def test_delete_without_confirm_deletes_nothing_and_shows_what_would_go(client, on):
+    from app.db import one
+    keep = make_take(title="Twin", created_at=1_700_000_000.0)
+    other = make_take(title="Twin", created_at=1_700_000_900.0)
+    error, plan = call(client, "delete_take", take_id=keep["id"])
+    assert not error and plan["deleted"] is False and "NOTHING WAS DELETED" in plan["message"]
+    assert plan["would_delete"]["id"] == keep["id"]
+    assert [t["id"] for t in plan["other_takes_with_this_title"]] == [other["id"]]      # the twin is named, so it can be told apart
+    assert one("SELECT id FROM takes WHERE id = ?", (keep["id"],)) and one("SELECT id FROM takes WHERE id = ?", (other["id"],))
+
+
+def test_delete_with_confirm_deletes_that_take_and_only_that_one(client, on):
+    from app.db import one
+    gone = make_take(title="Twin")
+    kept = make_take(title="Twin")
+    error, done = call(client, "delete_take", take_id=gone["id"], confirm=True)
+    assert not error and done["deleted"] is True and done["take"]["id"] == gone["id"]
+    assert one("SELECT id FROM takes WHERE id = ?", (gone["id"],)) is None
+    assert one("SELECT id FROM takes WHERE id = ?", (kept["id"],))
+    assert call(client, "delete_take", take_id="nothing", confirm=True)[0] is True
+
+
+def test_a_starred_take_needs_to_be_asked_for_twice(client, on):
+    from app.db import execute, one
+    loved = make_take(title="Loved")
+    execute("UPDATE takes SET favourite = 1 WHERE id = ?", (loved["id"],))
+    error, text = call(client, "delete_take", take_id=loved["id"], confirm=True)
+    assert error and "starred" in text and one("SELECT id FROM takes WHERE id = ?", (loved["id"],))
+    error, done = call(client, "delete_take", take_id=loved["id"], confirm=True, even_if_starred=True)
+    assert not error and done["deleted"] is True
+    assert one("SELECT id FROM takes WHERE id = ?", (loved["id"],)) is None
+
+
+def test_a_title_is_never_taken_for_an_id(client, on):
+    make_take(title="By title")
+    assert call(client, "delete_take", take_id="By title", confirm=True)[0] is True

@@ -12,6 +12,7 @@ apply to it too."""
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import time
 from typing import Any, Awaitable, Callable
@@ -27,7 +28,10 @@ TOOLS: list[dict] = [
     {
         "name": "list_takes",
         "description": "List takes in the library, newest first: id, title, kind (song, cover or instrumental), "
-                       "status, length and style. Use get_take for one in full.",
+                       "status, length, style and when it was made. Titles are NOT unique: several takes can share one, "
+                       "and `same_title_count` says so. Always act on a take by its id, and when more than one matches "
+                       "what the person said, show them the choices (made, length, style) and ask which. "
+                       "Use get_take for one in full.",
         "inputSchema": {"type": "object", "properties": {
             "query": {"type": "string", "description": "Words that must appear in the title, style or lyrics."},
             "space": {"type": "string", "description": "Only the takes in this space, by name (see list_spaces)."},
@@ -95,6 +99,28 @@ TOOLS: list[dict] = [
         }},
     },
     {
+        "name": "move_take",
+        "description": "Move a take to another space, by the space's name. Reversible: move it back. Take the id from "
+                       "list_takes; never act on a title, since several takes can share one.",
+        "inputSchema": {"type": "object", "required": ["take_id", "space"], "properties": {
+            "take_id": {"type": "string"},
+            "space": {"type": "string", "description": "The space to move it to, by name (see list_spaces)."},
+        }},
+    },
+    {
+        "name": "delete_take",
+        "description": "Delete a take for good: its audio and its record cannot be got back. Two steps. Called with just "
+                       "take_id it deletes NOTHING and returns what it would delete, with any other takes that share the "
+                       "title. Show the person that, ask whether to go ahead, and only if they say yes call again with "
+                       "confirm true. A starred take also needs even_if_starred true, and the person must have said so. "
+                       "Take the id from list_takes; never act on a title.",
+        "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
+            "take_id": {"type": "string"},
+            "confirm": {"type": "boolean", "description": "True only after the person has agreed to this deletion."},
+            "even_if_starred": {"type": "boolean", "description": "Needed as well when the take is starred."},
+        }},
+    },
+    {
         "name": "render_take",
         "description": "Render a planned take, or render a finished one again (with new_seed for a different result).",
         "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
@@ -109,12 +135,21 @@ TOOLS: list[dict] = [
     },
 ]
 
-_BRIEF = ("id", "title", "kind", "status", "duration", "style", "space_id", "favourite", "created_at", "error")
+_BRIEF = ("id", "title", "kind", "status", "duration", "style", "favourite", "error")
+
+
+def _when(stamp: Any) -> str | None:
+    """A time a person can tell takes apart by."""
+    try:
+        return datetime.datetime.fromtimestamp(float(stamp)).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 def _brief(take: dict, spaces: dict | None = None) -> dict:
     out = {key: take.get(key) for key in _BRIEF if take.get(key) not in (None, "")}
     out["has_audio"] = bool(take.get("has_audio"))
+    out["made"] = _when(take.get("created_at"))
     if spaces and take.get("space_id") in spaces:
         out["space"] = spaces[take["space_id"]]           # the name, which an agent can say to a person
     return out
@@ -182,7 +217,14 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
             if space:
                 params["space_id"] = space
             spaces = await _space_names(api)
-            return _text([_brief(take, spaces) for take in await api("GET", "/api/takes", params=params)])
+            found = [_brief(take, spaces) for take in await api("GET", "/api/takes", params=params)]
+            same = {}
+            for item in found:
+                same[item.get("title")] = same.get(item.get("title"), 0) + 1
+            for item in found:
+                if same[item.get("title")] > 1:
+                    item["same_title_count"] = same[item.get("title")]       # so an agent knows the title is not enough
+            return _text(found)
         if name == "get_take":
             take = await api("GET", f"/api/takes/{args['take_id']}")
             return _text(_full(take, bool(args.get("include_score")), await _space_names(api)))
@@ -216,6 +258,31 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
                 body["lyrics"] = args["lyrics"]
                 made = await api("POST", "/api/songs", json=body)
             return _text(_brief(made, await _space_names(api)) if isinstance(made, dict) and "id" in made else made)
+        if name == "move_take":
+            space = await _space_of(api, args.get("space"))
+            if not space:
+                return _text("say which space to move it to", True)
+            await api("POST", f"/api/takes/{args['take_id']}/move", json={"space_id": space})
+            return _text(_brief(await api("GET", f"/api/takes/{args['take_id']}"), await _space_names(api)))
+        if name == "delete_take":
+            take = await api("GET", f"/api/takes/{args['take_id']}")
+            if take.get("favourite") and not args.get("even_if_starred"):
+                return _text(f"'{take.get('title')}' ({take['id']}) is starred, so it was not deleted. If the person really wants it "
+                             "gone, ask them, then call again with confirm and even_if_starred both true.", True)
+            if not args.get("confirm"):
+                spaces = await _space_names(api)
+                same = [t for t in await api("GET", "/api/takes", params={"q": take.get("title") or "", "limit": LIMIT})
+                        if t["id"] != take["id"] and t.get("title") == take.get("title")]
+                return _text({
+                    "deleted": False,
+                    "message": "NOTHING WAS DELETED. This is the take that would be. Show the person its details, ask whether to "
+                               "delete it for good, and if they agree call delete_take again with confirm true.",
+                    "would_delete": _brief(take, spaces) | ({"running": "it is being made and would be stopped"}
+                                                           if take.get("status") in ("queued", "running") else {}),
+                    "other_takes_with_this_title": [_brief(t, spaces) for t in same],
+                })
+            await api("DELETE", f"/api/takes/{args['take_id']}")
+            return _text({"deleted": True, "take": {"id": take["id"], "title": take.get("title"), "made": _when(take.get("created_at"))}})
         if name == "render_take":
             made = await api("POST", f"/api/takes/{args['take_id']}/render", json={"reseed": bool(args.get("new_seed"))})
             return _text(made)
