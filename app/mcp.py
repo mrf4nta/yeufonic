@@ -80,6 +80,10 @@ TOOLS: list[dict] = [
             "seed": {"type": "integer"},
             "space": {"type": "string", "description": "The space to make it in, by name, such as \"EDM\" (see list_spaces). "
                                                       "Omit for the default space."},
+            "style_lora": {"type": "string", "description": "A style LoRA to use, by name or title (see list_style_loras). Its "
+                                                           "trigger word is added to the style for you."},
+            "lora_planner": {"type": "number", "description": "How strongly it shapes the plan, 0 to 3. Default: the strength saved with it."},
+            "lora_sound": {"type": "number", "description": "How strongly it shapes the sound, 0 to 3. Default: the strength saved with it."},
             "render": {"type": "boolean", "description": "Render as well as plan. Default true."},
         }},
     },
@@ -97,7 +101,61 @@ TOOLS: list[dict] = [
             "seed": {"type": "integer"},
             "space": {"type": "string", "description": "The space to make it in, by name, such as \"EDM\" (see list_spaces). "
                                                       "Omit for the default space."},
+            "style_lora": {"type": "string", "description": "A style LoRA to use, by name or title (see list_style_loras). Its "
+                                                           "trigger word is added to the style for you."},
+            "lora_planner": {"type": "number", "description": "How strongly it shapes the plan, 0 to 3. Default: the strength saved with it."},
+            "lora_sound": {"type": "number", "description": "How strongly it shapes the sound, 0 to 3. Default: the strength saved with it."},
             "render": {"type": "boolean", "description": "Render as well as plan. Default true."},
+        }},
+    },
+    {
+        "name": "list_recordings",
+        "description": "The recordings in the library that a cover can be made from: id, title, length, whether it has a score "
+                       "(a cover needs one) and whether its words are known. Recordings can share a title: use the id.",
+        "inputSchema": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "Words that must appear in the title."},
+        }},
+    },
+    {
+        "name": "make_cover",
+        "description": "Make a cover of a recording from the library: the same song and melody, sung and played in a new style. "
+                       "Needs the recording's id from list_recordings and a score for it. If no lyrics are given, the words heard "
+                       "in the recording (or last used for a cover of it) are used. It renders straight away and takes minutes: "
+                       "follow it with wait_for_take.",
+        "inputSchema": {"type": "object", "required": ["recording_id", "style"], "properties": {
+            "recording_id": {"type": "string"},
+            "style": {"type": "string", "description": "Comma-separated tags: genre, mood, instruments, voice."},
+            "lyrics": {"type": "string", "description": "Words with section tags like [Verse]. Omit to use the recording's own."},
+            "title": {"type": "string"},
+            "seed": {"type": "integer"},
+            "max_duration": {"type": "integer", "description": "The most seconds it may run, 10 to 900. Default: the recording's length plus a margin."},
+            "space": {"type": "string", "description": "The space to make it in, by name. Omit for the default space."},
+            "style_lora": {"type": "string", "description": "A style LoRA to use, by name or title (see list_style_loras). Its "
+                                                           "trigger word is added to the style for you."},
+            "lora_planner": {"type": "number", "description": "How strongly it shapes the plan, 0 to 3. Default: the strength saved with it."},
+            "lora_sound": {"type": "number", "description": "How strongly it shapes the sound, 0 to 3. Default: the strength saved with it."},
+        }},
+    },
+    {
+        "name": "list_style_loras",
+        "description": "The style LoRAs installed: ones trained on a corpus of songs, which carry a sound (and sometimes a voice). "
+                       "Gives each one's name, title, trigger word, saved strengths and the styles it learned.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "star_take",
+        "description": "Star a take (or, with starred false, unstar it). Use the take's id: titles are not unique.",
+        "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
+            "take_id": {"type": "string"},
+            "starred": {"type": "boolean", "description": "Default true."},
+        }},
+    },
+    {
+        "name": "rename_take",
+        "description": "Change a take's title. Use the take's id: titles are not unique.",
+        "inputSchema": {"type": "object", "required": ["take_id", "title"], "properties": {
+            "take_id": {"type": "string"},
+            "title": {"type": "string"},
         }},
     },
     {
@@ -205,6 +263,52 @@ async def _space_of(api: Api, asked: Any) -> str | None:
     raise ApiRefused(f"{'More than one space is' if found else 'No space is'} called '{name}'. The spaces are: {names}.")
 
 
+_LORA_KINDS = ("planner", "decoder", "both", "unknown")
+
+
+async def _style_loras(api: Api) -> list[dict]:
+    """The style LoRAs the app offers: not the ones it applies for its own reasons."""
+    state = await api("GET", "/api/state")
+    return [item for item in (state.get("options") or {}).get("loras") or []
+            if not item.get("reserved") and item.get("kind") in _LORA_KINDS]
+
+
+def _lora_brief(item: dict) -> dict:
+    strengths = item.get("strengths") or {}
+    styles = [style.get("title") for style in (item.get("styles") or []) if style.get("title")][:12]
+    out = {"name": item["name"], "title": item.get("title"), "trigger": item.get("trigger"), "kind": item.get("kind"),
+           "saved_planner": strengths.get("planner"), "saved_sound": strengths.get("sound"),
+           "note": (item.get("note") or "")[:300] or None, "learned_styles": styles or None}
+    return {key: value for key, value in out.items() if value is not None}
+
+
+def _has_tag(style: str, word: str) -> bool:
+    return word.strip().lower() in [tag.strip().lower() for tag in style.split(",")]
+
+
+async def _with_lora(api: Api, args: dict, body: dict) -> None:
+    """Add the style LoRA an agent asked for to a create request: resolved by name or title, its trigger word put first
+    in the style (a LoRA does very little without it), and its strengths the ones asked for, else the ones saved with it."""
+    asked = str(args.get("style_lora") or "").strip()
+    if not asked:
+        return
+    loras = await _style_loras(api)
+    want = asked.lower()
+    found = [item for item in loras if want in (item["name"].lower(), item["name"].lower().removesuffix(".safetensors"),
+                                                 str(item.get("title") or "").strip().lower())]
+    if len(found) != 1:
+        names = ", ".join(f"{item.get('title') or item['name']}" for item in loras) or "none are installed"
+        raise ApiRefused(f"{'More than one style LoRA is' if found else 'No style LoRA is'} called '{asked}'. They are: {names}.")
+    item = found[0]
+    strengths = item.get("strengths") or {}
+    body["style_lora"] = item["name"]
+    body["style_lora_clip"] = float(args["lora_planner"]) if args.get("lora_planner") is not None else float(strengths.get("planner", 1.0))
+    body["style_lora_model"] = float(args["lora_sound"]) if args.get("lora_sound") is not None else float(strengths.get("sound", 1.0))
+    trigger = (item.get("trigger") or "").strip()
+    if trigger and not _has_tag(body.get("style", ""), trigger):
+        body["style"] = trigger + (", " + body["style"] if body.get("style") else "")
+
+
 def _text(value: Any, error: bool = False) -> dict:
     return {"content": [{"type": "text", "text": value if isinstance(value, str) else json.dumps(value, indent=2, default=str)}],
             "isError": error}
@@ -254,6 +358,7 @@ async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
             for key in ("title", "seed", "max_duration"):
                 if args.get(key) not in (None, ""):
                     body[key] = args[key]
+            await _with_lora(api, args, body)
             if name == "make_instrumental":
                 if args.get("structure"):
                     body["structure"] = args["structure"]
@@ -262,6 +367,44 @@ async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
                 body["lyrics"] = args["lyrics"]
                 made = await api("POST", "/api/songs", json=body)
             return _text(_brief(made, await _space_names(api)) if isinstance(made, dict) and "id" in made else made)
+        if name == "list_recordings":
+            query = str(args.get("query") or "").strip().lower()
+            found = [{"id": r["id"], "title": r["title"], "length": r.get("duration"), "has_score": bool(r.get("has_score")),
+                      "words_known": bool(r.get("has_lyrics")), "covers_made": r.get("take_count")}
+                     for r in await api("GET", "/api/sources") if not query or query in (r.get("title") or "").lower()]
+            return _text(found[:LIMIT])
+        if name == "list_style_loras":
+            return _text([_lora_brief(item) for item in await _style_loras(api)])
+        if name == "make_cover":
+            source = await api("GET", f"/api/sources/{args['recording_id']}")
+            if not (source.get("abc") or "").strip():
+                return _text(f"'{source.get('title')}' has no score yet, and a cover is made from its score. Transcribe it in the "
+                             "app first (the Transcribe button beside the recording).", True)
+            lyrics = str(args.get("lyrics") or "").strip()
+            if not lyrics:
+                heard = await api("GET", f"/api/sources/{args['recording_id']}/lyrics")
+                lyrics = (heard.get("lyrics") or heard.get("last_used") or "").strip()
+            sources = {r["id"]: r for r in await api("GET", "/api/sources")}
+            seconds = (sources.get(source["id"]) or {}).get("score_seconds")
+            body = {"source_id": source["id"], "style": args["style"], "lyrics": lyrics,
+                    "max_duration": float(args["max_duration"]) if args.get("max_duration") else min(900.0, float(int(seconds or 350) + 10))}
+            for key in ("title", "seed"):
+                if args.get(key) not in (None, ""):
+                    body[key] = args[key]
+            space = await _space_of(api, args.get("space"))
+            if space:
+                body["space_id"] = space
+            await _with_lora(api, args, body)
+            made = await api("POST", "/api/takes", json=body)
+            if isinstance(made, dict) and "id" in made:
+                return _text({"kind": "cover", **_brief(made, await _space_names(api))})     # the route's reply does not say
+            return _text(made)
+        if name == "star_take":
+            starred = args.get("starred") is not False
+            await api("POST", f"/api/takes/{args['take_id']}/favourite", params={"value": starred})
+            return _text({"take_id": args["take_id"], "starred": starred})
+        if name == "rename_take":
+            return _text(await api("POST", f"/api/takes/{args['take_id']}/rename", json={"title": str(args.get("title") or "")}))
         if name == "move_take":
             space = await _space_of(api, args.get("space"))
             if not space:

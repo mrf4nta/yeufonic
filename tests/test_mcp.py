@@ -49,7 +49,7 @@ def test_a_notification_gets_no_reply_and_ping_is_answered(client, on):
 
 def test_tools_are_listed_with_schemas(client, on):
     tools = {t["name"]: t for t in rpc(client, "tools/list").json()["result"]["tools"]}
-    assert {"list_takes", "get_take", "wait_for_take", "list_spaces", "make_instrumental", "make_song", "move_take", "delete_take", "render_take", "cancel_take"} <= set(tools)
+    assert {"list_takes", "get_take", "wait_for_take", "list_spaces", "make_instrumental", "make_song", "make_cover", "list_recordings", "list_style_loras", "star_take", "rename_take", "move_take", "delete_take", "render_take", "cancel_take"} <= set(tools)
     assert all(t["inputSchema"]["type"] == "object" and t["description"] for t in tools.values())
     assert tools["make_song"]["inputSchema"]["required"] == ["style", "lyrics"]
     assert "max_duration" in tools["make_song"]["inputSchema"]["properties"]
@@ -261,3 +261,122 @@ def test_a_take_with_audio_gives_a_link_that_plays_in_a_browser(client, on, tmp_
     assert played.status_code == 200 and played.headers["content-disposition"].startswith("inline")      # plays, does not save
     saved = client.get(f"/api/takes/{mine['id']}/audio?download=true&format=flac")
     assert saved.status_code in (200, 500)             # the save path is unchanged; the stand-in file is not real audio
+
+
+# ------------------------------------------------------------- recordings, covers, LoRAs, star and rename
+
+def a_recording(tmp_path, title="Home demo", abc=None):
+    from app.db import execute
+    import uuid
+    if abc is None:
+        abc = ("X:1\nM:4/4\nL:1/16\nQ:1/4=90\nV: Vocal\nV: Ins\nK:C\n% verse\nV: Vocal\n" + '"C"z16|"G"z16|"Am"z16|"F"z16|\n' * 2 +
+               "V: Ins\n" + "c4e4g4e4|B4d4g4d4|A4c4e4c4|F4A4c4A4|\n" * 2)
+    path = tmp_path / f"{title}.wav"
+    path.write_bytes(b"RIFF" + b"\0" * 64)
+    ident = uuid.uuid4().hex[:12]
+    execute("INSERT INTO sources(id, title, filename, stored_path, sha256, created_at, abc) VALUES(?, ?, ?, ?, ?, 1.0, ?)",
+            (ident, title, path.name, str(path), ident, abc))
+    return ident
+
+
+def a_lora(monkeypatch, tmp_path, name="jazz.safetensors", trigger="jazzy", title="Jazz club", strengths="Planner 0.70, Sound 0.50"):
+    import json, struct
+    from app import jobs, loras
+    root = tmp_path / "loras"
+    root.mkdir(exist_ok=True)
+    header = {"text_encoders.layer.0.weight": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]},
+              "diffusion_model.block.1.weight": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}}
+    raw = json.dumps(header).encode()
+    (root / name).write_bytes(struct.pack("<Q", len(raw)) + raw + b"\0" * 4)
+    (root / name.replace(".safetensors", ".txt")).write_text(f"{title}\nTrigger: {trigger}\nStrengths: {strengths}\n")
+    monkeypatch.setattr(loras, "folder", lambda: root)
+    monkeypatch.setitem(jobs.ENGINE.options, "loras", [*jobs.ENGINE.options.get("loras", []), name])
+
+
+def test_list_recordings_says_which_can_be_covered(client, on, tmp_path):
+    ready = a_recording(tmp_path, "Home demo")
+    bare = a_recording(tmp_path, "Voice memo", abc="")
+    error, found = call(client, "list_recordings")
+    by_id = {r["id"]: r for r in found}
+    assert not error and by_id[ready]["has_score"] is True and by_id[bare]["has_score"] is False
+    assert [r["id"] for r in call(client, "list_recordings", query="memo")[1]] == [bare]
+
+
+def test_make_cover_queues_a_render_from_the_recordings_score(client, on, tmp_path, monkeypatch):
+    from app import jobs
+    from app.db import one
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", ["yue2_3b_bf16.safetensors"])
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    recording = a_recording(tmp_path)
+    edm = a_space("EDM")
+    error, made = call(client, "make_cover", recording_id=recording, style="synthwave, female vocal", lyrics="[Verse]\nla la la",
+                       title="A cover", space="EDM")
+    assert not error and made["kind"] == "cover" and made["space"] == "EDM"
+    row = one("SELECT source_id, space_id, lyrics, status FROM takes WHERE id = ?", (made["id"],))
+    assert row["source_id"] == recording and row["space_id"] == edm and "la la la" in row["lyrics"]
+    queued = []
+    while not jobs.QUEUE.empty():
+        queued.append(jobs.QUEUE.get_nowait())
+    assert any(item.get("kind") == "render" and item.get("id") == made["id"] for item in queued)
+
+
+def test_make_cover_without_a_score_says_what_to_do(client, on, tmp_path):
+    error, text = call(client, "make_cover", recording_id=a_recording(tmp_path, "Bare", abc=""), style="rock")
+    assert error and "Transcribe" in text
+    assert call(client, "make_cover", recording_id="nothing", style="rock")[0] is True
+
+
+def test_make_cover_with_no_words_given_uses_the_recordings_own(client, on, tmp_path, monkeypatch):
+    from app import jobs
+    from app.db import execute, one
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", ["yue2_3b_bf16.safetensors"])
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    recording = a_recording(tmp_path)
+    execute("UPDATE sources SET lyrics = ? WHERE id = ?", ("[Verse]\nheard in the recording", recording))
+    error, made = call(client, "make_cover", recording_id=recording, style="rock")
+    assert not error and "heard in the recording" in one("SELECT lyrics FROM takes WHERE id = ?", (made["id"],))["lyrics"]
+
+
+def test_list_style_loras_gives_the_trigger_and_saved_strengths(client, on, tmp_path, monkeypatch):
+    a_lora(monkeypatch, tmp_path)
+    error, found = call(client, "list_style_loras")
+    mine = [item for item in found if item["name"] == "jazz.safetensors"]
+    assert not error and mine and mine[0]["trigger"] == "jazzy" and mine[0]["saved_planner"] == 0.7 and mine[0]["saved_sound"] == 0.5
+
+
+def test_a_style_lora_is_chosen_by_title_with_its_trigger_put_first_and_its_saved_strengths(client, on, tmp_path, monkeypatch):
+    from app import jobs
+    from app.db import one
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", ["yue2_3b_bf16.safetensors"])
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    a_lora(monkeypatch, tmp_path)
+    error, made = call(client, "make_song", style="swing, upright bass", lyrics="[Verse]\nla", style_lora="jazz club")
+    assert not error
+    row = one("SELECT style, style_lora, style_lora_clip, style_lora_model FROM takes WHERE id = ?", (made["id"],))
+    assert row["style"].startswith("jazzy, ") and row["style_lora"] == "jazz.safetensors"
+    assert (row["style_lora_clip"], row["style_lora_model"]) == (0.7, 0.5)           # the strengths saved with it
+    error, again = call(client, "make_song", style="jazzy, swing", lyrics="[Verse]\nla", style_lora="jazz", lora_planner=0.3)
+    row = one("SELECT style, style_lora_clip, style_lora_model FROM takes WHERE id = ?", (again["id"],))
+    assert row["style"] == "jazzy, swing" and (row["style_lora_clip"], row["style_lora_model"]) == (0.3, 0.5)   # not added twice; asked-for strength wins
+
+
+def test_an_unknown_style_lora_lists_the_ones_there_are(client, on, tmp_path, monkeypatch):
+    a_lora(monkeypatch, tmp_path)
+    error, text = call(client, "make_song", style="rock", lyrics="[Verse]\nla", style_lora="Nope")
+    assert error and "No style LoRA is called 'Nope'" in text and "Jazz club" in text
+
+
+def test_star_and_rename_work_by_id(client, on):
+    from app.db import one
+    mine = make_take(title="Draft")
+    twin = make_take(title="Draft")
+    assert call(client, "star_take", take_id=mine["id"])[1]["starred"] is True
+    assert one("SELECT favourite FROM takes WHERE id = ?", (mine["id"],))["favourite"] == 1
+    assert one("SELECT favourite FROM takes WHERE id = ?", (twin["id"],))["favourite"] == 0          # only the one asked for
+    call(client, "star_take", take_id=mine["id"], starred=False)
+    assert one("SELECT favourite FROM takes WHERE id = ?", (mine["id"],))["favourite"] == 0
+    error, renamed = call(client, "rename_take", take_id=mine["id"], title="  Sunrise  ")
+    assert not error and renamed["title"] == "Sunrise"
+    assert one("SELECT title FROM takes WHERE id = ?", (twin["id"],))["title"] == "Draft"
+    assert call(client, "rename_take", take_id=mine["id"], title="  ")[0] is True
+    assert call(client, "star_take", take_id="nothing")[0] is True
