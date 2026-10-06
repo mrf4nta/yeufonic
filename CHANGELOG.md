@@ -37,6 +37,12 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Fixed
+- **A failed instrumental plan no longer tells you to lower a style LoRA's strength when none was used.** Every take stores a strength,
+  1.00 unless changed, whether or not a LoRA was chosen, and the advice read it as if one had been. It now appears only for a take with a LoRA.
+
 ## 0.0.29 (2026-10-06)
 
 ### Changed

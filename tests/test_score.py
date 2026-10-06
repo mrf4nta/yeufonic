@@ -143,7 +143,7 @@ def test_instrumental_collapse_advice(monkeypatch):
     while not jobs.QUEUE.empty():
         jobs.QUEUE.get_nowait()
     take = make_take(status="queued", kind="instrumental")
-    execute("UPDATE takes SET style_lora_clip = 1.0, harmony = 1 WHERE id = ?", (take["id"],))
+    execute("UPDATE takes SET style_lora = 'jazz.safetensors', style_lora_clip = 1.0, harmony = 1 WHERE id = ?", (take["id"],))
     plan_twice(take["id"])
     row = one("SELECT status, error, abc FROM takes WHERE id = ?", (take["id"],))
     assert row["status"] == "failed" and not row["abc"]
@@ -151,6 +151,21 @@ def test_instrumental_collapse_advice(monkeypatch):
     assert "no instrument part" in row["error"]
     assert "lower style LoRA Planner strength" in row["error"]
     assert "set Harmony to Familiar" in row["error"]
+
+
+def test_a_take_with_no_style_lora_is_not_told_to_lower_its_strength(monkeypatch):
+    """Every take stores a LoRA strength, 1.00 by default, whether or not a LoRA was chosen, and the advice read it as
+    if one had been."""
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(jobs.asyncio, "sleep", lambda _s: real_sleep(0))
+    monkeypatch.setattr(jobs, "ENGINE", PlanEngine("Q:1::::::::::::::::::::::\n"))
+    while not jobs.QUEUE.empty():
+        jobs.QUEUE.get_nowait()
+    take = make_take(status="queued", kind="instrumental")
+    plan_twice(take["id"])
+    row = one("SELECT status, error, style_lora, style_lora_clip FROM takes WHERE id = ?", (take["id"],))
+    assert row["status"] == "failed" and row["style_lora"] is None
+    assert "LoRA" not in row["error"] and "Planner strength" not in row["error"]
 
 
 def test_a_score_lasts_its_bars_in_quarter_notes():

@@ -680,7 +680,7 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
             clip_val = float(record.get("style_lora_clip") or 0.0)
             harmony_val = int(record.get("harmony") or 0)
             variety_val = record.get("variety")
-            if is_inst and clip_val > 0.6:
+            if is_inst and record.get("style_lora") and clip_val > 0.6:      # a take with no LoRA still stores a strength
                 advice_parts.append(f"lower style LoRA Planner strength ({clip_val:.2f}) to ~0.50–0.60")
             if harmony_val > 0:
                 advice_parts.append("set Harmony to Familiar")
