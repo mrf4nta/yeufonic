@@ -91,15 +91,23 @@ TOOLS: list[dict] = [
 _BRIEF = ("id", "title", "kind", "status", "duration", "style", "space_id", "favourite", "created_at", "error")
 
 
-def _brief(take: dict) -> dict:
+def _brief(take: dict, spaces: dict | None = None) -> dict:
     out = {key: take.get(key) for key in _BRIEF if take.get(key) not in (None, "")}
     out["has_audio"] = bool(take.get("has_audio"))
+    if spaces and take.get("space_id") in spaces:
+        out["space"] = spaces[take["space_id"]]           # the name, which an agent can say to a person
     return out
 
 
-def _full(take: dict, include_score: bool) -> dict:
+async def _space_names(api: Api) -> dict:
+    return {space["id"]: space["name"] for space in await api("GET", "/api/spaces")}
+
+
+def _full(take: dict, include_score: bool, spaces: dict | None = None) -> dict:
     out = {key: value for key, value in take.items()
            if value is not None and key not in ("abc", "audio_path", "prompt_id", "live", "weak_dismissed")}
+    if spaces and take.get("space_id") in spaces:
+        out["space"] = spaces[take["space_id"]]
     if take.get("live"):
         out["progress"] = take["live"]
     if include_score:
@@ -123,10 +131,11 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
             params = {"limit": limit, "q": args.get("query") or "", "favourite": bool(args.get("favourites"))}
             if args.get("space_id"):
                 params["space_id"] = args["space_id"]
-            return _text([_brief(take) for take in await api("GET", "/api/takes", params=params)])
+            spaces = await _space_names(api)
+            return _text([_brief(take, spaces) for take in await api("GET", "/api/takes", params=params)])
         if name == "get_take":
             take = await api("GET", f"/api/takes/{args['take_id']}")
-            return _text(_full(take, bool(args.get("include_score"))))
+            return _text(_full(take, bool(args.get("include_score")), await _space_names(api)))
         if name == "list_spaces":
             return _text(await api("GET", "/api/spaces"))
         if name in ("make_instrumental", "make_song"):
@@ -141,7 +150,7 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
             else:
                 body["lyrics"] = args["lyrics"]
                 made = await api("POST", "/api/songs", json=body)
-            return _text(_brief(made) if isinstance(made, dict) and "id" in made else made)
+            return _text(_brief(made, await _space_names(api)) if isinstance(made, dict) and "id" in made else made)
         if name == "render_take":
             made = await api("POST", f"/api/takes/{args['take_id']}/render", json={"reseed": bool(args.get("new_seed"))})
             return _text(made)

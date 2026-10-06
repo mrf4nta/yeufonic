@@ -71,8 +71,10 @@ def test_list_and_get_take_read_the_library(client, on):
     make_take(title="Something loud", style="metal")
     error, found = call(client, "list_takes", query="calm")
     assert not error and [t["id"] for t in found] == [mine["id"]]
+    assert isinstance(found[0]["space"], str) and found[0]["space"]       # the space's name, not only its id
     error, one = call(client, "get_take", take_id=mine["id"])
     assert not error and one["title"] == "A calm piece" and "score" not in one and "abc" not in one
+    assert isinstance(one["space"], str) and one["space"]
     assert call(client, "get_take", take_id=mine["id"], include_score=True)[1]["score"].startswith("X:1")
     error, missing = call(client, "get_take", take_id="nothing")
     assert error and "no such take" in missing
