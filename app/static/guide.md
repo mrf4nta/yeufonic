@@ -892,6 +892,24 @@ so the page opens in it. The log window stays dark in every theme, like a termin
 
 ---
 
+## Using Yeufonic from an AI agent
+
+Yeufonic can act as an MCP server, so an AI agent on the same computer (Claude Code, Cursor and others) can ask it for
+songs and read the library. It is **off** until you turn on **MCP server** in Settings, because a request can queue work on
+the GPU.
+
+The address is `/mcp` on the app, for example `http://localhost:8090/mcp`. In Claude Code:
+
+```
+claude mcp add --transport http yeufonic http://localhost:8090/mcp
+```
+
+The tools are `list_takes`, `get_take`, `list_spaces`, `make_instrumental`, `make_song`, `render_take` and `cancel_take`.
+They do what the page does, through the same routes, so a take an agent starts appears in the library like any other, and a
+refusal (a missing lyric, an engine that is busy) comes back to the agent in the page's own words. Making a take takes
+minutes, so the agent starts it and checks `get_take` until the status is done or failed; the take's audio is at the
+`audio_url` it returns. The same Host-name and cross-site checks apply as for the page.
+
 ## System Logs
 
 The app writes a consolidated, real-time log of every major action — score planning, rendering, audio transcription, stem separation, and LoRA training — tagged with `INFO`, `WARN`, and `ERROR` prefixes.

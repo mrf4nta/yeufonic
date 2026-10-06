@@ -37,6 +37,14 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Added
+- **An MCP server, off by default.** With **MCP server** switched on in Settings, an AI agent on the same computer can make songs
+  and instrumentals, render, cancel and read the library through `/mcp`: `list_takes`, `get_take`, `list_spaces`,
+  `make_instrumental`, `make_song`, `render_take` and `cancel_take`. A tool calls the app's own routes, so it has the page's
+  checks and effects. (On a feature branch for trying out.)
+
 ## 0.0.29 (2026-10-06)
 
 ### Changed

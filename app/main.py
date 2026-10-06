@@ -16,6 +16,7 @@ import asyncio
 import collections
 import contextlib
 import hashlib
+import httpx
 import json
 import logging
 import os
@@ -40,7 +41,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import aligner, config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, midi, score, soundfonts, stems, storage, trainsize, transpose, update
+from . import aligner, config, identities, instrumental, jobs, library, llm, logging_setup, loras, lyrics, mcp, midi, score, soundfonts, stems, storage, trainsize, transpose, update
 from .db import DEFAULT_SPACE, delete_setting, execute, get_setting, migrate, one, rows, set_setting
 
 personas = identities
@@ -136,6 +137,18 @@ SETTINGS_SPEC: list[dict] = [
         "default": "htdemucs",
         "options": [{"value": key, "label": spec["label"]} for key, spec in stems.MODELS.items()],
         "help": "The model new runs start with.",
+    },
+    {
+        "key": "mcp.enabled",
+        "label": "MCP server",
+        "type": "select",
+        "default": "off",
+        "options": [
+            {"value": "off", "label": "Off"},
+            {"value": "on", "label": "On"},
+        ],
+        "help": "Lets an AI agent on this computer (Claude Code, Cursor and others) make songs and read the library, at "
+                "/mcp. A request can start work on the GPU, so it is off until you turn it on.",
     },
     {
         "key": "stems.folder",
@@ -1988,6 +2001,42 @@ def _space_name(name: str, keep: str | None = None) -> str:
     if clash:
         raise HTTPException(409, f"there is already a space called {name}")
     return name
+
+
+@app.post("/mcp")
+async def mcp_endpoint(request: Request) -> Response:
+    """Yeufonic as an MCP server (app/mcp.py), over the app's own routes."""
+    if get_setting("mcp.enabled", "off") != "on":
+        return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {
+            "code": -32000, "message": "The MCP server is off. Turn it on in Settings, under MCP server."}}, status_code=403)
+    try:
+        message = await request.json()
+    except ValueError:
+        return JSONResponse(mcp.error_reply(None, -32700, "not JSON"), status_code=400)
+
+    async def api(method: str, path: str, json: dict | None = None, params: dict | None = None):
+        # In-process, with this app's own host name, so every route's checks apply as they do for the page.
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost") as client:
+            reply = await client.request(method, path, json=json, params=params)
+        if reply.status_code >= 400:
+            try:
+                detail = reply.json().get("detail", reply.text)
+            except ValueError:
+                detail = reply.text
+            raise mcp.ApiRefused(detail if isinstance(detail, str) else str(detail))
+        return reply.json() if reply.content else {}
+
+    batch = message if isinstance(message, list) else [message]
+    replies = [r for r in [await mcp.handle(item, api, config.VERSION) for item in batch] if r is not None]
+    if not replies:
+        return Response(status_code=202)
+    return JSONResponse(replies if isinstance(message, list) else replies[0])
+
+
+@app.get("/mcp")
+def mcp_stream() -> Response:
+    """No server-initiated stream: a client that asks for one is told so, as the protocol allows."""
+    return Response(status_code=405, headers={"Allow": "POST"})
 
 
 @app.get("/api/spaces")
