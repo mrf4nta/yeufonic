@@ -935,6 +935,54 @@ reconnect the agent (in Claude Code, `/mcp`). Reconnect after restarting Yeufoni
 
 Making a take takes minutes. The agent starts it and waits, reporting progress, so you can ask for the next thing meanwhile.
 
+### Everything it can do
+
+You do not need these names: you ask in your own words and the agent picks. They are here so you can see what exists, and so you can
+tell your agent which one you mean.
+
+| Tool | What it does |
+|---|---|
+| `list_takes` | Lists takes, newest first, optionally only those matching words, in a named space, or starred. Shows a short id |
+| `get_take` | One take in full: how it was made, its status, any error and, once it has audio, a link that plays it. Can include the score |
+| `wait_for_take` | Waits (up to about a minute at a time) for a take that is being made, and says whether it has finished |
+| `make_instrumental` | Plans and renders an instrumental from a style, with a length, a space and a style LoRA if you name them, and sections if you give them |
+| `make_song` | The same for a song, from lyrics |
+| `make_cover` | A cover from a recording in the library, using its score and, unless you give others, its words |
+| `try_more` | Several more takes from an existing one, with new seeds |
+| `render_take` | Renders a planned take, or renders a finished one again (with a new seed if asked) |
+| `cancel_take` | Stops a take that is queued or running |
+| `make_stems`, `get_stems` | Splits a take into parts, then lists the parts with a link to each and to the whole set as a zip |
+| `list_recordings`, `transcribe_recording` | Shows the recordings in the library and whether each has a score; transcribes one that has none |
+| `list_style_loras` | The style LoRAs installed, with their trigger words and the strengths saved with them |
+| `list_spaces`, `move_take` | The spaces and what each holds; moves a take to another |
+| `star_take`, `rename_take` | Stars or unstars a take; changes its title |
+| `delete_take` | Deletes a take for good, after showing it to you and being told to go ahead |
+| `status` | Whether the engine is ready, what is running and waiting, and whether a LoRA is training |
+
+### Ideas for using it
+
+- **A batch of ideas, then pick.** "Make five one-minute EDM instrumentals in different styles, in the EDM space." It starts them one after
+  another and tells you as each finishes. You listen, then say "star the second and fourth and delete the rest."
+- **Iterating on one idea.** "Make an instrumental in a dreamy synth style and play it", then "now the same with more drums", and
+  "give me four more like the second one." The agent keeps track of which take is which, so you can talk about them by position or
+  by what you said about them.
+- **Covers without clicking through.** "Transcribe *the demo*, then make three covers of it: folk, synthwave and jazz." It transcribes
+  the recording first if it has no score, then makes the covers in the space you name.
+- **Working a LoRA.** "List my style LoRAs, then make an instrumental with the jazz one." The trigger word and the saved strengths are
+  handled for you, which is easy to get wrong by hand.
+- **Words from the agent.** The agent can write the lyrics itself: "Write lyrics about a night train and make a song of them in a folk
+  style." Yeufonic only sees the finished words.
+- **Stems for a whole set.** "Split my five newest takes into vocals and instruments and give me the links." Each runs on the CPU, so
+  they queue behind one another without holding up what the GPU is doing.
+- **Library housekeeping.** "Find the takes with the same title, show me which is newest, and delete the older ones", or "move everything
+  I made today into a space called Drafts." It works from ids and asks before deleting.
+- **Checking before a long job.** "Is Yeufonic busy?" before you queue a long render or a batch, so you do not queue behind a training run.
+- **Part of a bigger task.** Because it is a tool the agent can call, it can sit inside something larger: make a track for a video and
+  write the note that goes with it, or build a playlist-sized batch and name the takes to match a list.
+
+The agent cannot hear a take, so it cannot judge how it sounds: you do the listening, and it does the legwork. It is also not a
+shortcut round the engine: the GPU still does one job at a time, so a large batch is a long queue.
+
 ### Things to know
 
 - **Takes can share a title,** so the agent works from a take's **id** and shows a short one (the `short_id` column) when it lists takes.
