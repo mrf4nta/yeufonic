@@ -42,7 +42,9 @@ TOOLS: list[dict] = [
     {
         "name": "get_take",
         "description": "One take in full: how it was made, its status, any error, its lyrics or structure, and "
-                       "where to fetch its audio once it has some.",
+                       "once it has audio a `listen_url`. You cannot play sound yourself: to let the person hear the take, "
+                       "open listen_url in their default browser (for example `xdg-open URL`, `wslview URL` or "
+                       "`explorer.exe URL` in WSL, `open URL` on a Mac, `start URL` on Windows). Do not download the file.",
         "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
             "take_id": {"type": "string"},
             "include_score": {"type": "boolean", "description": "Also return the score (ABC text). Default false: it is long."},
@@ -159,7 +161,7 @@ async def _space_names(api: Api) -> dict:
     return {space["id"]: space["name"] for space in await api("GET", "/api/spaces")}
 
 
-def _full(take: dict, include_score: bool, spaces: dict | None = None) -> dict:
+def _full(take: dict, include_score: bool, spaces: dict | None = None, base: str = "") -> dict:
     out = {key: value for key, value in take.items()
            if value is not None and key not in ("abc", "audio_path", "prompt_id", "live", "weak_dismissed")}
     if spaces and take.get("space_id") in spaces:
@@ -170,6 +172,8 @@ def _full(take: dict, include_score: bool, spaces: dict | None = None) -> dict:
         out["score"] = take.get("abc")
     if take.get("has_audio"):
         out["audio_url"] = f"/api/takes/{take['id']}/audio"
+        # A link a person's browser plays. The agent cannot play sound itself: to let them hear it, open this.
+        out["listen_url"] = f"{base}/api/takes/{take['id']}/audio"
     return out
 
 
@@ -206,7 +210,7 @@ def _text(value: Any, error: bool = False) -> dict:
             "isError": error}
 
 
-async def call_tool(name: str, args: dict, api: Api) -> dict:
+async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
     """Run one tool. A refusal from the app comes back as an error result the agent can read."""
     args = args or {}
     try:
@@ -227,7 +231,7 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
             return _text(found)
         if name == "get_take":
             take = await api("GET", f"/api/takes/{args['take_id']}")
-            return _text(_full(take, bool(args.get("include_score")), await _space_names(api)))
+            return _text(_full(take, bool(args.get("include_score")), await _space_names(api), base))
         if name == "wait_for_take":
             wait = max(1, min(MOST_WAIT, int(args.get("seconds") or 45)))
             deadline, started = time.monotonic() + wait, time.monotonic()
@@ -236,7 +240,7 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
                 if _settled(take) or time.monotonic() >= deadline:
                     break
                 await asyncio.sleep(min(POLL, max(0.05, deadline - time.monotonic())))
-            result = _full(take, False, await _space_names(api))
+            result = _full(take, False, await _space_names(api), base)
             result["finished"] = _settled(take)
             result["waited_seconds"] = round(time.monotonic() - started, 1)
             return _text(result)
@@ -303,7 +307,7 @@ def error_reply(request_id: Any, code: int, message: str) -> dict:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
 
 
-async def handle(message: Any, api: Api, version: str) -> dict | None:
+async def handle(message: Any, api: Api, version: str, base: str = "") -> dict | None:
     """One JSON-RPC message in, its reply out; None for a notification, which has none."""
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
         return error_reply(None, -32600, "not a JSON-RPC 2.0 request")
@@ -326,5 +330,5 @@ async def handle(message: Any, api: Api, version: str) -> dict | None:
     if method == "tools/call":
         if not isinstance(params.get("name"), str):
             return error_reply(request_id, -32602, "a tool name is needed")
-        return {"jsonrpc": "2.0", "id": request_id, "result": await call_tool(params["name"], params.get("arguments"), api)}
+        return {"jsonrpc": "2.0", "id": request_id, "result": await call_tool(params["name"], params.get("arguments"), api, base)}
     return error_reply(request_id, -32601, f"method not found: {method}")

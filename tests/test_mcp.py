@@ -245,3 +245,19 @@ def test_a_starred_take_needs_to_be_asked_for_twice(client, on):
 def test_a_title_is_never_taken_for_an_id(client, on):
     make_take(title="By title")
     assert call(client, "delete_take", take_id="By title", confirm=True)[0] is True
+
+
+def test_a_take_with_audio_gives_a_link_that_plays_in_a_browser(client, on, tmp_path):
+    from app.db import execute
+    sound = tmp_path / "take.flac"
+    sound.write_bytes(b"fLaC" + b"\0" * 64)
+    mine = make_take(title="Has sound")
+    execute("UPDATE takes SET audio_path = ? WHERE id = ?", (str(sound), mine["id"]))
+    error, one = call(client, "get_take", take_id=mine["id"])
+    assert not error and one["listen_url"] == f"http://localhost/api/takes/{mine['id']}/audio"
+    silent = make_take(title="Silent")
+    assert "listen_url" not in call(client, "get_take", take_id=silent["id"])[1]
+    played = client.get(f"/api/takes/{mine['id']}/audio")
+    assert played.status_code == 200 and played.headers["content-disposition"].startswith("inline")      # plays, does not save
+    saved = client.get(f"/api/takes/{mine['id']}/audio?download=true&format=flac")
+    assert saved.status_code in (200, 500)             # the save path is unchanged; the stand-in file is not real audio

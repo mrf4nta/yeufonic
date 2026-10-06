@@ -2026,8 +2026,9 @@ async def mcp_endpoint(request: Request) -> Response:
             raise mcp.ApiRefused(detail if isinstance(detail, str) else str(detail))
         return reply.json() if reply.content else {}
 
+    base = str(request.base_url).rstrip("/")          # how this client reached the app, for links it can open
     batch = message if isinstance(message, list) else [message]
-    replies = [r for r in [await mcp.handle(item, api, config.VERSION) for item in batch] if r is not None]
+    replies = [r for r in [await mcp.handle(item, api, config.VERSION, base) for item in batch] if r is not None]
     if not replies:
         return Response(status_code=202)
     return JSONResponse(replies if isinstance(message, list) else replies[0])
@@ -3690,8 +3691,9 @@ def take_audio(take_id: str, download: bool = False, format: str | None = None) 
     if not take or not take["audio_path"] or not Path(take["audio_path"]).exists():
         raise HTTPException(404, "no audio for this take")
     safe = "".join(ch for ch in (take["title"] or "take") if ch.isalnum() or ch in " -_")[:60].strip() or "take"
-    if not download:   # playing: the FLAC as kept
-        return FileResponse(take["audio_path"], media_type="audio/flac", filename=f"{safe}.flac")
+    if not download:   # playing: the FLAC as kept, inline, so a link to it plays in a browser and does not save
+        return FileResponse(take["audio_path"], media_type="audio/flac", filename=f"{safe}.flac",
+                            content_disposition_type="inline")
     # A download is in the format asked for, else the one set in Settings.
     fmt = format or setting_value("stems.format")
     fmt = fmt if fmt in SAVE_FORMATS else "flac"
