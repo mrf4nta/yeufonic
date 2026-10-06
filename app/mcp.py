@@ -463,8 +463,10 @@ async def handle(message: Any, api: Api, version: str, base: str = "") -> dict |
             "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": "yeufonic", "version": version},
-            "instructions": "Yeufonic makes songs and instrumentals with YuE2. Making one takes minutes: start it, then "
-                            "poll get_take until its status is done or failed.",
+            "instructions": "Yeufonic makes songs, covers and instrumentals with YuE2. Making one takes minutes: start it, then "
+                            "call wait_for_take with its id, and again while `finished` is false. Do not poll with shell commands or "
+                            "the app's web API: use these tools. To let the person hear a take, open its listen_url in their "
+                            "browser. Always act on a take by its id, since several can share a title.",
         }}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}

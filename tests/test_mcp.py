@@ -39,6 +39,7 @@ def test_initialize_names_the_server_and_agrees_a_protocol_version(client, on):
     result = rpc(client, "initialize", {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}).json()["result"]
     assert result["serverInfo"]["name"] == "yeufonic" and result["protocolVersion"] == "2025-03-26"
     assert "tools" in result["capabilities"]
+    assert "wait_for_take" in result["instructions"] and "listen_url" in result["instructions"]
     assert rpc(client, "initialize", {"protocolVersion": "1999-01-01"}).json()["result"]["protocolVersion"] == "2025-06-18"
 
 
