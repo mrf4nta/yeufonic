@@ -50,7 +50,7 @@ def test_a_notification_gets_no_reply_and_ping_is_answered(client, on):
 
 def test_tools_are_listed_with_schemas(client, on):
     tools = {t["name"]: t for t in rpc(client, "tools/list").json()["result"]["tools"]}
-    assert {"list_takes", "get_take", "wait_for_take", "list_spaces", "make_instrumental", "make_song", "make_cover", "list_recordings", "list_style_loras", "star_take", "rename_take", "move_take", "delete_take", "render_take", "cancel_take"} <= set(tools)
+    assert {"list_takes", "get_take", "wait_for_take", "list_spaces", "make_instrumental", "make_song", "make_cover", "list_recordings", "list_style_loras", "try_more", "status", "transcribe_recording", "make_stems", "get_stems", "star_take", "rename_take", "move_take", "delete_take", "render_take", "cancel_take"} <= set(tools)
     assert all(t["inputSchema"]["type"] == "object" and t["description"] for t in tools.values())
     assert tools["make_song"]["inputSchema"]["required"] == ["style", "lyrics"]
     assert "max_duration" in tools["make_song"]["inputSchema"]["properties"]
@@ -438,3 +438,111 @@ def test_the_instructions_ask_for_the_short_id_to_be_shown(client, on):
     assert "short_id" in result["instructions"]
     tools = {t["name"]: t for t in rpc(client, "tools/list").json()["result"]["tools"]}
     assert "short_id" in tools["list_takes"]["description"]
+
+
+# ------------------------------------------------------------- try more, status, transcribe, stems
+
+@pytest.fixture
+def stems_idle(monkeypatch):
+    import asyncio
+    from app import jobs
+    held = asyncio.Event()
+
+    async def idle():
+        await held.wait()
+    monkeypatch.setattr(jobs, "stems_worker", idle)
+    yield
+    held.set()
+
+
+def a_rendered_take(tmp_path, title="Finished", kind="cover", abc=None):
+    from app.db import execute
+    sound = tmp_path / f"{title}.flac"
+    sound.write_bytes(b"fLaC" + b"\0" * 64)
+    take = make_take(title=title, kind=kind, abc=abc or "", status="done")
+    execute("UPDATE takes SET audio_path = ? WHERE id = ?", (str(sound), take["id"]))
+    return take
+
+
+def test_try_more_queues_new_takes_from_a_score_it_already_has(client, on, tmp_path, monkeypatch):
+    from app import jobs
+    from app.db import one, rows
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", ["yue2_3b_bf16.safetensors"])
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    recording = a_recording(tmp_path)
+    original = make_take(title="Song", kind="cover", status="done", abc=one("SELECT abc FROM sources WHERE id = ?", (recording,))["abc"])
+    error, made = call(client, "try_more", take_id=original["id"], count=3)
+    assert not error and len(made["queued"]) == 3
+    assert all(t["title"].startswith("Song") and t["short_id"] == t["id"][:6] for t in made["queued"])
+    assert len({t["seed"] for t in made["queued"]}) == 3                                   # new seeds, each its own
+    assert len(rows("SELECT id FROM takes WHERE title LIKE 'Song%'")) == 4                 # the original and three more
+    error, text = call(client, "try_more", take_id=make_take(title="Empty", abc="")["id"])
+    assert error and "no score" in text                                                    # the route's own refusal, as written
+
+
+def test_status_says_whether_the_engine_is_ready_and_what_is_waiting(client, on):
+    error, status = call(client, "status")
+    assert not error and status["engine_online"] is False and "not online" in status["advice"]
+    assert status["version"]
+
+
+def test_transcribe_queues_a_recording_and_reports_where_it_is(client, on, tmp_path):
+    from app import jobs
+    from app.db import one
+    bare = a_recording(tmp_path, "Voice memo", abc="")
+    error, state = call(client, "transcribe_recording", recording_id=bare, wait_seconds=0)
+    assert not error and state["transcription"] == "queued" and state["has_score"] is False and "call again" in state["next"]
+    assert one("SELECT transcribe_state FROM sources WHERE id = ?", (bare,))["transcribe_state"] == "queued"
+    queued = []
+    while not jobs.QUEUE.empty():
+        queued.append(jobs.QUEUE.get_nowait())
+    assert any(item.get("kind") == "transcribe" and item.get("id") == bare for item in queued)
+    again, state = call(client, "transcribe_recording", recording_id=bare, wait_seconds=0)        # already queued: not an error
+    assert not again and state["transcription"] == "queued"
+    assert call(client, "transcribe_recording", recording_id="nothing")[0] is True
+
+
+def test_a_recording_that_has_a_score_is_not_transcribed_again_unless_asked(client, on, tmp_path):
+    from app.db import execute, one
+    ready = a_recording(tmp_path)
+    execute("UPDATE sources SET transcribe_state = 'done' WHERE id = ?", (ready,))
+    error, state = call(client, "transcribe_recording", recording_id=ready, wait_seconds=0)
+    assert not error and state["has_score"] is True and "already has a score" in state["next"]
+    assert one("SELECT transcribe_state FROM sources WHERE id = ?", (ready,))["transcribe_state"] == "done"      # left as it was
+    assert call(client, "transcribe_recording", recording_id=ready, wait_seconds=0, again=True)[1]["transcription"] == "queued"
+
+
+def test_make_stems_and_get_stems_follow_a_take_through(client, on, tmp_path, stems_idle):
+    from app.db import execute
+    take = a_rendered_take(tmp_path)
+    error, made = call(client, "make_stems", take_id=take["id"], kind="vocals_and_instruments", format="flac")
+    assert not error and made["parts"] == ["vocals", "instruments"] and made["status"] == "queued"
+    error, got = call(client, "get_stems", take_id=take["id"])
+    assert not error and got["any_running"] is True and got["stem_sets"][0]["model"] == "htdemucs_2s"
+    # once done, the files come with links a browser can open
+    folder = tmp_path / "stems"
+    folder.mkdir()
+    (folder / "vocals.flac").write_bytes(b"fLaC")
+    (folder / "instruments.flac").write_bytes(b"fLaC")
+    execute("UPDATE stem_sets SET status = 'done', folder = ? WHERE id = ?", (str(folder), made["stem_set"]))
+    error, done = call(client, "get_stems", take_id=take["id"])
+    first = done["stem_sets"][0]
+    assert not error and done["any_running"] is False and first["status"] == "done"
+    assert {f["name"] for f in first["files"]} == {"vocals", "instruments"}
+    assert first["files"][0]["url"].startswith(f"http://localhost/api/stem-sets/{made['stem_set']}/")
+    assert first["zip_url"] == f"http://localhost/api/stem-sets/{made['stem_set']}/zip"
+
+
+def test_stems_need_a_finished_take_and_a_known_kind(client, on, tmp_path, stems_idle):
+    error, text = call(client, "make_stems", take_id=make_take(title="No sound")["id"])
+    assert error and "no audio" in text
+    take = a_rendered_take(tmp_path, "Has sound")
+    assert call(client, "make_stems", take_id=take["id"], kind="seven")[0] is True
+    error, none = call(client, "get_stems", take_id=take["id"])
+    assert not error and none["stem_sets"] == [] and "No stems have been made" in none["message"]
+
+
+def test_list_recordings_says_where_transcription_is(client, on, tmp_path):
+    bare = a_recording(tmp_path, "Memo", abc="")
+    found = {r["id"]: r for r in call(client, "list_recordings")[1]}
+    assert "transcription" in found[bare]

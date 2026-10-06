@@ -927,6 +927,10 @@ reconnect the agent (in Claude Code, `/mcp`). Reconnect after restarting Yeufoni
 | "Play it" | Opens the take in your browser, where it plays |
 | "Star that one", "call it Sunrise", "move it to the Folk space" | Stars, renames or moves a take |
 | "Render it again with a new seed", "stop that" | Renders a take again, or cancels one in progress |
+| "Give me a few more like that one" | Renders the take again with new seeds, as several new takes to listen to together |
+| "Transcribe *the recording*" | Transcribes a recording into a score, so a cover can be made from it. It leaves a recording that already has a score alone unless asked |
+| "Split that into vocals and instruments" | Separates a finished take into its parts (four, six, or just vocals and instruments) and gives you a link to each file and one to the whole set as a zip |
+| "Is Yeufonic busy?" | Says whether the engine is ready, what is running and with what progress, what is waiting, and whether a LoRA is training |
 | "Delete that take" | Shows what would go and asks you first; see below |
 
 Making a take takes minutes. The agent starts it and waits, reporting progress, so you can ask for the next thing meanwhile.

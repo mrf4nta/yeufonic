@@ -147,6 +147,54 @@ TOOLS: list[dict] = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
+        "name": "try_more",
+        "description": "Make more takes from an existing one: the same score and words rendered again with new seeds, as several "
+                       "new takes to listen to together (the Try more button). Each is queued; follow them with wait_for_take.",
+        "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
+            "take_id": {"type": "string"},
+            "count": {"type": "integer", "description": "How many, 1 to 8. Default 4."},
+        }},
+    },
+    {
+        "name": "status",
+        "description": "How busy Yeufonic is: whether the engine is online, what is running now and with what progress, what is waiting, "
+                       "and whether a LoRA is being trained (which holds the GPU). Check this before queuing something long.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "transcribe_recording",
+        "description": "Transcribe a recording in the library into a score, which a cover is made from. Takes a minute or two on the GPU. "
+                       "Waits up to `wait_seconds` and returns the state; call again (or list_recordings) while it is still running. "
+                       "Recordings can share a title: use the id from list_recordings.",
+        "inputSchema": {"type": "object", "required": ["recording_id"], "properties": {
+            "recording_id": {"type": "string"},
+            "wait_seconds": {"type": "integer", "description": f"How long to wait for it, at most {MOST_WAIT}. Default 45."},
+            "again": {"type": "boolean", "description": "Transcribe even though it has a score: this replaces the score, edits and all."},
+        }},
+    },
+    {
+        "name": "make_stems",
+        "description": "Split a finished take into its parts. `kind` is 'four' (vocals, drums, bass and the rest, the default), "
+                       "'vocals_and_instruments' (two parts, the usual choice for a backing track or an acapella), or 'six' (adds guitar "
+                       "and piano). Runs on the CPU for minutes, beside other work. Follow it with get_stems.",
+        "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
+            "take_id": {"type": "string"},
+            "kind": {"type": "string", "enum": ["four", "vocals_and_instruments", "six"]},
+            "only": {"type": "array", "items": {"type": "string"},
+                     "description": "Keep only these parts, such as [\"vocals\"] (the others are still separated, not saved)."},
+            "format": {"type": "string", "enum": ["wav", "flac", "mp3"], "description": "Default: the format set in Settings."},
+        }},
+    },
+    {
+        "name": "get_stems",
+        "description": "The stems made from a take: each set's state, progress and, once done, its files with a link to open or save each "
+                       "and one for the whole set as a zip. Waits up to `wait_seconds` for one that is still being made.",
+        "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
+            "take_id": {"type": "string"},
+            "wait_seconds": {"type": "integer", "description": f"How long to wait for a running set, at most {MOST_WAIT}. Default 0: just look."},
+        }},
+    },
+    {
         "name": "star_take",
         "description": "Star a take (or, with starred false, unstar it). Use the take's id: titles are not unique.",
         "inputSchema": {"type": "object", "required": ["take_id"], "properties": {
@@ -231,7 +279,7 @@ def timed_structure(total: int) -> str:
     return "\n".join(out)
 
 
-TAKE_TOOLS = ("get_take", "wait_for_take", "move_take", "delete_take", "render_take", "cancel_take", "star_take", "rename_take")
+TAKE_TOOLS = ("try_more", "make_stems", "get_stems", "get_take", "wait_for_take", "move_take", "delete_take", "render_take", "cancel_take", "star_take", "rename_take")
 _BRIEF = ("id", "title", "kind", "status", "duration", "style", "favourite", "error")
 
 
@@ -377,6 +425,19 @@ def _text(value: Any, error: bool = False) -> dict:
             "isError": error}
 
 
+_KINDS = {"four": "htdemucs", "vocals_and_instruments": "htdemucs_2s", "six": "htdemucs_6s"}
+_TRANSCRIBING = ("queued", "running")
+
+
+def _stem_set(item: dict, base: str) -> dict:
+    out = {"id": item["id"], "status": item.get("status"), "model": item.get("model"), "parts": item.get("wanted"),
+           "format": item.get("fmt"), "progress": item.get("progress"), "stage": item.get("stage"), "error": item.get("error")}
+    if item.get("files"):
+        out["files"] = [{"name": f["name"], "url": f"{base}/api/stem-sets/{item['id']}/{f['file']}"} for f in item["files"]]
+        out["zip_url"] = f"{base}/api/stem-sets/{item['id']}/zip"
+    return {key: value for key, value in out.items() if value not in (None, "")}
+
+
 async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
     """Run one tool. A refusal from the app comes back as an error result the agent can read."""
     args = dict(args or {})
@@ -438,7 +499,8 @@ async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
         if name == "list_recordings":
             query = str(args.get("query") or "").strip().lower()
             found = [{"id": r["id"], "title": r["title"], "length": r.get("duration"), "has_score": bool(r.get("has_score")),
-                      "words_known": bool(r.get("has_lyrics")), "covers_made": r.get("take_count")}
+                      "transcription": r.get("transcribe_state"), "words_known": bool(r.get("has_lyrics")),
+                      "covers_made": r.get("take_count")}
                      for r in await api("GET", "/api/sources") if not query or query in (r.get("title") or "").lower()]
             return _text(found[:LIMIT])
         if name == "list_style_loras":
@@ -467,6 +529,76 @@ async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
             if isinstance(made, dict) and "id" in made:
                 return _text({"kind": "cover", **_brief(made, await _space_names(api))})     # the route's reply does not say
             return _text(made)
+        if name == "try_more":
+            count = max(1, min(8, int(args.get("count") or 4)))
+            made = await api("POST", f"/api/takes/{args['take_id']}/tries", json={"mode": "seeds", "count": count})
+            return _text({"queued": [{"id": t["id"], "short_id": t["id"][:6], "title": t["title"], "seed": t["seed"]}
+                                     for t in made.get("created", [])],
+                          "next": "Each is rendering. Use wait_for_take on any of them, or list_takes to see them all."})
+        if name == "status":
+            state = await api("GET", "/api/state")
+            engine, current = state.get("engine") or {}, state.get("current")
+            training = state.get("training")
+            out = {"version": state.get("version"), "engine_online": bool(engine.get("online")),
+                   "engine_starting": bool(engine.get("starting")), "engine_error": engine.get("error"),
+                   "running_now": ({"id": current.get("id"), "kind": current.get("kind"), "label": current.get("label"),
+                                    "seconds": current.get("elapsed"), "progress": current.get("progress")} if current else None),
+                   "waiting": [{"kind": q.get("kind"), "title": q.get("title"), "state": q.get("state")} for q in state.get("queue") or []
+                               if q.get("state") != "running"],
+                   "training": ({"lora": training.get("lora_name"), "progress": training.get("progress"), "stage": training.get("stage")}
+                                if training else None),
+                   "gpu": engine.get("gpu")}
+            if not out["engine_online"]:
+                out["advice"] = "The engine is not online, so nothing can be planned or rendered yet."
+            return _text({key: value for key, value in out.items() if value not in (None, [], "")})
+        if name == "transcribe_recording":
+            ident = args["recording_id"]
+            before = await api("GET", f"/api/sources/{ident}")
+            if (before.get("abc") or "").strip() and before.get("transcribe_state") == "done" and not args.get("again"):
+                return _text({"recording_id": ident, "title": before.get("title"), "transcription": "done", "has_score": True,
+                              "next": "It already has a score, so nothing was run. Pass again true to transcribe it again (it replaces the score)."})
+            try:
+                await api("POST", f"/api/sources/{ident}/transcribe")
+            except ApiRefused as refused:
+                if "already being transcribed" not in str(refused):
+                    raise
+            wait = max(0, min(MOST_WAIT, int(args.get("wait_seconds") if args.get("wait_seconds") is not None else 45)))
+            deadline = time.monotonic() + wait
+            while True:
+                source = await api("GET", f"/api/sources/{ident}")
+                if source.get("transcribe_state") not in _TRANSCRIBING or time.monotonic() >= deadline:
+                    break
+                await asyncio.sleep(min(POLL, max(0.05, deadline - time.monotonic())))
+            state = source.get("transcribe_state")
+            out = {"recording_id": ident, "title": source.get("title"), "transcription": state,
+                   "has_score": bool((source.get("abc") or "").strip())}
+            if state == "failed":
+                out["error"] = source.get("transcribe_error")
+            elif state in _TRANSCRIBING:
+                out["next"] = "Still transcribing: call again to wait longer."
+            return _text({key: value for key, value in out.items() if value not in (None, "")})
+        if name == "make_stems":
+            kind = str(args.get("kind") or "four")
+            if kind not in _KINDS:
+                return _text(f"kind must be one of: {', '.join(_KINDS)}", True)
+            body = {"model": _KINDS[kind], "stems": list(args.get("only") or [])}
+            if args.get("format"):
+                body["format"] = args["format"]
+            made = await api("POST", f"/api/takes/{args['take_id']}/stems", json=body)
+            return _text({"stem_set": made.get("id"), "parts": made.get("stems"), "format": made.get("format"), "status": made.get("status"),
+                          "next": "Separating on the CPU takes minutes. Call get_stems with this take's id, with wait_seconds to wait."})
+        if name == "get_stems":
+            wait = max(0, min(MOST_WAIT, int(args.get("wait_seconds") or 0)))
+            deadline = time.monotonic() + wait
+            while True:
+                sets = await api("GET", "/api/stem-sets", params={"take_id": args["take_id"]})
+                running = [item for item in sets if item.get("status") in ("queued", "running")]
+                if not running or time.monotonic() >= deadline:
+                    break
+                await asyncio.sleep(min(POLL, max(0.05, deadline - time.monotonic())))
+            if not sets:
+                return _text({"take_id": args["take_id"], "stem_sets": [], "message": "No stems have been made for this take. Use make_stems."})
+            return _text({"take_id": args["take_id"], "stem_sets": [_stem_set(item, base) for item in sets], "any_running": bool(running)})
         if name == "star_take":
             starred = args.get("starred") is not False
             await api("POST", f"/api/takes/{args['take_id']}/favourite", params={"value": starred})

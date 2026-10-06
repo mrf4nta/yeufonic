@@ -46,6 +46,8 @@ cannot creep back in.
   recording in the library or an instrumental (with a length, in a named space, with a style LoRA by name), render again, cancel, star, rename, move
   and delete takes. Takes can share a title, so it works by id and shows a short one; deleting asks twice, and a starred take needs asking for
   again. An instrumental is always given a structure with times, since without times the planner writes plans too long to use. See the guide.
+- **More for the MCP server:** try more takes from one, transcribe a recording, split a take into stems (with links to each file and a zip), and
+  ask how busy it is.
 - A link to a take's audio now plays in a browser instead of saving the file (saving is as before).
 
 ### Fixed
