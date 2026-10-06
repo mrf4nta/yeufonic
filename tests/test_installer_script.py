@@ -56,3 +56,20 @@ def test_the_windows_engine_keeps_the_portable_torch_and_undoes_the_0_0_25_pin()
     assert "'torch==2.13.0', 'torchvision==0.28.0', 'torchaudio==2.11.0'" in block
     assert "https://download.pytorch.org/whl/cu130" in block
     assert "torch-2.9.1-cu128-*.done" in block
+
+
+def test_the_windows_trainer_is_given_the_attention_that_runs_fast_on_windows():
+    """PyTorch's Windows builds have no FlashAttention, and the trainer's enable_gqa call then runs a kernel that needs
+    memory in proportion to the square of the song's length. The installer rewrites the two calls (so each query head has
+    its own key/value heads), on every run, and refuses to continue if the trainer's source is not what it expects."""
+    setup = (Path(__file__).resolve().parent.parent / "windows" / "setup.ps1").read_text(encoding="utf-8")
+    block = setup[setup.index("$trainDir = "):setup.index("# Our own node, carried by the installer.")]
+    olds = [line.split("Old = ", 1)[1] for line in block.splitlines() if "Old = " in line]
+    news = [line.split("New = ", 1)[1] for line in block.splitlines() if "New = " in line]
+    assert len(olds) == len(news) == 2
+    assert all("enable_gqa=True" in o for o in olds)                  # the two calls that need it, matched exactly...
+    assert not any("enable_gqa" in n for n in news)                   # ...and rewritten without it
+    assert all(n.count("repeat_interleave(self.NH // self.NKV, 1)") == 2 for n in news)
+    assert "throw" in block and ".Contains($edit.New)" in block       # a changed trainer stops setup; a patched one is left alone
+    fetch = setup[setup.index('if (-not (IsDone "fs_audio-'):setup.index("$trainDir = ")]
+    assert "$trainDir" not in fetch and "$edit" not in fetch          # outside the fetch's own check, so an existing install is repaired

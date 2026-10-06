@@ -538,10 +538,7 @@ artist, one genre, or a few similar artists.
 Open **Corpora** from the menu. It is on by default; `TRAINING_ENABLED=0` for the app, or an
 engine built with `WITH_TRAINER=0`, takes it out.
 
-Training is the most demanding thing the app does. In our own testing this workflow performs poorly in a native
-Windows environment (it is slow, and on a 16 GB card the engine sometimes stopped), so if training LoRAs is
-something you need, consider the Docker and WSL2 route (the README's *Windows with Docker Desktop* section).
-Making songs is not affected.
+Training is the most demanding thing the app does: a 16 GB card is the practical minimum.
 
 1. **New corpus.** Give it a name and a **trigger word**, say whether the voice is male or female,
    describe the sound shared by every song, and open the folder that holds the songs. Confirm you

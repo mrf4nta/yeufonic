@@ -50,11 +50,3 @@ def test_training_needs_the_full_model(client, monkeypatch):
     monkeypatch.setattr(ENGINE, "options", {"checkpoints": [config.CHECKPOINT_INT8], "trainer": True})
     reply = client.post("/api/identities/corpus1/train", json={})
     assert reply.status_code == 400 and "full-quality" in reply.json()["detail"]
-
-
-def test_the_state_says_whether_the_app_runs_on_native_windows(client, monkeypatch):
-    """The Train window shows a line about training on native Windows, and only there."""
-    monkeypatch.setattr(config, "NATIVE_WINDOWS", True)
-    assert client.get("/api/state").json()["native_windows"] is True
-    monkeypatch.setattr(config, "NATIVE_WINDOWS", False)
-    assert client.get("/api/state").json()["native_windows"] is False

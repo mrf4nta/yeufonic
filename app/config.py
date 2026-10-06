@@ -196,5 +196,3 @@ REGULARIZER_PACK = os.environ.get("REGULARIZER_PACK", "minted_regularizer_pack_v
 # Give up on a job when the engine has been unreachable this long.
 ENGINE_LOST_AFTER = 5 * 60
 
-# Whether the app itself runs on Windows (the native install, not a container): training is slow there.
-NATIVE_WINDOWS = sys.platform == "win32"

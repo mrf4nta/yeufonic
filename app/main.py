@@ -1143,8 +1143,6 @@ def state() -> dict:
     return {
         "version": config.VERSION,
         "build": config.BUILD,
-        # Whether the app itself runs on Windows (the native install), where training is slow.
-        "native_windows": config.NATIVE_WINDOWS,
         "model": config.CHECKPOINT_LABELS.get(config.CHECKPOINT, config.CHECKPOINT),
         # Whether a newer release is out, and what to do about it: a background task keeps
         # this current, and this route only ever reads it.

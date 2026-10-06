@@ -416,7 +416,6 @@ async function pollState() {
     if (data.settings) { adoptSettings(data.settings); }
     if (data.version) { $('app-version').textContent = 'v' + data.version; }
     State.about = { version: data.version || '', build: data.build || '', model: data.model || '' };
-    State.nativeWindows = Boolean(data.native_windows);
     paintUpdate(data.update);
     paintOptions();
     paintJob(data.current, data.queue || [], data.options);
@@ -8133,7 +8132,6 @@ function openTrain(all) {
     $('train-about').textContent = 'From ' + included + ' song' + (included === 1 ? '' : 's') + '. It can take a long time, and the GPU ' +
       'is not available to the app until it finishes. Progress shows here and on the main screen, where you can stop it.';
   }
-  paintTrainPlatform();
   $('train-go').textContent = all ? 'Run all' : 'Train';
   var previous = data.previous_lora;
   $('train-previous').classList.toggle('hidden', !previous);
@@ -8146,23 +8144,6 @@ function openTrain(all) {
   $('train-go').disabled = false;
   paintTrainMemory();
   $('train-modal').classList.remove('hidden');
-}
-
-/* On the native Windows install, training performs poorly in our testing; Docker with WSL2 does not.
-   One line under the description, only there. The element is made here so a page that was loaded
-   before the script changed still opens the window. */
-function paintTrainPlatform() {
-  var about = $('train-about');
-  if (!about) { return; }
-  var note = $('train-platform');
-  if (!note) {
-    note = document.createElement('p');
-    note.id = 'train-platform';
-    note.className = 'hint';
-    about.insertAdjacentElement('afterend', note);
-  }
-  note.textContent = 'Training performs poorly on native Windows. Docker with WSL2 is recommended.';
-  note.classList.toggle('hidden', !State.nativeWindows);
 }
 
 /* Training needs about 12.5 GB of GPU memory, measured on a 16 GB card, most of it

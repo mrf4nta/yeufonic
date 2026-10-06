@@ -367,6 +367,30 @@ if (-not (IsDone "fs_audio-$($Pins.FsAudioCommit.Substring(0, 8))") -or -not (Te
     Invoke-Checked "The trainer's packages" $py @('-s', '-m', 'pip', 'install', '--no-warn-script-location', 'soundfile>=0.12', 'librosa>=0.10', 'scipy')
     Done "fs_audio-$($Pins.FsAudioCommit.Substring(0, 8))"
 }
+# PyTorch's Windows builds have no FlashAttention, and the trainer asks for grouped-query attention (enable_gqa), which
+# on Windows falls back to a kernel that needs memory in proportion to the square of the song's length: a long song
+# fills the card and training crawls or aborts. Giving every query head its own copy of the key/value heads first lets
+# the ordinary fast kernel run, with the same result. Done on every run, so an install updated from an earlier version
+# is repaired too; each edit is an exact match, and a trainer that has changed stops setup rather than being guessed at.
+$trainDir = Join-Path $nodes 'ComfyUI-FS_Audio_Suite\fs_train'
+$attention = @(
+    @{ File = 'trainer.py'
+       Old = 'o = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=True)'
+       New = 'o = F.scaled_dot_product_attention(q, k.repeat_interleave(self.NH // self.NKV, 1), v.repeat_interleave(self.NH // self.NKV, 1), is_causal=True)' },
+    @{ File = 'decoder.py'
+       Old = 'o = F.scaled_dot_product_attention(q, torch.cat([pk.to(k.dtype), k], 2), torch.cat([pv.to(v.dtype), v], 2), is_causal=False, enable_gqa=True)'
+       New = 'o = F.scaled_dot_product_attention(q, torch.cat([pk.to(k.dtype), k], 2).repeat_interleave(self.NH // self.NKV, 1), torch.cat([pv.to(v.dtype), v], 2).repeat_interleave(self.NH // self.NKV, 1), is_causal=False)' }
+)
+foreach ($edit in $attention) {
+    $file = Join-Path $trainDir $edit.File
+    $source = [IO.File]::ReadAllText($file)
+    if ($source.Contains($edit.Old)) {
+        [IO.File]::WriteAllText($file, $source.Replace($edit.Old, $edit.New), (New-Object Text.UTF8Encoding($false)))
+        Say "Adjusted the trainer's attention ($($edit.File))."
+    } elseif (-not $source.Contains($edit.New)) {
+        throw "The trainer's attention call in $($edit.File) is not what this installer expects, so it was left alone."
+    }
+}
 # Our own node, carried by the installer.
 $harmony = Join-Path $nodes 'yue2_harmony'
 if (Test-Path $harmony) { Remove-Item -Recurse -Force $harmony }

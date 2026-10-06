@@ -20,8 +20,7 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 - **A take panel and an editor:** the left panel shows how the selected take was made, and a large
   window, in three columns or as steps, is where takes are made and changed.
 - **Windows without Docker:** an installer that sets it all up natively, for people who would
-  rather not use Docker. Please note that LoRA training in Windows currently has performance
-  trade-offs if this feature is important to you.
+  rather not use Docker.
 
 Everything runs on one machine, in two parts: the app and the engine. With Docker they are two
 containers; the Windows installer runs the same two natively. No cloud and no accounts; an
@@ -175,10 +174,6 @@ panel would make once on each of them, with one seed, so you can compare them by
 space, **Training checkpoints** in Settings can delete them when training ends. To share a LoRA, press **Download** under the picker: the zip carries
 its chips, and the other person adds it with **Install**.
 
-Training is the most demanding thing the app does. In our own testing this workflow performs poorly in a native
-Windows environment (it is slow, and on a 16 GB card the engine sometimes stopped), so if training LoRAs is
-something you need, consider the [Docker and WSL2 route](#windows-with-docker-desktop).
-
 Your corpora, one corpus per artist or genre:
 
 [![Corpora](docs/screenshots/corpora.png)](https://raw.githubusercontent.com/yeufonic/yeufonic/main/docs/screenshots/full/corpora.png)
@@ -220,9 +215,6 @@ installation, and running it again is also how you change the model size (below)
   [Choosing a model size](#choosing-a-model-size)). Training a LoRA needs more: about 12.5 GB free
   while it prepares the songs, so 16 GB is the practical minimum, and an 8 GB card can't train
   (it can still use LoRAs trained elsewhere). AMD and Intel graphics are not supported.
-  **Training is the exception:** in our own testing, training a LoRA performs poorly in a native Windows
-  environment (it is slow, and on a 16 GB card the engine sometimes stopped). Making songs is not affected. If
-  training LoRAs is something you need, consider the [Docker and WSL2 route](#windows-with-docker-desktop).
 - 16 GB of RAM and about 40 GB of free disk.
 - An internet connection for about 24 GB of downloads (20 GB with the smaller low-memory model, see
   [Choosing a model size](#choosing-a-model-size)), most of it the models. The score preview

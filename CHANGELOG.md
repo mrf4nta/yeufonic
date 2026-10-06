@@ -37,6 +37,16 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## 0.0.28 (2026-10-06)
+
+### Fixed
+- **Training a LoRA on native Windows.** PyTorch's Windows builds have no FlashAttention, so the trainer's
+  grouped-query attention fell back to a kernel whose memory grows with the square of a song's length: a long song
+  filled the card, and training slowed to a crawl or stopped the engine. The installer now gives the trainer's two
+  attention calls the key/value heads they need (the result is the same, and the fast kernel is used). It is applied
+  on every run, so an install updated from an earlier version is repaired, and it stops setup if the trainer's code is
+  not what it expects. Docker is unchanged: Linux already had the fast path.
+
 ## 0.0.27 (2026-10-06)
 
 ### Fixed
