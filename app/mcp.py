@@ -53,6 +53,8 @@ TOOLS: list[dict] = [
         "inputSchema": {"type": "object", "required": ["style"], "properties": {
             "style": {"type": "string", "description": "Comma-separated tags: genre, mood, instruments, tempo."},
             "structure": {"type": "string", "description": "One section tag per line. Omit to let the model decide."},
+            "max_duration": {"type": "integer", "description": "The most seconds the take may run, 10 to 900. Default 360. "
+                                                                 "Ask for the length wanted: 60 for a minute."},
             "title": {"type": "string"},
             "seed": {"type": "integer"},
             "space_id": {"type": "string"},
@@ -67,6 +69,8 @@ TOOLS: list[dict] = [
         "inputSchema": {"type": "object", "required": ["style", "lyrics"], "properties": {
             "style": {"type": "string"},
             "lyrics": {"type": "string"},
+            "max_duration": {"type": "integer", "description": "The most seconds the take may run, 10 to 900. Default 360. "
+                                                                 "Ask for the length wanted: 60 for a minute."},
             "title": {"type": "string"},
             "seed": {"type": "integer"},
             "space_id": {"type": "string"},
@@ -140,7 +144,7 @@ async def call_tool(name: str, args: dict, api: Api) -> dict:
             return _text(await api("GET", "/api/spaces"))
         if name in ("make_instrumental", "make_song"):
             body = {"style": args["style"], "auto_render": args.get("render") is not False}
-            for key in ("title", "seed", "space_id"):
+            for key in ("title", "seed", "space_id", "max_duration"):
                 if args.get(key) not in (None, ""):
                     body[key] = args[key]
             if name == "make_instrumental":

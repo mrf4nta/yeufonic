@@ -52,6 +52,8 @@ def test_tools_are_listed_with_schemas(client, on):
     assert {"list_takes", "get_take", "list_spaces", "make_instrumental", "make_song", "render_take", "cancel_take"} <= set(tools)
     assert all(t["inputSchema"]["type"] == "object" and t["description"] for t in tools.values())
     assert tools["make_song"]["inputSchema"]["required"] == ["style", "lyrics"]
+    assert "max_duration" in tools["make_song"]["inputSchema"]["properties"]
+    assert "max_duration" in tools["make_instrumental"]["inputSchema"]["properties"]
 
 
 def test_an_unknown_method_and_a_bad_message_are_errors(client, on):
@@ -102,3 +104,16 @@ def test_make_song_queues_a_plan_like_the_page_does(client, on, monkeypatch):
 
 def test_the_page_still_works_with_it_off(client):
     assert client.get("/api/spaces").status_code == 200
+
+
+def test_a_length_asked_for_is_the_cap_the_take_gets(client, on, monkeypatch):
+    from app import jobs
+    from app.db import one
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", ["yue2_3b_bf16.safetensors"])
+    monkeypatch.setitem(jobs.ENGINE.options, "instrumental", True)
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    error, made = call(client, "make_instrumental", style="edm", max_duration=60)
+    assert not error
+    assert one("SELECT max_duration FROM takes WHERE id = ?", (made["id"],))["max_duration"] == 60
+    error, refused = call(client, "make_instrumental", style="edm", max_duration=5)         # below the route's minimum
+    assert error and "max_duration" in refused
