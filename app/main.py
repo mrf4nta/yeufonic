@@ -2008,7 +2008,7 @@ async def mcp_endpoint(request: Request) -> Response:
     """Yeufonic as an MCP server (app/mcp.py), over the app's own routes."""
     if get_setting("mcp.enabled", "off") != "on":
         return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {
-            "code": -32000, "message": "The MCP server is off. Turn it on in Settings, under MCP server."}}, status_code=403)
+            "code": -32000, "message": "The MCP server is off. Turn it on in Settings, under MCP server."}}, status_code=503)
     try:
         message = await request.json()
     except ValueError:

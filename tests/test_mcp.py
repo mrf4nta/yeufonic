@@ -24,7 +24,8 @@ def on(client):
 
 def test_it_is_off_until_it_is_turned_on(client):
     reply = rpc(client, "tools/list")
-    assert reply.status_code == 403
+    # Not 401 or 403: a client reads those as "sign in first" and goes looking for an OAuth server this does not have.
+    assert reply.status_code == 503
     assert "off" in reply.json()["error"]["message"].lower()
 
 
