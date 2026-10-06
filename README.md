@@ -15,7 +15,7 @@ a corpus of music. Edit the score either way, then pull the stems out of the res
 - **MIDI import for covers and instrumentals:** MIDI editing with piano roll and sf2 (experimental).
 - **Style LoRAs:** use published ones, or train your own from a folder of songs.
 - **Lyrics:** draft them from a sentence, or extract them from a recording.
-- **An MCP server (off by default):** an AI agent on this computer can make songs and instrumentals and read the library.
+- **An MCP server (off by default):** let an AI agent such as Claude Code make songs, covers and instrumentals, play them and tidy the library, in your own words. See [Using Yeufonic from an AI agent](app/static/guide.md#using-yeufonic-from-an-ai-agent-mcp).
 - **Stems:** split any take into vocals, drums, bass and more, or into vocals and a backing track.
 - **A library:** spaces, stars, and every take's settings kept so it can be made again.
 - **A take panel and an editor:** the left panel shows how the selected take was made, and a large
@@ -508,6 +508,7 @@ any browser and survive a rebuild.
 | Theme | Dark (the default), Light, Match the computer (dark or light, as the system is), Studio (warm and dark) or High contrast |
 | Editor layout | Three columns with the score on a tab of its own (the default), or steps, one part at a time |
 | Normalise to | How loud a normalised take is made: −16, −14 (the default) or −11 LUFS |
+| MCP server | Off by default. Turn it on to let an AI agent on this computer use Yeufonic: see [Using Yeufonic from an AI agent](app/static/guide.md#using-yeufonic-from-an-ai-agent-mcp) |
 | Stem separation model | Which model a run starts with |
 | Stem save folder | Where stems are written. It must sit inside the data folder |
 | Storage | Opens the Storage window (below). It also holds three settings: **Training checkpoints**, kept by default or deleted when training ends; **Working copies of corpus songs**, removed when a song's analysis ends by default; and **Training sets**, kept by default or removed when training ends |

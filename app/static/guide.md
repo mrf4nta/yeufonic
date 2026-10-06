@@ -892,27 +892,58 @@ so the page opens in it. The log window stays dark in every theme, like a termin
 
 ---
 
-## Using Yeufonic from an AI agent
+## Using Yeufonic from an AI agent (MCP)
 
-Yeufonic can act as an MCP server, so an AI agent on the same computer (Claude Code, Cursor and others) can ask it for
-songs and read the library. It is **off** until you turn on **MCP server** in Settings, because a request can queue work on
-the GPU.
+Yeufonic can act as an **MCP server**. That lets an AI agent on the same computer, such as Claude Code or Cursor, use it for you:
+ask for a song, a cover or an instrumental, wait for it, play it, and tidy the library, all in your own words ("make a one-minute
+EDM instrumental in the EDM space and play it"). The agent does what the page does, through the same routes, so a take it starts is an
+ordinary take in your library.
 
-The address is `/mcp` on the app, for example `http://localhost:8090/mcp`. In Claude Code:
+### Setting it up
 
-```
-claude mcp add --transport http yeufonic http://localhost:8090/mcp
-```
+1. **Turn it on.** Open Settings and set **MCP server** to **On**. It is off by default, because a request can start work on the GPU.
+2. **Connect your agent** to the app's address with `/mcp` on the end: the address you open Yeufonic at, for example
+   `http://localhost:8090/mcp`. In Claude Code:
 
-The tools are `list_takes`, `get_take`, `wait_for_take`, `list_spaces`, `make_cover`, `list_recordings`, `list_style_loras`, `star_take`, `rename_take`, `move_take`, `delete_take`, `make_instrumental`, `make_song`, `render_take` and `cancel_take`.
-They do what the page does, through the same routes, so a take an agent starts appears in the library like any other, and a
-refusal (a missing lyric, an engine that is busy) comes back to the agent in the page's own words. Making a take takes
-minutes, so the agent starts it and calls `wait_for_take`, which holds for up to a minute and returns when the take is done or has failed; the take's audio is at the
-`audio_url` it returns. Takes can share a title, so an agent works from a take's id (it shows a short one, and any tool accepts the start of an id when only one take begins that way) and, when more than one matches, asks which. An instrumental is always given a structure with times, sized to the length asked, because without times the planner writes plans too long to use. `delete_take` deletes nothing
-until it is called a second time with `confirm`, and a starred take needs asking for twice. A cover is made from a recording already in the library (it needs a score: transcribe it in the app first), with the words heard in the
-recording unless the agent gives others. A style LoRA is chosen by name or title, and its trigger word is added to the style for the agent, since a
-LoRA does very little without it. A take is made in the space the agent names ("make an instrumental in the EDM space"), by name in any case; a name that matches
-no space gets the list of the spaces there are, and nothing is created. The same Host-name and cross-site checks apply as for the page.
+   ```
+   claude mcp add --transport http yeufonic http://localhost:8090/mcp
+   ```
+
+   Other clients take the same address as an HTTP server. Those that read a settings file usually want something like
+   `{"mcpServers": {"yeufonic": {"url": "http://localhost:8090/mcp"}}}`. No login or key is needed.
+3. **Ask.** Start your agent from any folder and describe what you want.
+
+If your agent says the server **needs authentication**, it is almost always because the setting is still Off: turn it on, then
+reconnect the agent (in Claude Code, `/mcp`). Reconnect after restarting Yeufonic too, because a restart ends the connection.
+
+### What you can ask for
+
+| Ask for | What happens |
+|---|---|
+| "List my latest takes", "show the takes in the EDM space" | Lists takes, newest first, with a short id, when each was made, its length and style |
+| "Make a one-minute instrumental in a synthwave style" | Plans and renders an instrumental. A length, a space and a [style LoRA](#style-loras) can be named |
+| "Make a song in a folk style with these words" | The same for a song, from the lyrics you give |
+| "Make a cover of *the recording* in a jazz style" | Makes a cover from a recording already in your library. It needs a score (transcribe it in the app first). Without words of your own it uses the words heard in the recording |
+| "Play it" | Opens the take in your browser, where it plays |
+| "Star that one", "call it Sunrise", "move it to the Folk space" | Stars, renames or moves a take |
+| "Render it again with a new seed", "stop that" | Renders a take again, or cancels one in progress |
+| "Delete that take" | Shows what would go and asks you first; see below |
+
+Making a take takes minutes. The agent starts it and waits, reporting progress, so you can ask for the next thing meanwhile.
+
+### Things to know
+
+- **Takes can share a title,** so the agent works from a take's **id** and shows a short one (the `short_id` column) when it lists takes.
+  You can name a take by the start of its id, four characters or more, as long as only one take begins that way. If two do, it tells you
+  and asks for more.
+- **Deleting asks twice.** The agent first shows you what it would delete, including any other take with the same title, and deletes
+  only after you say yes. A starred take needs you to say so explicitly. A deleted take, with its audio, cannot be got back.
+- **Spaces and style LoRAs are named,** not numbered: "in the EDM space", "using the jazz LoRA". A name that matches nothing gets the list of
+  what there is, and nothing is created. A LoRA's trigger word is added to the style for you, since a LoRA does very little without it.
+- **An instrumental is always planned with a structure that has times,** worked out from the length you ask for (about two and a half
+  minutes when you do not say). Without times the planner writes plans too long to use. Name your own sections and they are used as given.
+- **Only on this computer.** The same host-name and cross-site checks apply as for the page, and there is no login, so turn the setting
+  off when you are not using it, and do not expose the port to a network you do not trust.
 
 ## System Logs
 
