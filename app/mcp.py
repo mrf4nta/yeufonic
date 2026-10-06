@@ -29,8 +29,9 @@ TOOLS: list[dict] = [
         "name": "list_takes",
         "description": "List takes in the library, newest first: id, title, kind (song, cover or instrumental), "
                        "status, length, style and when it was made. Titles are NOT unique: several takes can share one, "
-                       "and `same_title_count` says so. Always act on a take by its id, and when more than one matches "
-                       "what the person said, show them the choices (made, length, style) and ask which. "
+                       "and `same_title_count` says so. When you show takes to a person, ALWAYS include the `short_id` as a "
+                       "column, so they can name one exactly (every tool accepts it). Act on a take by its id; when more than "
+                       "one matches what the person said, show the choices (short_id, made, length, style) and ask which. "
                        "Use get_take for one in full.",
         "inputSchema": {"type": "object", "properties": {
             "query": {"type": "string", "description": "Words that must appear in the title, style or lyrics."},
@@ -73,7 +74,10 @@ TOOLS: list[dict] = [
                        "renders it. Takes minutes: check progress with get_take. Returns the new take.",
         "inputSchema": {"type": "object", "required": ["style"], "properties": {
             "style": {"type": "string", "description": "Comma-separated tags: genre, mood, instruments, tempo."},
-            "structure": {"type": "string", "description": "One section tag per line. Omit to let the model decide."},
+            "structure": {"type": "string", "description": "One section tag per line, each with its time, such as "
+                                                           "'[intro 0:00-0:10]\\n[verse 0:10-0:30]'. Omit and one is made for "
+                                                           "max_duration (default about 2.5 minutes): leave it out unless the person "
+                                                           "named the sections."},
             "max_duration": {"type": "integer", "description": "The most seconds the take may run, 10 to 900. Default 360. "
                                                                  "Ask for the length wanted: 60 for a minute."},
             "title": {"type": "string"},
@@ -195,6 +199,39 @@ TOOLS: list[dict] = [
     },
 ]
 
+# Without times the planner writes plans of ten minutes and more for an instrumental, which the app rejects as
+# unreadable, so an instrumental an agent asks for always gets a structure with times, sized to the length asked.
+_SHAPES = (                       # (longest song this shape is for, in seconds; sections with their weights)
+    (100, (("intro", 1), ("verse", 3), ("chorus", 3), ("outro", 1))),
+    (190, (("intro", 1), ("verse", 3), ("chorus", 3), ("verse", 3), ("chorus", 3), ("outro", 1))),
+    (900, (("intro", 1), ("verse", 3), ("chorus", 3), ("verse", 3), ("chorus", 3), ("bridge", 2), ("chorus", 3), ("outro", 1))),
+)
+DEFAULT_SECONDS = 150
+
+
+def _mmss(seconds: int) -> str:
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def timed_structure(total: int) -> str:
+    """Sections with times that add up to `total` seconds, in the form the instrumental LoRA reads."""
+    total = max(30, min(900, int(total)))                  # four sections of five seconds or more need about this
+    sections = next(shape for limit, shape in _SHAPES if total <= limit)
+    weight = sum(w for _, w in sections)
+    lengths = [max(5, round(total * w / weight)) for _, w in sections]
+    lengths[-1] += total - sum(lengths)                    # rounding goes to the last section
+    if lengths[-1] < 5:                                    # a very short song: take it from the longest
+        longest = lengths.index(max(lengths[:-1]))
+        lengths[longest] -= 5 - lengths[-1]
+        lengths[-1] = 5
+    out, clock = [], 0
+    for (name, _), length in zip(sections, lengths):
+        out.append(f"[{name} {_mmss(clock)}-{_mmss(clock + length)}]")
+        clock += length
+    return "\n".join(out)
+
+
+TAKE_TOOLS = ("get_take", "wait_for_take", "move_take", "delete_take", "render_take", "cancel_take", "star_take", "rename_take")
 _BRIEF = ("id", "title", "kind", "status", "duration", "style", "favourite", "error")
 
 
@@ -209,6 +246,7 @@ def _when(stamp: Any) -> str | None:
 def _brief(take: dict, spaces: dict | None = None) -> dict:
     out = {key: take.get(key) for key in _BRIEF if take.get(key) not in (None, "")}
     out["has_audio"] = bool(take.get("has_audio"))
+    out["short_id"] = str(take.get("id") or "")[:6]
     out["made"] = _when(take.get("created_at"))
     if spaces and take.get("space_id") in spaces:
         out["space"] = spaces[take["space_id"]]           # the name, which an agent can say to a person
@@ -241,6 +279,31 @@ def _settled(take: dict) -> bool:
     if status in ("done", "failed", "cancelled", "stopped"):
         return True
     return status == "planned" and not take.get("auto_render")
+
+
+MIN_PREFIX = 4
+
+
+async def _take_id(api: Api, asked: Any) -> str:
+    """The full id of the take a person or agent named: the whole id, or the start of it (as many characters as shown in
+    the short_id column), when only one take begins that way. A title is never taken for an id."""
+    ident = str(asked or "").strip().lower()
+    if not ident:
+        raise ApiRefused("which take? Give its id (the short_id column of list_takes will do).")
+    try:
+        await api("GET", f"/api/takes/{ident}")
+        return ident
+    except ApiRefused:
+        pass
+    if len(ident) < MIN_PREFIX or not all(ch in "0123456789abcdef" for ch in ident):
+        raise ApiRefused(f"no such take: '{asked}'. Use a take's id, or the start of it from the short_id column (at least {MIN_PREFIX} characters).")
+    found = [take for take in await api("GET", "/api/takes", params={"limit": 5000}) if take["id"].startswith(ident)]
+    if not found:
+        raise ApiRefused(f"no such take: '{asked}'")
+    if len(found) > 1:
+        raise ApiRefused(f"'{asked}' starts {len(found)} takes (" + ", ".join(f"{take['id']} {take.get('title')!r}" for take in found[:6]) +
+                         "). Use more of the id.")
+    return found[0]["id"]
 
 
 async def _space_of(api: Api, asked: Any) -> str | None:
@@ -316,8 +379,10 @@ def _text(value: Any, error: bool = False) -> dict:
 
 async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
     """Run one tool. A refusal from the app comes back as an error result the agent can read."""
-    args = args or {}
+    args = dict(args or {})
     try:
+        if name in TAKE_TOOLS:
+            args["take_id"] = await _take_id(api, args.get("take_id"))
         if name == "list_takes":
             limit = max(1, min(LIMIT, int(args.get("limit") or 20)))
             params = {"limit": limit, "q": args.get("query") or "", "favourite": bool(args.get("favourites"))}
@@ -360,8 +425,11 @@ async def call_tool(name: str, args: dict, api: Api, base: str = "") -> dict:
                     body[key] = args[key]
             await _with_lora(api, args, body)
             if name == "make_instrumental":
-                if args.get("structure"):
-                    body["structure"] = args["structure"]
+                # What the person asked for, or a timed structure for the length: never bare, which fails.
+                body["structure"] = str(args.get("structure") or "").strip() or timed_structure(
+                    int(args.get("max_duration") or DEFAULT_SECONDS))
+                if not args.get("max_duration") and not args.get("structure"):
+                    body["max_duration"] = DEFAULT_SECONDS + 30
                 made = await api("POST", "/api/instrumentals", json=body)
             else:
                 body["lyrics"] = args["lyrics"]
@@ -466,7 +534,8 @@ async def handle(message: Any, api: Api, version: str, base: str = "") -> dict |
             "instructions": "Yeufonic makes songs, covers and instrumentals with YuE2. Making one takes minutes: start it, then "
                             "call wait_for_take with its id, and again while `finished` is false. Do not poll with shell commands or "
                             "the app's web API: use these tools. To let the person hear a take, open its listen_url in their "
-                            "browser. Always act on a take by its id, since several can share a title.",
+                            "browser. Several takes can share a title, so act on a take by its id, and whenever you list takes show "
+                            "each one's short_id (any tool accepts it) so the person can name one exactly.",
         }}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}

@@ -908,7 +908,7 @@ The tools are `list_takes`, `get_take`, `wait_for_take`, `list_spaces`, `make_co
 They do what the page does, through the same routes, so a take an agent starts appears in the library like any other, and a
 refusal (a missing lyric, an engine that is busy) comes back to the agent in the page's own words. Making a take takes
 minutes, so the agent starts it and calls `wait_for_take`, which holds for up to a minute and returns when the take is done or has failed; the take's audio is at the
-`audio_url` it returns. Takes can share a title, so an agent works from a take's id and, when more than one matches, asks which. `delete_take` deletes nothing
+`audio_url` it returns. Takes can share a title, so an agent works from a take's id (it shows a short one, and any tool accepts the start of an id when only one take begins that way) and, when more than one matches, asks which. An instrumental is always given a structure with times, sized to the length asked, because without times the planner writes plans too long to use. `delete_take` deletes nothing
 until it is called a second time with `confirm`, and a starred take needs asking for twice. A cover is made from a recording already in the library (it needs a score: transcribe it in the app first), with the words heard in the
 recording unless the agent gives others. A style LoRA is chosen by name or title, and its trigger word is added to the style for the agent, since a
 LoRA does very little without it. A take is made in the space the agent names ("make an instrumental in the EDM space"), by name in any case; a name that matches

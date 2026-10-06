@@ -381,3 +381,60 @@ def test_star_and_rename_work_by_id(client, on):
     assert one("SELECT title FROM takes WHERE id = ?", (twin["id"],))["title"] == "Draft"
     assert call(client, "rename_take", take_id=mine["id"], title="  ")[0] is True
     assert call(client, "star_take", take_id="nothing")[0] is True
+
+
+def test_a_timed_structure_adds_up_to_the_length_asked_and_is_one_the_app_accepts():
+    from app import instrumental
+    from app.mcp import timed_structure
+    for total in (30, 45, 60, 90, 100, 120, 150, 190, 240, 300, 600, 900):
+        structure = timed_structure(total)
+        assert instrumental.normalise(structure) == structure, total          # sections, in order, each starting where the last ended
+        assert instrumental.seconds(structure) == total, total
+        assert all(int(end[0]) * 60 + int(end[1]) - int(start[0]) * 60 - int(start[1]) >= 5
+                   for start, end in [(l.split()[1].strip("]").split("-")[0].split(":"), l.split()[1].strip("]").split("-")[1].split(":"))
+                                      for l in structure.splitlines()]), total      # no section under five seconds
+    assert instrumental.seconds(timed_structure(10)) == 30                     # too short to hold four sections: the least that can
+    assert timed_structure(60).splitlines()[0].startswith("[intro 0:00-")
+    assert len(timed_structure(60).splitlines()) == 4 and len(timed_structure(300).splitlines()) == 8
+
+
+def test_make_instrumental_never_sends_a_bare_structure(client, on, monkeypatch):
+    from app import instrumental, jobs
+    from app.db import one
+    monkeypatch.setitem(jobs.ENGINE.options, "checkpoints", ["yue2_3b_bf16.safetensors"])
+    monkeypatch.setitem(jobs.ENGINE.options, "instrumental", True)
+    monkeypatch.setattr(jobs.ENGINE, "options_loaded", True)
+    error, short = call(client, "make_instrumental", style="edm", max_duration=60)
+    row = one("SELECT lyrics, max_duration FROM takes WHERE id = ?", (short["id"],))
+    assert not error and instrumental.seconds(row["lyrics"]) == 60 and row["max_duration"] == 60
+    error, plain = call(client, "make_instrumental", style="edm")
+    row = one("SELECT lyrics, max_duration FROM takes WHERE id = ?", (plain["id"],))
+    assert instrumental.seconds(row["lyrics"]) == 150 and row["max_duration"] == 180        # a default length, with room past it
+    error, named = call(client, "make_instrumental", style="edm", structure="[verse]\n[chorus]")
+    assert one("SELECT lyrics FROM takes WHERE id = ?", (named["id"],))["lyrics"] == "[verse]\n[chorus]"   # the person's own is kept as given
+
+
+def test_a_take_can_be_named_by_the_start_of_its_id(client, on):
+    from app.db import one
+    a = make_take(title="Twin", id="abcd1234ef01")
+    b = make_take(title="Twin", id="abcd9999ef02")
+    c = make_take(title="Other", id="0f0f0f0f0f03")
+    error, found = call(client, "list_takes", limit=10)
+    assert {t["short_id"] for t in found} == {"abcd12", "abcd99", "0f0f0f"}
+    assert call(client, "get_take", take_id="0f0f0f")[1]["id"] == c["id"]                 # the short id shown in the list
+    assert call(client, "get_take", take_id="ABCD12")[1]["id"] == a["id"]                 # any case
+    error, text = call(client, "get_take", take_id="abcd")                                 # starts two takes: not guessed
+    assert error and "starts 2 takes" in text and a["id"] in text and b["id"] in text
+    error, text = call(client, "delete_take", take_id="abc", confirm=True)                 # too short to be trusted
+    assert error and "no such take" in text and one("SELECT id FROM takes WHERE id = ?", (a["id"],))
+    assert call(client, "delete_take", take_id="abcd12", confirm=True)[1]["deleted"] is True
+    assert one("SELECT id FROM takes WHERE id = ?", (a["id"],)) is None and one("SELECT id FROM takes WHERE id = ?", (b["id"],))
+    assert call(client, "rename_take", take_id="abcd99", title="Renamed")[1]["title"] == "Renamed"
+    assert call(client, "get_take", take_id="deadbeef")[0] is True
+
+
+def test_the_instructions_ask_for_the_short_id_to_be_shown(client, on):
+    result = rpc(client, "initialize", {"protocolVersion": "2025-06-18"}).json()["result"]
+    assert "short_id" in result["instructions"]
+    tools = {t["name"]: t for t in rpc(client, "tools/list").json()["result"]["tools"]}
+    assert "short_id" in tools["list_takes"]["description"]
