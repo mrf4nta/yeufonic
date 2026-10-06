@@ -138,18 +138,6 @@ SETTINGS_SPEC: list[dict] = [
         "help": "The model new runs start with.",
     },
     {
-        "key": "instrumental.vocal_check",
-        "label": "Vocal check on instrumentals",
-        "type": "select",
-        "default": "fast",
-        "options": [
-            {"value": "fast", "label": "Quick, holds about 800 MB"},
-            {"value": "thrifty", "label": "Thrifty, slower, holds nothing"},
-            {"value": "off", "label": "Off"},
-        ],
-        "help": "Checks a finished instrumental for singing.",
-    },
-    {
         "key": "stems.folder",
         "label": "Stem save folder",
         "type": "text",

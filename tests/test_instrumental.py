@@ -1,5 +1,4 @@
 """Instrumentals: the structure, the LoRA in both graphs, and the score check."""
-import subprocess
 import pytest
 
 from app import config, instrumental, jobs, score
@@ -116,67 +115,6 @@ def test_an_old_take_saved_as_varied_is_still_accepted(client, monkeypatch):
     drain()
 
 
-def test_a_silent_vocal_stem_is_not_called_singing(tmp_path):
-    silence = tmp_path / "quiet.wav"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono",
-                    "-t", "8", str(silence)], check=True)
-    assert instrumental.sung_share(silence) == 0.0
-
-
-def test_a_loud_vocal_stem_is_called_singing(tmp_path):
-    tone = tmp_path / "loud.wav"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:r=16000",
-                    "-t", "8", str(tone)], check=True)
-    assert instrumental.sung_share(tone) > instrumental.SUNG
-
-
-def test_a_short_piece_is_checked_whole(tmp_path):
-    short = tmp_path / "short.wav"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:r=16000",
-                    "-t", "5", str(short)], check=True)
-    out = instrumental.excerpt(short, tmp_path / "out.wav")
-    assert out.exists()
-    assert abs(instrumental.duration_of(out) - 5) < 0.5
-
-
-def test_a_long_piece_is_sampled_not_read_whole(tmp_path):
-    """A span from every fifteen seconds: a fifth of the piece, and never more than
-    the most spans, so a long piece does not hold the queue up."""
-    long = tmp_path / "long.wav"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:r=16000",
-                    "-t", "120", str(long)], check=True)
-    out = instrumental.excerpt(long, tmp_path / "out.wav")
-    assert 23 < instrumental.duration_of(out) < 25, "eight spans of three seconds"
-    longer = tmp_path / "longer.wav"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:r=16000",
-                    "-t", "600", str(longer)], check=True)
-    assert instrumental.duration_of(instrumental.excerpt(longer, tmp_path / "out2.wav")) < instrumental.MOST_SPANS * 3 + 1
-
-
-def test_a_voice_that_comes_and_goes_is_heard(tmp_path):
-    """A stretch of voice longer than the spacing always lands in a span: here twenty
-    seconds of tone in four minutes of silence, where three spans at a quarter, a
-    half and three quarters heard nothing."""
-    piece = tmp_path / "piece.wav"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-f", "lavfi",
-                    "-i", "sine=frequency=330:r=16000", "-filter_complex",
-                    "[0:a]atrim=duration=240[s];[1:a]atrim=duration=20,adelay=200000[t];[s][t]amix=inputs=2:normalize=0",
-                    "-t", "240", str(piece)], check=True)
-    out = instrumental.excerpt(piece, tmp_path / "out.wav")
-    assert instrumental.sung_share(out) > 0.05
-
-
-def test_the_share_reads_silence_and_singing_apart():
-    import numpy as np
-    rate = 16000
-    quiet = np.zeros(rate * 6, dtype=np.float32)
-    loud = (np.sin(np.arange(rate * 6) * 0.05) * 0.5).astype(np.float32)
-    half = np.concatenate([quiet[: rate * 3], loud[: rate * 3]])
-    assert instrumental.share_of(quiet, rate) == 0.0
-    assert instrumental.share_of(loud, rate) == 1.0
-    assert 0.4 < instrumental.share_of(half, rate) < 0.6
-
-
 SINGING_PLAN = PLAN.replace('"Gm"z16|"Eb"z16|"Bb"z16|"F"z16|', '"Gm"B4A4G4F4|"Eb"E8G8|"Bb"B4d4f4d4|"F"c16|')
 
 
@@ -192,27 +130,6 @@ def test_a_plan_with_a_melody_in_the_vocal_part_is_spotted():
 def test_chord_symbols_are_not_mistaken_for_a_melody():
     chords_only = 'X:1\nM:4/4\nL:1/16\nV: Vocal\nK:C\n% intro\nV: Vocal\n"Gm"z16|"Bbmaj7"z16|"F/A"z16|\n'
     assert instrumental.sings(chords_only) == 0
-
-
-def test_the_check_can_be_quick_thrifty_or_off():
-    """Holding the separator cannot be undone once loaded, so the thrifty choice
-    runs a separate program rather than pretending to free memory."""
-    from app.db import set_setting
-    assert jobs.check_mode() == "fast"            # the default
-    for mode in ("thrifty", "off", "fast"):
-        set_setting("instrumental.vocal_check", mode)
-        assert jobs.check_mode() == mode
-    set_setting("instrumental.vocal_check", "nonsense")
-    assert jobs.check_mode() == "fast"            # anything unknown is the default
-    set_setting("instrumental.vocal_check", "fast")
-
-
-def test_off_means_no_answer_and_no_work(tmp_path, monkeypatch):
-    from app.db import set_setting
-    set_setting("instrumental.vocal_check", "off")
-    monkeypatch.setattr(jobs.instrumental, "excerpt", lambda *a, **k: pytest.fail("should not have looked"))
-    assert jobs.singing_share(tmp_path / "nothing.flac") is None
-    set_setting("instrumental.vocal_check", "fast")
 
 
 # A transcription of a recording with no vocal: the Vocal voice rests under the chords,

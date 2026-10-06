@@ -19,10 +19,10 @@ def test_old_frozen_defaults_are_forgotten_at_start(client):
 
     set_setting("stems.format", "wav")               # the old default, stored by a save
     set_setting("stems.model", "htdemucs")           # the default, stored by a save
-    set_setting("instrumental.vocal_check", "off")   # a real choice
+    set_setting("stems.folder", "/data/my-stems")    # a real choice
     assert forget_frozen_defaults() == 2
     assert get_setting("stems.format") is None and get_setting("stems.model") is None
-    assert get_setting("instrumental.vocal_check") == "off"
+    assert get_setting("stems.folder") == "/data/my-stems"
 
 
 def test_the_setting_is_named_for_takes_too(client):

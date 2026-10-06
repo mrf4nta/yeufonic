@@ -5901,53 +5901,6 @@ async function loadTakes() {
   State.takesRaw = text;
   State.takes = JSON.parse(text);
   paintTakes();
-  noticeSinging();
-}
-
-/* An instrumental that came out singing is worth interrupting for once: the
-   render has just been paid for, and the answer is a click away. Only for one
-   that finished a moment ago, only once per take, and never over another open
-   window. Anything older is left to say so on its card. */
-function getSungSeen() {
-  try {
-    return JSON.parse(sessionStorage.getItem('yue2.sungSeen') || '{}');
-  } catch (e) {
-    return {};
-  }
-}
-
-function markSungSeen(id) {
-  try {
-    var seen = getSungSeen();
-    seen[id] = true;
-    sessionStorage.setItem('yue2.sungSeen', JSON.stringify(seen));
-  } catch (e) {}
-}
-
-function noticeSinging() {
-  var seen = getSungSeen();
-  // On the first load of the page, treat all existing takes as already seen so a
-  // page refresh never throws an unexpected popup over the library.
-  if (!State.initialLoadDone) {
-    State.initialLoadDone = true;
-    for (var j = 0; j < State.takes.length; j++) {
-      seen[State.takes[j].id] = true;
-      markSungSeen(State.takes[j].id);
-    }
-    return;
-  }
-  var now = Date.now() / 1000;
-  for (var i = 0; i < State.takes.length; i++) {
-    var take = State.takes[i];
-    if (take.kind !== 'instrumental' || take.status !== 'done') { continue; }
-    if (!(take.vocal_check >= 0.1) || seen[take.id]) { continue; }
-    seen[take.id] = true;
-    markSungSeen(take.id);
-    if (now - (take.finished_at || 0) > 300) { continue; }        // not fresh
-    if (document.querySelector('.modal:not(.hidden)')) { continue; }
-    openSungWarning(take);
-    return;
-  }
 }
 
 /* ----------------------------------------------------------------- spaces
@@ -9287,11 +9240,6 @@ function paintTakes() {
         : '<div class="take-status ready">plan ready</div>';
     } else if (status !== 'done') {
       live = '<div class="take-meta">' + esc(status === 'queued' ? 'waiting for the engine' : status) + '</div>';
-    } else if (take.kind === 'instrumental' && take.vocal_check >= 0.1) {
-      // The LoRA keeps the voice out on most seeds and not all. The finished
-      // audio is checked, so a spoiled take says so rather than puzzling you.
-      live = '<button class="take-status sung" data-act="sung" data-id="' + take.id + '">singing in ' +
-        Math.round(take.vocal_check * 100) + '% of this instrumental</button>';
     } else if (State.normalising[take.id]) {
       // Takes a few seconds, and the cards are redrawn meanwhile, so the state is
       // kept here rather than on the button that was clicked.
@@ -10358,22 +10306,14 @@ function chordChart(abc) {
    there instead, the render often sings — not always, which is why this asks
    rather than refuses. */
 function openSungWarning(take) {
-  var rendered = take.status === 'done';
   State.sungTakeId = take.id;
-  State.sungRendered = rendered;
-  $('sung-title').textContent = rendered ? 'This instrumental has singing in it' : 'This plan may sing';
-  if (rendered) {
-    $('sung-text').textContent = 'There is singing in ' + Math.round((take.vocal_check || 0) * 100) + '% of it.';
-  } else {
-    // The same sentence is a status line on the card and the opening line here,
-    // so it starts a sentence properly in the window.
-    var why = take.error || 'The plan has a melody in the vocal part.';
-    $('sung-text').textContent = why.charAt(0).toUpperCase() + why.slice(1) + '.';
-  }
-  $('sung-advice').textContent = rendered
-    ? 'A new seed usually clears it. A new plan changes the music too.'
-    : 'It may be fine. A new plan is quick, and uses a new seed.';
-  $('sung-render').textContent = rendered ? 'New seed' : 'Render anyway';
+  $('sung-title').textContent = 'This plan may sing';
+  // The same sentence is a status line on the card and the opening line here,
+  // so it starts a sentence properly in the window.
+  var why = take.error || 'The plan has a melody in the vocal part.';
+  $('sung-text').textContent = why.charAt(0).toUpperCase() + why.slice(1) + '.';
+  $('sung-advice').textContent = 'It may be fine. A new plan is quick, and uses a new seed.';
+  $('sung-render').textContent = 'Render anyway';
   $('sung-variety').value = take.variety || 'normal';
   $('sung-modal').classList.remove('hidden');
 }
@@ -10385,15 +10325,13 @@ function closeSungWarning() {
 
 async function renderAnyway() {
   var id = State.sungTakeId;
-  var reseed = State.sungRendered;     // a finished take is worth another seed
   closeSungWarning();
   if (!id) { return; }
   selectTake(takeById(id));
   await api('/api/takes/' + id + '/render', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ realaudio: $('realaudio').checked, normalise: normaliseWanted(), reseed: reseed })
+    body: JSON.stringify({ realaudio: $('realaudio').checked, normalise: normaliseWanted() })
   });
-  if (reseed) { statusLine('Rendering the same score again with a new seed\u2026'); }
   loadTakes();
 }
 
@@ -11225,11 +11163,6 @@ function wire() {
       delete State.normalising[id];
       await loadTakes();
       paintTakes();   // an unchanged list is not redrawn, and the card must drop Normalising
-      return;
-    }
-    if (act === 'sung') {
-      var spoiled = takeById(id);
-      if (spoiled) { openSungWarning(spoiled); }
       return;
     }
     if (act === 'render') {

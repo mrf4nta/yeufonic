@@ -581,12 +581,6 @@ async def run_job(kind: str, ref_id: str) -> None:
             log.info("Starting audio render for '%s' (%s, mode=%s%s%s)",
                      title, ref_id, record.get("mode", "full"),
                      style_info, voice_info)
-        if kind == "render" and record.get("kind") == "instrumental" and check_mode() == "fast":
-            # The finished audio will be checked for singing. Loading Demucs takes
-            # longer than the check itself, so it is loaded while the render runs
-            # and is ready the moment the audio is. Only for instrumentals, so an
-            # installation that never makes one never holds the model.
-            asyncio.create_task(asyncio.to_thread(stems.warm))
 
     try:
         prompt_id = await ENGINE.submit(graph)
@@ -783,13 +777,10 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
             log.warning("Could not normalise '%s'; it keeps the level it was rendered at: %s",
                         record.get("title") or ref_id, exc)
     duration = await asyncio.to_thread(audio_duration, dest)
-    # An instrumental is checked for singing before it is called finished, so no
-    # one is told it is ready and left to discover otherwise.
-    sung = await asyncio.to_thread(singing_share, dest) if record.get("kind") == "instrumental" else None
     elapsed = time.time() - started
     execute(
-        "UPDATE takes SET status = 'done', stage = NULL, audio_path = ?, duration = ?, finished_at = ?, elapsed = ?, error = NULL, vocal_check = ?, loudness = ?, normalised = ?, normalised_to = ?, weak_dismissed = 0 WHERE id = ?",
-        (str(playing), duration, time.time(), elapsed, sung, level, normalised, normalised_to, ref_id),
+        "UPDATE takes SET status = 'done', stage = NULL, audio_path = ?, duration = ?, finished_at = ?, elapsed = ?, error = NULL, loudness = ?, normalised = ?, normalised_to = ?, weak_dismissed = 0 WHERE id = ?",
+        (str(playing), duration, time.time(), elapsed, level, normalised, normalised_to, ref_id),
     )
     fresh = one("SELECT * FROM takes WHERE id = ?", (ref_id,))
     if fresh:
@@ -798,8 +789,6 @@ async def _finish(kind: str, ref_id: str, record: dict, job: dict, started: floa
     bump_average("render", elapsed)
     log.info("Audio render finished for '%s' (duration=%.1fs, elapsed=%.1fs)",
              record.get("title") or ref_id, duration or 0.0, elapsed)
-    if sung is not None:
-        log.info("Vocal check for '%s': %.1f%% singing detected", record.get("title") or ref_id, sung * 100)
 
 
 def _drop_engine_output(item: dict) -> None:
@@ -1827,62 +1816,6 @@ async def run_stems_job(set_id: str) -> None:
         return
     bump_average("stems", elapsed)
     log.info("Stem separation %s for %s %s finished in %.1fs -> %s", set_id, target_type, target_id, elapsed, dest)
-
-
-def singing_share(audio: Path) -> float | None:
-    """How much of a finished instrumental is singing, in a few seconds.
-
-    The instrumental LoRA usually keeps the voice out and sometimes does not, so
-    the audio is checked rather than assumed. A short span from every fifteen
-    seconds is separated with Demucs held in memory: a fresh process spends ten seconds loading the
-    model before it does anything, which was long enough for someone to hear the
-    opening, believe it was clean, and move on. This answers while they are still
-    listening.
-    """
-    mode = check_mode()
-    if mode == "off":
-        return None
-    work = Path(tempfile.mkdtemp(prefix="vocal-check-", dir=config.WORK_DIR))
-    try:
-        clip = instrumental.excerpt(audio, work / "excerpt.wav")
-        if mode == "thrifty":
-            # A separate program, which gives its memory back when it ends, at the
-            # cost of loading the model from scratch every time.
-            asyncio.run(stems.separate(clip, work / "split", "htdemucs", ["vocals"], "wav",
-                                       work_root=config.WORK_DIR))
-            vocals = next((work / "split").glob("*vocals*.wav"), None)
-            return instrumental.sung_share(vocals) if vocals else None
-        samples, rate = stems.vocal_of(clip)
-        return instrumental.share_of(samples, rate)
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
-        log.warning("vocal check failed for %s: %s", audio, exc)
-        return None
-    finally:
-        remove_tree(work)
-
-
-def check_mode() -> str:
-    """How thoroughly to pay for the check: fast, thrifty, or not at all.
-
-    Holding the separator cannot be undone once it is loaded — releasing the
-    model leaves the memory with the allocator rather than the system — so the
-    thrifty choice runs it as a separate program instead."""
-    mode = (get_setting("instrumental.vocal_check", "fast") or "fast").lower()
-    return mode if mode in ("fast", "thrifty", "off") else "fast"
-
-
-async def run_vocal_check(take_id: str) -> None:
-    """The same check for a take that already exists, used to fill in one made
-    before the check did."""
-    take = one("SELECT id, audio_path, kind FROM takes WHERE id = ?", (take_id,))
-    if not take or take["kind"] != "instrumental" or not take["audio_path"]:
-        return
-    audio = Path(take["audio_path"])
-    if not audio.exists():
-        return
-    share = await asyncio.to_thread(singing_share, audio)
-    if share is not None:
-        execute("UPDATE takes SET vocal_check = ? WHERE id = ?", (share, take_id))
 
 
 def fail_cover_lyrics(source_id: str, message: str) -> None:

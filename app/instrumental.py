@@ -12,7 +12,6 @@ the plan and for the render alike."""
 from __future__ import annotations
 
 import re
-import shutil
 from fractions import Fraction
 import subprocess
 from pathlib import Path
@@ -32,12 +31,6 @@ SECTIONS = ("intro", "verse", "pre-chorus", "chorus", "bridge", "outro")
 # Interpretation and choosing the sections, none of which risk a vocal.
 FEELS = {"steady": 1.0}
 
-# A finished instrumental is judged by how much of it carries a vocal: the share
-# of seconds whose separated vocal is above the noise the separation leaves
-# behind.  A clean instrumental measures a fraction of a per cent; the take that
-# prompted this measured 65%.
-VOCAL_FLOOR = 0.01     # RMS below which a second counts as silent
-SUNG = 0.10            # share of sung seconds worth telling someone about
 BARE = "[instrumental]"
 _TAG = re.compile(r"^\[\s*([a-z-]+)(?:\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2}))?\s*\]$")
 
@@ -253,35 +246,6 @@ def tune_on_instrument(abc: str) -> str:
     return "\n".join(out)
 
 
-# The check hears a span every EVERY seconds, so a voice lasting that long cannot fall
-# between two.  Three spans in all, at a quarter, a half and three quarters, missed a
-# take whose humming came and went: 14% sung across the take, 0% in the spans.
-EVERY = 15.0
-MOST_SPANS = 24
-
-
-def excerpt(src: Path, dest: Path, each: float = 3.0, every: float = EVERY, most: int = MOST_SPANS) -> Path:
-    """A montage of the piece, for a check that need not read all of it: a span from
-    each stretch of `every` seconds, a fifth of the piece at the usual spacing, with
-    at most `most` spans so a long piece does not hold the queue up for long."""
-    total = duration_of(src)
-    count = max(3, min(most, int(total // every)))
-    if total <= count * each:
-        shutil.copy(src, dest)
-        return dest
-    stretch = total / count
-    starts = [stretch * (index + 0.5) - each / 2 for index in range(count)]
-    parts = " ".join(
-        f"[0:a]atrim=start={max(0.0, start):.2f}:duration={each},asetpts=N/SR/TB[a{i}];"
-        for i, start in enumerate(starts))
-    joins = "".join(f"[a{i}]" for i in range(len(starts)))
-    subprocess.run(
-        ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-filter_complex",
-         f"{parts}{joins}concat=n={len(starts)}:v=0:a=1[out]", "-map", "[out]", str(dest)],
-        check=True, capture_output=True, timeout=120)
-    return dest
-
-
 def duration_of(src: Path) -> float:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(src)],
@@ -290,31 +254,3 @@ def duration_of(src: Path) -> float:
         return float(out.decode().strip())
     except ValueError:
         return 0.0
-
-
-def share_of(samples, rate: int) -> float:
-    """How much of a separated vocal is someone singing, as a share of its
-    seconds.  Silence between phrases counts as not singing, so a clean
-    instrumental measures zero and a spoiled one most of itself."""
-    import numpy as np
-
-    seconds = len(samples) // rate
-    if seconds < 2:
-        return 0.0
-    frames = np.asarray(samples[:seconds * rate], dtype=np.float64).reshape(seconds, rate)
-    loud = np.sqrt((frames ** 2).mean(axis=1))
-    return round(float((loud > VOCAL_FLOOR).sum()) / seconds, 4)
-
-
-def sung_share(vocals: Path) -> float:
-    """The same, for a separated vocal already written to a file.  Returns 0.0
-    when it cannot be read: a check that fails should not accuse a take."""
-    try:
-        raw = subprocess.run(
-            ["ffmpeg", "-v", "error", "-i", str(vocals), "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
-            check=True, capture_output=True, timeout=300).stdout
-    except (subprocess.SubprocessError, OSError):
-        return 0.0
-    import numpy as np
-
-    return share_of(np.frombuffer(raw, dtype=np.float32), 16000)
