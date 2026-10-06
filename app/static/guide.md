@@ -913,6 +913,15 @@ ordinary take in your library.
    `{"mcpServers": {"yeufonic": {"url": "http://localhost:8090/mcp"}}}`. No login or key is needed.
 3. **Ask.** Start your agent from any folder and describe what you want.
 
+**Which address?** It is the address you open Yeufonic at, with `/mcp` on the end.
+- **Docker:** `http://localhost:8090/mcp`.
+- **The Windows install:** the app's port is in `settings.ini` (`app_port`, 8090 unless you changed it, for instance to run beside
+  a Docker copy). With `app_port = 8091` it is `http://localhost:8091/mcp`.
+- **Agent in WSL, app on Windows:** this does not connect. The Windows app listens only on Windows' own loopback address, which WSL cannot
+  reach (Docker running inside WSL is fine, as it is in WSL too). Run the agent from Windows (PowerShell or the Windows version of
+  your agent), or turn on WSL's mirrored networking (`networkingMode=mirrored` under `[wsl2]` in `.wslconfig`, then `wsl --shutdown`),
+  which makes `localhost` the same on both sides.
+
 If your agent says the server **needs authentication**, it is almost always because the setting is still Off: turn it on, then
 reconnect the agent (in Claude Code, `/mcp`). Reconnect after restarting Yeufonic too, because a restart ends the connection.
 

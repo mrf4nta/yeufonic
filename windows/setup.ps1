@@ -254,7 +254,18 @@ if ($drive.Free -lt $needBytes) { [void]$problems.Add("Not enough free space on 
 
 if ($InstallDir.Length -gt 60) { [void]$warnings.Add("The install folder's path is long ($($InstallDir.Length) characters); a shorter one avoids Windows' path length limit.") }
 
-foreach ($port in @(8090, 8188)) {
+# The ports this install uses: the defaults, or what its settings.ini says (an install beside a Docker copy of the
+# app, which holds 8090, is usually moved to another).
+$ports = @(8090, 8188)
+$settingsFile = Join-Path $InstallDir 'settings.ini'
+if (Test-Path $settingsFile) {
+    $names = @('app_port', 'engine_port')
+    for ($i = 0; $i -lt $names.Count; $i++) {
+        $line = Get-Content $settingsFile | Where-Object { $_ -match ('^\s*' + $names[$i] + '\s*=') } | Select-Object -First 1
+        if ($line -and ($line -match '=\s*(\d{2,5})\s*$')) { $ports[$i] = [int]$Matches[1] }
+    }
+}
+foreach ($port in $ports) {
     if (Test-Port $port) { [void]$warnings.Add("Something is already using port $port (Docker Desktop, or another copy of Yeufonic or ComfyUI?). Stop it before starting Yeufonic.") }
 }
 

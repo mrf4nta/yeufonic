@@ -37,7 +37,7 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
-## Unreleased
+## 0.0.30 (2026-10-06)
 
 ### Added
 - **An MCP server, off by default.** With **MCP server** switched on in Settings, an AI agent on the same computer (Claude Code, Cursor and
@@ -51,6 +51,9 @@ cannot creep back in.
 - A link to a take's audio now plays in a browser instead of saving the file (saving is as before).
 
 ### Fixed
+- **The Windows installer checked the default ports, not the ones the install uses.** Its check that the app's and the engine's ports
+  are free now reads them from `settings.ini`, so an install moved off 8090 beside a Docker copy is checked on its own ports and not
+  warned about Docker's. The guide's MCP chapter also says which address to use, and that an agent in WSL cannot reach the Windows app.
 - **A failed instrumental plan no longer tells you to lower a style LoRA's strength when none was used.** Every take stores a strength,
   1.00 unless changed, whether or not a LoRA was chosen, and the advice read it as if one had been. It now appears only for a take with a LoRA.
 

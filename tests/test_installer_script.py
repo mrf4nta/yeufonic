@@ -73,3 +73,11 @@ def test_the_windows_trainer_is_given_the_attention_that_runs_fast_on_windows():
     assert "throw" in block and ".Contains($edit.New)" in block       # a changed trainer stops setup; a patched one is left alone
     fetch = setup[setup.index('if (-not (IsDone "fs_audio-'):setup.index("$trainDir = ")]
     assert "$trainDir" not in fetch and "$edit" not in fetch          # outside the fetch's own check, so an existing install is repaired
+
+
+def test_the_installers_port_check_uses_the_ports_in_settings_ini():
+    """An install moved off 8090 (beside a Docker copy, which holds it) was still checked on 8090, and its own port never was."""
+    setup = (Path(__file__).resolve().parent.parent / "windows" / "setup.ps1").read_text(encoding="utf-8")
+    block = setup[setup.index("$ports = @(8090, 8188)"):setup.index("foreach ($site in")]
+    assert "app_port" in block and "engine_port" in block and "settings.ini" in block
+    assert "foreach ($port in $ports)" in block and "foreach ($port in @(8090, 8188))" not in setup
