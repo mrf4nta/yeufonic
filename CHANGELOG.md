@@ -37,6 +37,35 @@ Release notes live in two places and neither is a file in this repository: this 
 history, and each GitHub release holds its published notes. `RELEASE-NOTES-*.md` is ignored so it
 cannot creep back in.
 
+## Unreleased
+
+### Changed
+- **Finished instrumentals are no longer checked for singing.** The check separated a few spans of the audio and
+  flagged a take when anything loud enough landed in the vocal stem, which synths and effects could do, and plenty of
+  instrumentals have a spoken line or a refrain in them anyway. Renders finish sooner without it, and the engine no
+  longer loads the separator while an instrumental renders. The **Vocal check on instrumentals** setting is gone.
+  The warning on a *plan* that has a melody in its vocal part ("This plan may sing") stays, as it reads the score.
+
+### Added
+- **Rearranging a song's sections.** For an instrumental made from a recording and for a cover, each section in the list can be
+  dragged to a new place or moved with the arrows, copied or taken out, and the score is rewritten to match, so a verse, chorus, verse, verse can become verse,
+  chorus, verse, chorus. The original sections can be restored until another score is loaded. A cover's words are matched to the
+  sections in order, so they need to suit the new order. While the take plays in the editor, the section it is at is lit in
+  the list, and double-clicking a section jumps the take to it. Once a take has played after its sections were rearranged, the status
+  line says the structure has changed and what to press to render it, until they are put back. (First pass; issue #37.)
+
+### Fixed
+- **A cover keeps its score's section names when its lyrics have cue lines.** A bracketed line such as `[strings]` or `[full orchestra]`
+  is not a section heading, but a section it stood over was relabelled "verse", so a transcription's intro, interlude and outro all
+  read as verses once words were fitted. Such a section now keeps the name the score gave it. Takes made before this keep the names
+  they were made with.
+- **A recording brings its words back.** Choosing a recording fills the lyrics box with the words heard in it, and now, when none were
+  heard, with the words last used for a cover of it. Starting a new cover does the same, where it used to leave the box empty because
+  the recording stays chosen. Words already in the box are only replaced after asking.
+- **A new take starts clean.** Starting a new song, cover or instrumental no longer leaves the last take's playback controls in the
+  editor, and it clears the style LoRA (and with it the trigger word in the style) along with the title, style and score.
+- **An instrumental's editor now has the playback controls** a song's and a cover's have.
+
 ## 0.0.28 (2026-10-06)
 
 ### Fixed

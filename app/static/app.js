@@ -5501,6 +5501,7 @@ function setMode(mode) {
   show('lyrics-field', !inst);
   show('vocal-field', !inst);
   show('structure-field', inst);
+  if (cover) { paintStructure(); }
   show('mode-field', !inst);
   $('headline').textContent = cover ? 'Cover a song' : (inst ? 'Write an instrumental' : 'Write a song');
   $('sub').textContent = cover
@@ -5581,6 +5582,9 @@ function loadWorkingScore() {
    that arrives from the engine counts as already saved. */
 function scoreBaseline(text) {
   State.savedAbc = text || '';
+  State.sectionsOriginal = '';
+  if (State.mode === 'cover' && $('structure-body')) { paintStructure(); }
+  paintStructureNotice();
   paintScoreDirty();
 }
 
@@ -6831,8 +6835,9 @@ var STRUCTURE = {
 };
 
 function clock(total) {
-  var m = Math.floor(total / 60);
-  var s = Math.round(total % 60);
+  var whole = Math.round(total);          // rounded first, so 119.6 s reads 2:00 and not 1:60
+  var m = Math.floor(whole / 60);
+  var s = whole % 60;
   return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
@@ -6931,21 +6936,51 @@ async function doInstrumentalFromRecording() {
   }
 }
 
+/* The sections of a recording's score, in the list the structure uses: for an instrumental made from a
+   recording, and for a cover. They come from the "% name" lines of the score in the box, and each row can
+   be moved, copied or taken out, which rewrites the score (the Score window shows it). */
+function sectionsFromScore() {
+  if (State.mode === 'inst') { return instFromRecording(); }
+  return State.mode === 'cover' && scoreSectionSpans($('abc').value).length > 0;
+}
+
 function paintStructure() {
-  if ($('structure-kind')) { $('structure-kind').style.display = instFromRecording() ? 'none' : ''; }
-  if (instFromRecording()) {
+  var cover = State.mode === 'cover';
+  if ($('structure-field') && (cover || State.mode === 'inst')) {
+    $('structure-field').style.display = (State.mode === 'inst' || sectionsFromScore()) ? '' : 'none';
+  }
+  var sent = $('structure-preview') ? $('structure-preview').parentNode : null;
+  if (sent) { sent.style.display = cover ? 'none' : ''; }
+  if ($('structure-kind')) { $('structure-kind').style.display = (cover || instFromRecording()) ? 'none' : ''; }
+  if (cover && !sectionsFromScore()) { return; }
+  if (sectionsFromScore()) {
     var spans = scoreSectionSpans($('abc').value);
     var total = spans.length ? spans[spans.length - 1].end : 0;
     $('structure-total').textContent = total ? clock(total) + ' in all' : '';
     $('structure-total').classList.remove('over');
+    var changed = Boolean(State.sectionsOriginal) && State.sectionsOriginal !== $('abc').value;
+    var button = function (act, index, label, title, off) {
+      return '<button type="button" class="struct-btn" data-sec-act="' + act + '" data-i="' + index + '" title="' + title + '"' +
+        (off ? ' disabled' : '') + '>' + label + '</button>';
+    };
     $('structure-body').innerHTML = spans.length
-      ? '<ol class="struct-list">' + spans.map(function (span) {
-          return '<li class="struct-row struct-fixed"><span class="struct-name">' + esc(span.name) +
+      ? '<ol class="struct-list">' + spans.map(function (span, index) {
+          return '<li class="struct-row struct-fixed" draggable="true" data-i="' + index + '" title="Drag to move"><span class="struct-name">' + esc(span.name) +
             (span.was !== span.name ? ' <span class="struct-was">' + esc(span.was) + ' in the score</span>' : '') + '</span>' +
-            '<span class="struct-time">' + clock(span.start) + '\u2013' + clock(span.end) + '</span></li>';
-        }).join('') + '</ol><p class="struct-note">The sections of the recording\'s score. Edit its % lines to change them.</p>'
+            '<span class="struct-time">' + clock(span.start) + '\u2013' + clock(span.end) + '</span>' +
+            '<span class="struct-acts">' +
+            button('up', index, '\u2191', 'Move up', index === 0) +
+            button('down', index, '\u2193', 'Move down', index === spans.length - 1) +
+            button('copy', index, 'copy', 'Add a copy of this section after it') +
+            button('remove', index, '\u2715', 'Take this section out', spans.length < 2) +
+            '</span></li>';
+        }).join('') + '</ol><p class="struct-note">The sections of the recording\'s score' +
+          (cover ? '. The words are matched to them in order, so change those to suit.' : '.') +
+          ' Moving, copying or removing one rewrites the score.</p>' +
+          (changed ? '<p class="struct-note"><button type="button" class="chip action" data-sec-act="restore">Restore the original sections</button></p>' : '')
       : '<p class="struct-note">The sections come from the recording\'s score once it is transcribed.</p>';
-    $('structure-preview').textContent = spans.length ? spans.map(function (span) { return '[' + span.name + ']'; }).join(' ') : '[instrumental]';
+    if (!cover) { $('structure-preview').textContent = spans.length ? spans.map(function (span) { return '[' + span.name + ']'; }).join(' ') : '[instrumental]'; }
+    paintEdTransport();
     return;
   }
   Array.prototype.forEach.call(document.querySelectorAll('#structure-kind button'), function (button) {
@@ -6985,7 +7020,135 @@ function paintStructure() {
   saveForm();
 }
 
+/* A render's sections begin a little before the score's times say (measured: a beat or so, and steady
+   through a song), so the take is taken, and the list lit, a beat and a half early (the score's own
+   tempo): landing a touch before a section is heard as its start, landing after it as late. */
+function sectionLead(abc) {
+  var found = /^Q:\s*(?:\d+\/\d+\s*=\s*)?(\d+(?:\.\d+)?)/m.exec(String(abc || ''));
+  var tempo = found ? Number(found[1]) : 120;
+  var beat = tempo > 0 ? 60 / tempo : 0.5;
+  return Math.min(0.9, Math.max(0.3, beat * 1.5));
+}
+
+function sectionStart(span, index, lead) { return index === 0 ? 0 : Math.max(0, span.start - lead); }
+
+/* While a take plays and the sections have been rearranged since, the status line says the audio is the old
+   arrangement and what makes the new one. It stays when playback stops and goes when the sections are put
+   back or another score is loaded, and only if it is still the message on show, so nothing else is wiped. */
+function paintStructureNotice() {
+  var node = $('render-status');
+  var audio = $('audio');
+  var take = editorTake();
+  if (!node || !audio) { return; }
+  var playing = Boolean(take && State.loadedId === take.id && !audio.paused && !audio.ended);
+  var changed = Boolean(State.sectionsOriginal) && State.sectionsOriginal !== $('abc').value;
+  var message = 'Song structure has changed. ' + (State.mode === 'inst' ? 'Create instrumental' : 'Create cover') +
+    ' to render this into a take.';
+  if (changed && (playing || State.sectionNotice)) {
+    if (playing && node.textContent !== message) { statusLine(message, 'wait'); }
+    State.sectionNotice = message;
+  } else if (State.sectionNotice) {
+    if (node.textContent === State.sectionNotice) { statusLine(''); }
+    State.sectionNotice = '';
+  }
+}
+
+/* Double-clicking a section takes the take to where that section starts. The list's times are the score's,
+   which the render follows closely; once the sections are rearranged the audio is still in its first order,
+   so this says so and does nothing. */
+function jumpToSection(index) {
+  var take = editorTake();
+  if (!take || !take.has_audio) { return; }
+  if (State.sectionsOriginal && State.sectionsOriginal !== $('abc').value) {
+    statusLine('The sections have been rearranged; the take still plays in its first order.');
+    return;
+  }
+  var spans = scoreSectionSpans($('abc').value);
+  if (!spans[index]) { return; }
+  var audio = $('audio');
+  var start = sectionStart(spans[index], index, sectionLead($('abc').value));
+  var seek = function () {
+    var limit = audio.duration && isFinite(audio.duration) ? Math.max(0, audio.duration - 0.2) : start;
+    try { audio.currentTime = Math.min(start, limit); } catch (e) { /* not ready: the next one will do */ }
+    paintTransport();
+  };
+  if (State.loadedId === take.id && audio.src && audio.readyState > 0) {
+    seek();
+    if (audio.paused || audio.ended) { audio.play().catch(function () {}); State.playing = take.id; paintTransport(); paintTakes(); }
+  } else {
+    playTake(take.id);
+    audio.addEventListener('loadedmetadata', function once() { audio.removeEventListener('loadedmetadata', once); seek(); });
+  }
+}
+
+/* One change to the score's sections, written into the score box as if typed there. The score as it was
+   before the first change is kept, so the original sections can be put back until another score is loaded. */
+function changeSections(act, index, to) {
+  var box = $('abc');
+  if (act === 'restore') {
+    if (!State.sectionsOriginal) { return; }
+    box.value = State.sectionsOriginal;
+  } else {
+    if (typeof ScoreSections === 'undefined') { return; }
+    var next = ScoreSections.change(box.value, { act: act, index: index, to: to });
+    if (next === null || next === box.value) { return; }
+    if (!State.sectionsOriginal) { State.sectionsOriginal = box.value; }
+    box.value = next;
+  }
+  box.dispatchEvent(new Event('input'));
+  setChart(chordChart(box.value));
+  showPlanLength(box.value);
+  paintStructure();
+  paintStructureNotice();
+}
+
 function wireStructure() {
+  /* Dragging a row to a new place: the row under the pointer shows a line above or below it, and dropping
+     moves the section there. Touch screens have no drag, so the arrows stay. */
+  var body = $('structure-body');
+  var clearDrop = function () {
+    Array.prototype.forEach.call(body.querySelectorAll('.drop-before, .drop-after, .dragging'), function (el) {
+      el.classList.remove('drop-before', 'drop-after', 'dragging');
+    });
+  };
+  var dropAt = function (event) {
+    var row = event.target.closest ? event.target.closest('.struct-row[data-i]') : null;
+    if (!row || State.dragSection === undefined || State.dragSection === null) { return null; }
+    var box = row.getBoundingClientRect();
+    var after = event.clientY > box.top + box.height / 2;
+    var target = Number(row.dataset.i) + (after ? 1 : 0);
+    if (State.dragSection < target) { target -= 1; }
+    return { row: row, after: after, to: target };
+  };
+  body.addEventListener('dragstart', function (event) {
+    var row = event.target.closest ? event.target.closest('.struct-row[data-i]') : null;
+    if (!row) { return; }
+    State.dragSection = Number(row.dataset.i);
+    row.classList.add('dragging');
+    if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(State.dragSection)); }
+  });
+  body.addEventListener('dragover', function (event) {
+    var drop = dropAt(event);
+    if (!drop) { return; }
+    event.preventDefault();
+    Array.prototype.forEach.call(body.querySelectorAll('.drop-before, .drop-after'), function (el) { el.classList.remove('drop-before', 'drop-after'); });
+    if (drop.to !== State.dragSection) { drop.row.classList.add(drop.after ? 'drop-after' : 'drop-before'); }
+  });
+  body.addEventListener('drop', function (event) {
+    var drop = dropAt(event);
+    var from = State.dragSection;
+    State.dragSection = null;
+    clearDrop();
+    if (!drop) { return; }
+    event.preventDefault();
+    if (drop.to !== from) { changeSections('move', from, drop.to); }
+  });
+  body.addEventListener('dragend', function () { State.dragSection = null; clearDrop(); });
+  body.addEventListener('dblclick', function (event) {
+    if (event.target.closest('button')) { return; }
+    var row = event.target.closest('.struct-row[data-i]');
+    if (row) { jumpToSection(Number(row.dataset.i)); }
+  });
   $('structure-kind').addEventListener('click', function (event) {
     var button = event.target.closest('[data-kind]');
     if (!button) { return; }
@@ -6995,6 +7158,7 @@ function wireStructure() {
   $('structure-body').addEventListener('click', function (event) {
     var button = event.target.closest('button');
     if (!button) { return; }
+    if (button.dataset.secAct) { changeSections(button.dataset.secAct, Number(button.dataset.i)); return; }
     var list = STRUCTURE.sections;
     if (button.dataset.add) {
       list.push({ name: button.dataset.add, seconds: SECTION_SECONDS[button.dataset.add] });
@@ -9022,6 +9186,8 @@ async function startFresh() {
   if (formIsDraft()) { stashDraft(); }
   var cover = State.mode === 'cover';
   setSelection({});
+  // The editor reads its take from here: left behind, it kept the last take's player on a new one.
+  State.formTake = null;
   $('title').value = '';
   if (State.mode !== 'inst') { $('lyrics').value = ''; }   // an instrumental keeps its structure, like a setting
   $('abc').value = '';
@@ -9039,8 +9205,8 @@ async function startFresh() {
   // A new take starts from the defaults, not from whatever the last one used.
   $('style').value = '';
   delete $('style').dataset.touched;
-  // A chosen LoRA stays chosen, and needs its trigger word in the style to act.
-  if (State.loraTrigger && loraChosen()) { applyLoraTrigger(State.loraTrigger); }
+  // No style LoRA either: one chosen for the last take would bring its trigger word back into the style.
+  showStyleLora({});
   $('max-duration').value = DEFAULT_CAP;
   State.capTyped = false;
   State.capFromScore = false;
@@ -9616,7 +9782,7 @@ function paintEdTransport() {
   var take = editorTake();
   var shouldShow = Boolean(editorOpen() && take && take.has_audio);
   box.classList.toggle('hidden', !shouldShow);
-  if (!shouldShow) { return; }
+  if (!shouldShow) { paintPlayingSection(-1); return; }
 
   var audio = $('audio');
   var isPlaying = Boolean(take && State.playing === take.id && audio && !audio.paused && !audio.ended);
@@ -9655,6 +9821,33 @@ function paintEdTransport() {
   if (edSeek && !edSeek.dataset.dragging) {
     edSeek.value = (hasDur && dur > 0) ? Math.round((cur / dur) * 1000) : 0;
   }
+  paintPlayingSection(isLoaded ? cur : -1);
+}
+
+/* The section the take is at, lit in the list above the player. The list's times are those of the score,
+   which the render follows closely, so this is the section a listener would name; it is not drawn once the
+   sections have been rearranged, since the audio is still the original order. */
+function paintPlayingSection(seconds) {
+  var body = $('structure-body');
+  if (!body) { return; }
+  var rows = body.querySelectorAll('.struct-row[data-i]');
+  if (!rows.length) { return; }
+  var at = -1;
+  var original = !State.sectionsOriginal || State.sectionsOriginal === $('abc').value;
+  if (seconds >= 0 && original) {
+    var text = $('abc').value;
+    if (!State.sectionSpans || State.sectionSpans.text !== text) { State.sectionSpans = { text: text, spans: scoreSectionSpans(text) }; }
+    var spans = State.sectionSpans.spans;
+    var lead = sectionLead(text);
+    for (var i = 0; i < spans.length; i++) {
+      var from = sectionStart(spans[i], i, lead);
+      var to = i + 1 < spans.length ? sectionStart(spans[i + 1], i + 1, lead) : Infinity;
+      if (seconds >= from && seconds < to) { at = i; break; }
+    }
+  }
+  Array.prototype.forEach.call(rows, function (row) {
+    row.classList.toggle('now', Number(row.dataset.i) === at);
+  });
 }
 
 function updateMediaSession(take) {
@@ -10102,6 +10295,7 @@ function wireWave() {
     // space bar resume it rather than starting a take. Only the sound stops.
     paintAudition();
   });
+  ['play', 'playing', 'pause', 'ended'].forEach(function (name) { audio.addEventListener(name, paintStructureNotice); });
   audio.addEventListener('seeking', function () { syncWaveRatio(); drawWave(); });
   audio.addEventListener('timeupdate', function () { syncWaveRatio(); drawWave(); });
 }
@@ -11350,6 +11544,7 @@ function wire() {
   });
   $('abc').addEventListener('input', function () {
     if (State.mode === 'inst') { paintInstSource(); }
+    if (State.mode === 'cover') { paintStructure(); }
     saveWorkingScore();
     pushScoreHistory($('abc').value);
     paintScoreDirty();

@@ -500,8 +500,11 @@ chords with the instrumental LoRA.
 
 The sections come from the score too: one per section of the score, in the names the LoRA knows. An
 *interlude* becomes a bridge. A render pairs each section of the structure with one of the score,
-which is why the builder gives way to them; edit the score to change them. Press **Create
-instrumental** to render.
+which is why the builder gives way to them. To rearrange the song, drag a section to a new place or move it with the arrows, add a
+**copy** of it after itself, or take it out with the **✕**: each change rewrites the score (the Score
+window shows it), and **Restore the original sections** puts it back until another score is loaded.
+While the take plays in the editor, the section it is at is lit, and double-clicking a section jumps to it. A cover shows the same list under its words, and its words are matched to the sections in order, so
+change them to suit. Press **Create instrumental** to render.
 
 **A song with vocals works too.** Its score has the sung melody in the vocal part, which would come
 out sung, so the tune is given to an instrument: wherever no instrument is playing, the sung notes
